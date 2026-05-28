@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nerix-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nerix
+      POSTGRES_PASSWORD: nerix
+      POSTGRES_DB: nerix
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nerix -d nerix"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: nerix-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: nerix-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: nerix
+      MINIO_ROOT_PASSWORD: nerix-local-password
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data/minio:/data
+

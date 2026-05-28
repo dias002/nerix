@@ -1,0 +1,21 @@
+{
+  "name": "nerix",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nerix AI agent platform monorepo.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "web:dev": "npm --prefix apps/web run dev -- --host 127.0.0.1",
+    "web:build": "npm --prefix apps/web run build",
+    "api:dev": "npm --prefix apps/api run dev",
+    "api:build": "npm --prefix apps/api run build",
+    "api:test": "npm --prefix apps/api run test",
+    "infra:up": "docker compose -f infra/docker-compose.yml up -d",
+    "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "test": "npm run api:test",
+    "check": "npm run api:build && npm run api:test && npm run web:build"
+  }
+}
