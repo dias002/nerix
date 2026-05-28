@@ -9,10 +9,11 @@
   ],
   "scripts": {
     "web:dev": "npm --prefix apps/web run dev -- --host 127.0.0.1",
-    "web:build": "npm --prefix apps/web run build",
+    "web:build": "npm run shared:build && npm --prefix apps/web run build",
     "api:dev": "npm --prefix apps/api run dev",
-    "api:build": "npm --prefix apps/api run build",
+    "api:build": "npm run shared:build && npm --prefix apps/api run build",
     "api:test": "npm --prefix apps/api run test",
+    "shared:build": "npm --prefix packages/shared run build",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "test": "npm run api:test",

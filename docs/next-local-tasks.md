@@ -2,8 +2,8 @@
 
 ## 1. Make API Runnable With Real Persistence
 
-- connect Fastify API to PostgreSQL;
-- add database migration runner;
+- replace in-memory repositories with PostgreSQL-backed repositories;
+- add database migration runner after the initial SQL stabilizes;
 - implement users table access;
 - implement wallet read;
 - implement append-only ledger writes.

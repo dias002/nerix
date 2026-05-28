@@ -35,6 +35,8 @@ npm run web:build
 npm run infra:up
 ```
 
+Local PostgreSQL is exposed on `127.0.0.1:55432` to avoid conflicts with a system PostgreSQL running on `5432`.
+
 The API scaffold is present, but dependencies still need to be installed before it can run.
 
 ## Product Rule
@@ -46,4 +48,3 @@ Client -> Nerix API -> AI Gateway -> Provider
 ```
 
 This protects API keys, lets Nerix count usage, apply country/provider rules, charge internal credits, and block abuse.
-

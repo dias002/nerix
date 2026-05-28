@@ -1,3 +1,4 @@
+import { NoopDatabaseClient, type DatabaseClient } from "../database/index.js";
 import { InMemoryAgentRepository } from "../modules/agents/agent.repository.js";
 import { AgentService } from "../modules/agents/agent.service.js";
 import { AiGatewayService } from "../modules/ai-gateway/ai-gateway.service.js";
@@ -9,6 +10,7 @@ import { InMemoryUserRepository } from "../modules/users/user.repository.js";
 import { UserService } from "../modules/users/user.service.js";
 
 export type AppDependencies = {
+  database: DatabaseClient;
   users: UserService;
   billing: BillingService;
   agents: AgentService;
@@ -16,7 +18,11 @@ export type AppDependencies = {
   chat: ChatService;
 };
 
-export function createDependencies(): AppDependencies {
+export type CreateDependenciesOptions = {
+  database?: DatabaseClient;
+};
+
+export function createDependencies(options: CreateDependenciesOptions = {}): AppDependencies {
   const userRepository = new InMemoryUserRepository();
   const walletRepository = new InMemoryWalletRepository();
   const agentRepository = new InMemoryAgentRepository();
@@ -29,6 +35,7 @@ export function createDependencies(): AppDependencies {
   const chat = new ChatService(conversationRepository, aiGateway);
 
   return {
+    database: options.database ?? new NoopDatabaseClient(),
     users,
     billing,
     agents,
@@ -36,4 +43,3 @@ export function createDependencies(): AppDependencies {
     chat,
   };
 }
-

@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: nerix
       POSTGRES_DB: nerix
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
@@ -41,4 +41,3 @@ services:
       - "9001:9001"
     volumes:
       - ./data/minio:/data
-

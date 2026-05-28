@@ -24,6 +24,7 @@ routes -> services -> repositories
 - `repositories` hide persistence and can later move from memory to PostgreSQL.
 - `domain` contains shared business rules such as credits and typed results.
 - `server/create-app.ts` builds Fastify without listening on a port, so tests can use `app.inject()`.
+- `database` owns PostgreSQL connectivity and exposes a small `DatabaseClient` interface.
 
 ## Current Modules
 
@@ -33,7 +34,21 @@ agents      agent registry and task-to-agent selection
 billing     wallet, estimates, reserve/capture/refund
 ai-gateway  modality classification and provider/model routing
 chat        conversation/message flow through AI Gateway
+database    Postgres pool, health checks, and future persistence adapters
 ```
+
+## File Size Rule
+
+Project-owned code should be split by responsibility before files become hard to scan:
+
+```text
+feature.routes.ts       HTTP input/output only
+feature.service.ts      business logic
+feature.repository.ts   persistence
+feature.types.ts        local feature contracts
+```
+
+Large data objects, such as UI translations or country lists, should live in data modules instead of being mixed with React providers or services.
 
 ## Country And Provider Policy
 

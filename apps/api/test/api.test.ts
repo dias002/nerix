@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { DatabaseClient, DatabaseQueryResult } from "../src/database/index.js";
 import { createApp } from "../src/server/create-app.js";
+import { createDependencies } from "../src/server/dependencies.js";
 
 test("GET /health returns service status", async () => {
   const app = await createApp();
@@ -16,6 +18,47 @@ test("GET /health returns service status", async () => {
     service: "nerix-api",
     version: "0.1.0",
   });
+
+  await app.close();
+});
+
+test("GET /health/database reports missing database in test app", async () => {
+  const app = await createApp();
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/health/database",
+  });
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(response.json().configured, false);
+
+  await app.close();
+});
+
+test("GET /health/database reports injected database status", async () => {
+  const database: DatabaseClient = {
+    async query<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<DatabaseQueryResult<T>> {
+      return { rows: [], rowCount: 0 };
+    },
+    async health() {
+      return { ok: true, configured: true, latencyMs: 1 };
+    },
+    async close() {
+      return undefined;
+    },
+  };
+  const app = await createApp({
+    dependencies: createDependencies({ database }),
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/health/database",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().configured, true);
 
   await app.close();
 });

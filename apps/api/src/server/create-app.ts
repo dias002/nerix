@@ -23,7 +23,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
     origin: true,
   });
 
-  await registerHealthRoutes(app);
+  await registerHealthRoutes(app, dependencies.database);
   await registerUserRoutes(app, dependencies.users);
   await registerBillingRoutes(app, dependencies.billing);
   await registerAgentRoutes(app, dependencies.agents);
@@ -32,4 +32,3 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
 
   return app;
 }
-
