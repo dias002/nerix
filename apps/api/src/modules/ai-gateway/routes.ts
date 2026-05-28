@@ -1,12 +1,15 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { sendResult } from "../../server/response.js";
+import { countrySchema, languageSchema } from "../../server/schemas.js";
+import { ok } from "../../domain/result.js";
 import type { AiGatewayService } from "./ai-gateway.service.js";
+import { getConfiguredProviders, getProviderPolicyMode } from "./provider-registry.js";
 
 const routeSchema = z.object({
   userId: z.string().default("local-user"),
-  country: z.enum(["KZ", "KG", "UZ", "TJ", "TM", "AM", "AZ", "GE", "MD", "RU", "BY", "OTHER"]).default("KZ"),
-  language: z.enum(["ru", "kz", "en"]).default("ru"),
+  country: countrySchema.default("KZ"),
+  language: languageSchema.default("ru"),
   agentId: z.string().optional(),
   modality: z.enum(["text", "code", "image", "video", "music", "voice", "file"]).optional(),
   prompt: z.string().min(1),
@@ -14,6 +17,22 @@ const routeSchema = z.object({
 });
 
 export async function registerAiGatewayRoutes(app: FastifyInstance, aiGateway: AiGatewayService) {
+  app.get("/ai/providers", async (_request, reply) => {
+    return sendResult(
+      reply,
+      ok({
+        policyMode: getProviderPolicyMode(),
+        providers: getConfiguredProviders().map(({ code, name, enabled, modalities, reason }) => ({
+          code,
+          name,
+          enabled,
+          modalities,
+          reason,
+        })),
+      })
+    );
+  });
+
   app.post("/ai/route", async (request, reply) => {
     const input = routeSchema.safeParse(request.body);
 

@@ -35,6 +35,36 @@ ai-gateway  modality classification and provider/model routing
 chat        conversation/message flow through AI Gateway
 ```
 
+## Country And Provider Policy
+
+The repo now supports a broad ISO country list through `packages/shared/src/countries.ts`.
+
+Local development uses:
+
+```text
+AI_PROVIDER_POLICY=dev_allow_all
+```
+
+In this mode every selected country follows the same provider path. This is for architecture testing only: wallet, routing, model selection, and UI can be built before legal/provider restrictions are finalized.
+
+Before production, switch to:
+
+```text
+AI_PROVIDER_POLICY=production_rules
+```
+
+Then country/provider restrictions must be implemented according to actual provider contracts and launch countries.
+
+Real provider keys are backend-only:
+
+```text
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+GOOGLE_AI_API_KEY
+```
+
+No provider key should ever be added to `apps/web` or `apps/mobile`.
+
 ## Important Rules
 
 - AI provider keys must only live in `apps/api`.
@@ -42,4 +72,3 @@ chat        conversation/message flow through AI Gateway
 - Billing must stay append-only through ledger entries.
 - Provider routing must be explicit by country and modality.
 - Long jobs such as image/video/music should go through queues later.
-

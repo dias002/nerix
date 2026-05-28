@@ -27,8 +27,9 @@ test("provider router separates supported and regional country routes", () => {
     }),
     {
       provider: "mock-provider",
-      model: "text-primary",
-      reason: "Default provider for supported country route.",
+      model: "mock-text",
+      policyMode: "dev_allow_all",
+      reason: "Dev policy: Local Mock Provider is available for KZ.",
     }
   );
 
@@ -38,7 +39,7 @@ test("provider router separates supported and regional country routes", () => {
       modality: "music",
       preferredModel: "music-primary",
     }).provider,
-    "regional-mock-provider"
+    "mock-provider"
   );
 });
 
@@ -90,4 +91,3 @@ test("billing service reserves, captures, and refunds credits", async () => {
     walletBefore.value.availableCredits - reservation.value.estimate.estimatedCredits
   );
 });
-

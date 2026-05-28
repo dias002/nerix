@@ -1,36 +1,30 @@
 import type { AiModality, CountryCode } from "@nerix/shared";
+import { getEnabledProvidersForModality, getProviderPolicyMode, type ProviderPolicyMode } from "./provider-registry.js";
 
 export type ProviderDecision = {
   provider: string;
   model: string;
   reason: string;
+  policyMode: ProviderPolicyMode;
 };
-
-const unsupportedInternationalProviderCountries = new Set<CountryCode>(["RU", "BY"]);
 
 export function chooseProvider(input: {
   country: CountryCode;
   modality: AiModality;
   preferredModel: string;
 }): ProviderDecision {
-  if (unsupportedInternationalProviderCountries.has(input.country)) {
-    return {
-      provider: "regional-mock-provider",
-      model: regionalModelFor(input.modality),
-      reason: "Country routing selected a regional-compatible provider.",
-    };
-  }
+  const policyMode = getProviderPolicyMode();
+  const providers = getEnabledProvidersForModality(input.modality);
+  const provider = providers.find((candidate) => candidate.code !== "mock-provider") ?? providers[0];
+  const model = provider.modelByModality[input.modality] ?? input.preferredModel;
 
   return {
-    provider: "mock-provider",
-    model: input.modality === "code" ? "code-primary" : input.preferredModel,
-    reason: "Default provider for supported country route.",
+    provider: provider.code,
+    model,
+    policyMode,
+    reason:
+      policyMode === "dev_allow_all"
+        ? `Dev policy: ${provider.name} is available for ${input.country}.`
+        : `Production policy hook selected ${provider.name} for ${input.country}.`,
   };
 }
-
-function regionalModelFor(modality: AiModality) {
-  if (modality === "code") return "regional-code";
-  if (["image", "video", "music", "voice"].includes(modality)) return `regional-${modality}`;
-  return "regional-text";
-}
-

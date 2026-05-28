@@ -162,6 +162,8 @@ const translations = {
       appearance: "Внешний вид",
       notifications: "Уведомления",
       language: "Язык",
+      country: "Страна",
+      countryHint: "Для будущих правил платежей и доступных моделей",
       security: "Безопасность",
     },
     download: {
@@ -357,6 +359,8 @@ const translations = {
       appearance: "Сыртқы көрініс",
       notifications: "Хабарламалар",
       language: "Тіл",
+      country: "Ел",
+      countryHint: "Болашақ төлем және модель ережелері үшін",
       security: "Қауіпсіздік",
     },
     download: {
@@ -552,6 +556,8 @@ const translations = {
       appearance: "Appearance",
       notifications: "Notifications",
       language: "Language",
+      country: "Country",
+      countryHint: "For future payment and model availability rules",
       security: "Security",
     },
     download: {

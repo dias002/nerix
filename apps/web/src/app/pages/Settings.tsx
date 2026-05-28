@@ -1,10 +1,41 @@
 import { motion } from "motion/react";
 import { User, Palette, Bell, Globe, Shield, ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { countryCodes, normalizeCountryCode, type CountryCode } from "@nerix/shared";
 import LanguageSwitch from "../components/LanguageSwitch";
 import { useLanguage } from "../i18n";
 
 export default function Settings() {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
+  const [country, setCountry] = useState<CountryCode>(() => {
+    if (typeof window === "undefined") return "KZ";
+    return normalizeCountryCode(window.localStorage.getItem("nerix-country") ?? "KZ");
+  });
+  const displayNames = useMemo(() => {
+    const locale = language === "kk" ? "kk" : language;
+    const IntlDisplayNames = (Intl as typeof Intl & {
+      DisplayNames?: new (locales: string[], options: { type: "region" }) => { of: (code: string) => string | undefined };
+    }).DisplayNames;
+
+    return IntlDisplayNames ? new IntlDisplayNames([locale], { type: "region" }) : null;
+  }, [language]);
+  const countryOptions = useMemo(
+    () =>
+      countryCodes
+        .map((code) => ({
+          code,
+          name: displayNames?.of(code) ?? code,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, language === "kk" ? "kk" : language)),
+    [displayNames, language]
+  );
+
+  const handleCountryChange = (value: string) => {
+    const nextCountry = normalizeCountryCode(value);
+    setCountry(nextCountry);
+    window.localStorage.setItem("nerix-country", nextCountry);
+  };
+
   const settingsGroups = [
     {
       title: t.settings.main,
@@ -18,6 +49,7 @@ export default function Settings() {
       title: t.settings.extra,
       items: [
         { id: "language", label: t.settings.language, icon: Globe },
+        { id: "country", label: t.settings.country, icon: Globe },
         { id: "security", label: t.settings.security, icon: Shield },
       ]
     }
@@ -55,6 +87,23 @@ export default function Settings() {
                     <div className="flex items-center gap-3">
                       {item.id === "language" ? (
                         <LanguageSwitch />
+                      ) : item.id === "country" ? (
+                        <div className="flex max-w-full flex-col items-end gap-1">
+                          <select
+                            value={country}
+                            onChange={(event) => handleCountryChange(event.target.value)}
+                            className="max-w-[220px] rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-gray-200 outline-none transition-colors hover:border-white/20 focus:border-white/30"
+                          >
+                            {countryOptions.map((option) => (
+                              <option key={option.code} value={option.code}>
+                                {option.name} ({option.code})
+                              </option>
+                            ))}
+                          </select>
+                          <span className="hidden max-w-[220px] text-right text-xs text-gray-600 sm:block">
+                            {t.settings.countryHint}
+                          </span>
+                        </div>
                       ) : (
                         <ChevronRight className="w-4 h-4 text-gray-600" />
                       )}

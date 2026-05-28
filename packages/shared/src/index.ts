@@ -1,18 +1,6 @@
 export type Language = "ru" | "kz" | "en";
-
-export type CountryCode =
-  | "KZ"
-  | "KG"
-  | "UZ"
-  | "TJ"
-  | "TM"
-  | "AM"
-  | "AZ"
-  | "GE"
-  | "MD"
-  | "RU"
-  | "BY"
-  | "OTHER";
+import type { CountryCode } from "./countries.js";
+export { countryCodes, isCountryCode, normalizeCountryCode, type CountryCode } from "./countries.js";
 
 export type AgentCategory =
   | "general"
@@ -77,4 +65,3 @@ export type AiRouteDecision = {
   estimatedCredits: number;
   asyncJob: boolean;
 };
-

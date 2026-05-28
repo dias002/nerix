@@ -38,6 +38,7 @@ export class AiGatewayService {
       agentId: agentResult.value.id,
       provider: provider.provider,
       model: provider.model,
+      policyMode: provider.policyMode,
       estimatedCredits: estimateResult.value.estimatedCredits,
       reserveCredits: estimateResult.value.reserveCredits,
       asyncJob: ["image", "video", "music", "voice"].includes(modality),
@@ -46,4 +47,3 @@ export class AiGatewayService {
     });
   }
 }
-

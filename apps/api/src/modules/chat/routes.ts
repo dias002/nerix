@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { sendResult } from "../../server/response.js";
+import { countrySchema, languageSchema } from "../../server/schemas.js";
 import type { ChatService } from "./chat.service.js";
 
 const sendMessageSchema = z.object({
   userId: z.string().default("local-user"),
-  country: z.enum(["KZ", "KG", "UZ", "TJ", "TM", "AM", "AZ", "GE", "MD", "RU", "BY", "OTHER"]).default("KZ"),
-  language: z.enum(["ru", "kz", "en"]).default("ru"),
+  country: countrySchema.default("KZ"),
+  language: languageSchema.default("ru"),
   conversationId: z.string().optional(),
   message: z.string().min(1),
   agentId: z.string().optional(),

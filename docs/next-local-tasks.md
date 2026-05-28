@@ -37,8 +37,8 @@
 Only after wallet and usage logs work:
 
 - add first text provider;
+- start with backend-only OpenAI/Anthropic/Gemini adapters behind AI Gateway;
 - stream chat responses;
 - record usage;
 - charge credits;
 - add country/provider rule checks.
-
