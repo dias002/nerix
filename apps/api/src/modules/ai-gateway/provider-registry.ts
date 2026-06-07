@@ -48,11 +48,11 @@ export function getConfiguredProviders(): ProviderConfig[] {
       enabled: Boolean(process.env.OPENAI_API_KEY),
       modalities: ["text", "code", "image", "voice", "file"],
       modelByModality: {
-        text: process.env.OPENAI_TEXT_MODEL || "openai-text-configured",
-        code: process.env.OPENAI_CODE_MODEL || "openai-code-configured",
+        text: process.env.OPENAI_TEXT_MODEL || "gpt-5.2",
+        code: process.env.OPENAI_CODE_MODEL || "gpt-5.2",
         image: process.env.OPENAI_IMAGE_MODEL || "openai-image-configured",
         voice: process.env.OPENAI_VOICE_MODEL || "openai-voice-configured",
-        file: process.env.OPENAI_TEXT_MODEL || "openai-text-configured",
+        file: process.env.OPENAI_TEXT_MODEL || "gpt-5.2",
       },
       reason: "Enabled only when OPENAI_API_KEY exists on the backend.",
     },
@@ -91,4 +91,3 @@ export function getEnabledProvidersForModality(modality: AiModality) {
 
   return providers.length > 0 ? providers : getConfiguredProviders().filter((provider) => provider.code === "mock-provider");
 }
-

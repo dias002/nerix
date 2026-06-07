@@ -4,6 +4,41 @@
 
 Users buy internal Nerix credits, not provider tokens directly. Nerix spends provider APIs from the backend and charges the user's internal wallet through the ledger.
 
+## Current Product Decision
+
+MVP countries:
+
+```text
+KZ
+RU
+```
+
+MVP payment providers:
+
+```text
+KZ -> Kaspi
+RU -> YooKassa
+```
+
+MVP billing model:
+
+```text
+subscription only
+3 paid plans
+monthly period first
+credits reset to the plan limit every billing period
+```
+
+Prices are not final. Use MashaGPT as a market benchmark, not as a copy:
+
+```text
+Base   ~ 990 RUB/month
+Ultra  ~ 1,990 RUB/month
+Pro    ~ 19,990 RUB/month
+```
+
+For Kazakhstan, convert to KZT only after payment costs, provider costs, VAT/tax assumptions, and target margin are known.
+
 ## Payment Flow
 
 ```text
@@ -11,11 +46,13 @@ User chooses package
 -> Nerix creates payment intent/order
 -> Payment provider opens checkout
 -> Provider sends webhook to Nerix API
--> Nerix verifies webhook signature
--> Nerix writes payment record
+-> Nerix verifies/parses provider event
+-> Nerix completes pending checkout
 -> Nerix writes ledger topup entry
 -> User wallet balance increases
 ```
+
+The frontend must not complete a checkout by itself. A plan button creates a pending checkout and redirects to the provider when a real checkout URL is available. In local/mock mode the checkout remains pending until the backend dev endpoint or provider webhook completes it.
 
 ## AI Usage Flow
 
@@ -40,7 +77,19 @@ parseWebhookEvent
 refundPayment
 ```
 
-Then adapters can be added for the selected Kazakhstan payment partner, bank acquiring, card acquiring, invoices, or later regional payment methods.
+Then adapters can be added for Kaspi, YooKassa, card acquiring, invoices, or later regional payment methods.
+
+For subscriptions, the provider abstraction should also support:
+
+```text
+createSubscriptionCheckout
+verifyWebhook
+parseSubscriptionEvent
+cancelSubscription
+resumeSubscription
+```
+
+The internal billing state should not trust the frontend. Subscription activation, renewal, cancellation, and failed payments must come from verified provider webhooks.
 
 ## Minimum Tables
 
@@ -65,6 +114,15 @@ promo_codes
 refunds
 ```
 
+For subscription MVP, add these before real provider launch:
+
+```text
+plans
+subscriptions
+subscription_events
+payment_provider_customers
+```
+
 ## Rules
 
 - Payment webhooks must use idempotency keys.
@@ -72,16 +130,22 @@ refunds
 - Do not accept money in a region where the product cannot legally provide the paid service.
 - Expensive media jobs should show estimated credits before the user starts the job.
 - Business customers should support invoice-based payments later.
+- Kaspi and YooKassa logic must be separate adapters behind one internal payment interface.
+- KZ and RU payment routing must be explicit by user country.
+- A subscription renewal should create a payment record and a ledger topup/reset entry only after a verified provider event.
+- Plan prices must be stored server-side; the frontend can display prices but must never decide payable amounts.
 
 ## First Practical Step
 
-For MVP, implement a mock payment provider first:
+For MVP, implement a mock subscription provider first:
 
 ```text
-POST /payments/intents
-POST /payments/mock/complete
-GET  /payments/:id
+GET  /plans
+POST /subscriptions/checkout
+POST /subscriptions/mock/complete
+POST /subscriptions/webhooks/yookassa
+POST /subscriptions/cancel
+GET  /subscriptions/current
 ```
 
-After wallet and ledger are stable, replace mock completion with a real provider webhook.
-
+`POST /subscriptions/mock/complete` is for backend/dev tests only. YooKassa card payments for RU users should complete through `POST /subscriptions/webhooks/yookassa` after `payment.succeeded`. Kaspi remains a configurable checkout-link adapter until the real Kaspi contract endpoint/webhook format is available.

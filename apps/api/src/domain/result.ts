@@ -11,6 +11,7 @@ export type Result<T> =
 export type DomainErrorCode =
   | "not_found"
   | "validation_failed"
+  | "unauthorized"
   | "insufficient_credits"
   | "provider_unavailable"
   | "internal_error";
@@ -34,4 +35,3 @@ export function ok<T>(value: T): Result<T> {
 export function fail<T = never>(error: DomainError): Result<T> {
   return { ok: false, error };
 }
-

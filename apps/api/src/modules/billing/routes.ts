@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
+import type { AuthService } from "../auth/auth.service.js";
 import type { BillingService } from "./billing.service.js";
 
 const estimateSchema = z.object({
@@ -8,13 +10,19 @@ const estimateSchema = z.object({
   agentId: z.string().optional(),
 });
 
-export async function registerBillingRoutes(app: FastifyInstance, billing: BillingService) {
-  app.get("/billing/wallet", async (_request, reply) => {
-    return sendResult(reply, await billing.getWallet());
+export async function registerBillingRoutes(app: FastifyInstance, billing: BillingService, auth: AuthService) {
+  app.get("/billing/wallet", async (request, reply) => {
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await billing.getWallet(user.value.userId));
   });
 
-  app.get("/billing/ledger", async (_request, reply) => {
-    return sendResult(reply, await billing.ledger());
+  app.get("/billing/ledger", async (request, reply) => {
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await billing.ledger(user.value.userId));
   });
 
   app.post("/billing/estimate", async (request, reply) => {

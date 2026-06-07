@@ -26,6 +26,23 @@ export class PostgresDatabaseClient implements DatabaseClient {
     };
   }
 
+  async transaction<T>(callback: (client: DatabaseClient) => Promise<T>): Promise<T> {
+    const connection = await this.pool.connect();
+    const transactionClient = new PostgresTransactionClient(connection);
+
+    try {
+      await connection.query("begin");
+      const result = await callback(transactionClient);
+      await connection.query("commit");
+      return result;
+    } catch (error) {
+      await connection.query("rollback");
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   async health(): Promise<DatabaseHealth> {
     const startedAt = Date.now();
 
@@ -48,6 +65,36 @@ export class PostgresDatabaseClient implements DatabaseClient {
 
   async close() {
     await this.pool.end();
+  }
+}
+
+class PostgresTransactionClient implements DatabaseClient {
+  constructor(private readonly client: pg.PoolClient) {}
+
+  async query<T extends pg.QueryResultRow = pg.QueryResultRow>(
+    text: string,
+    params: unknown[] = []
+  ): Promise<DatabaseQueryResult<T>> {
+    const result = await this.client.query<T>(text, params);
+    return {
+      rows: result.rows,
+      rowCount: result.rowCount ?? result.rows.length,
+    };
+  }
+
+  async transaction<T>(callback: (client: DatabaseClient) => Promise<T>): Promise<T> {
+    return callback(this);
+  }
+
+  async health(): Promise<DatabaseHealth> {
+    return {
+      ok: true,
+      configured: true,
+    };
+  }
+
+  async close() {
+    return undefined;
   }
 }
 

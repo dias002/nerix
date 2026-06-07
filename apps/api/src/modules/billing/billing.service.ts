@@ -33,6 +33,26 @@ export class BillingService {
     });
   }
 
+  async topup(input: { userId: string; credits: number; referenceId: string }) {
+    const wallet = await this.walletRepository.topup(input.userId, input.credits, input.referenceId);
+
+    if (!wallet) {
+      return fail(new DomainError("not_found", `Wallet for user '${input.userId}' was not found.`, 404));
+    }
+
+    return ok(wallet);
+  }
+
+  async topupOnce(input: { userId: string; credits: number; referenceId: string }) {
+    const wallet = await this.walletRepository.topupOnce(input.userId, input.credits, input.referenceId);
+
+    if (!wallet) {
+      return fail(new DomainError("not_found", `Wallet for user '${input.userId}' was not found.`, 404));
+    }
+
+    return ok(wallet);
+  }
+
   async reserve(input: { userId: string; prompt: string; agentId?: string; referenceId: string }) {
     const estimateResult = await this.estimate(input);
     if (!estimateResult.ok) return estimateResult;
@@ -79,4 +99,3 @@ export class BillingService {
     });
   }
 }
-

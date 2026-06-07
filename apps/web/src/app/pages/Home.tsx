@@ -35,7 +35,7 @@ export default function Home() {
       </motion.div>
 
       {/* Hero Section */}
-      <section className="relative z-10 min-h-screen flex flex-col items-center justify-start px-6 pb-24 pt-24 md:justify-center md:py-0">
+      <section className="relative z-10 flex min-h-[760px] flex-col items-center justify-start px-6 pb-20 pt-24 md:min-h-[820px] md:justify-center md:py-0">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -63,19 +63,28 @@ export default function Home() {
 
           <div className="pt-8">
             <Link
-              to="/workspace"
+              to="/workspace/chat"
               className="inline-flex items-center justify-center px-10 py-3.5 rounded-full bg-white text-black text-base font-medium hover:bg-gray-200 transition-colors"
             >
               {t.home.enter}
             </Link>
             <div className="mt-4">
-              <Link
-                to="/about"
-                className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-              >
-                <BookOpen className="h-4 w-4" strokeWidth={1.6} />
-                {t.home.aboutProject}
-              </Link>
+              <div className="flex flex-wrap items-center justify-center gap-4">
+                <Link
+                  to="/about"
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <BookOpen className="h-4 w-4" strokeWidth={1.6} />
+                  {t.home.aboutProject}
+                </Link>
+                <Link
+                  to="/business"
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <ArrowRight className="h-4 w-4" strokeWidth={1.6} />
+                  {t.home.forBusiness}
+                </Link>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -84,7 +93,7 @@ export default function Home() {
       <section className="relative z-10 px-6 pb-28">
         <div className="mx-auto max-w-5xl space-y-8">
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 1, y: 0 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-120px" }}
             transition={{ duration: 0.55, ease: "easeOut" }}
@@ -99,7 +108,7 @@ export default function Home() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 24 }}
+            initial={{ opacity: 1, y: 0 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: "-120px" }}
             transition={{ duration: 0.55, ease: "easeOut" }}
@@ -127,7 +136,7 @@ export default function Home() {
               {t.home.services.map((service, index) => (
                 <motion.div
                   key={service.title}
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={{ opacity: 1, y: 0 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true, margin: "-120px" }}
                   transition={{ duration: 0.35, delay: index * 0.05 }}
@@ -147,7 +156,7 @@ export default function Home() {
             {t.home.steps.map((step, index) => (
               <motion.div
                 key={step.title}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 1, y: 0 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-120px" }}
                 transition={{ duration: 0.45, delay: index * 0.06 }}

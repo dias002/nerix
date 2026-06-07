@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { ArrowLeft, ArrowRight, Building2, GraduationCap, MessageSquare, Sparkles, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Briefcase, FileText, GraduationCap, MessageSquare, Sparkles } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 import LanguageSwitch from "../components/LanguageSwitch";
 import DownloadAppBanner from "../components/DownloadAppBanner";
@@ -10,7 +10,7 @@ import { useLanguage } from "../i18n";
 export default function About() {
   const { t } = useLanguage();
   const [activeAudience, setActiveAudience] = useState(0);
-  const audienceIcons = [Building2, Sparkles, GraduationCap, Users];
+  const audienceIcons = [Sparkles, GraduationCap, MessageSquare, FileText];
   const ActiveIcon = audienceIcons[activeAudience] ?? Sparkles;
   const selectedAudience = t.about.audiences[activeAudience];
 
@@ -168,6 +168,14 @@ export default function About() {
             >
               <MessageSquare className="h-4 w-4" strokeWidth={1.8} />
               {t.about.openApp}
+              <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+            </Link>
+            <Link
+              to="/business"
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm font-medium text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+            >
+              <Briefcase className="h-4 w-4" strokeWidth={1.8} />
+              {t.about.businessLink}
               <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
             </Link>
           </div>

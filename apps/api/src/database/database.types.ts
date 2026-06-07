@@ -14,6 +14,7 @@ export type DatabaseQueryResult<T extends DatabaseRow = DatabaseRow> = {
 
 export interface DatabaseClient {
   query<T extends DatabaseRow = DatabaseRow>(text: string, params?: unknown[]): Promise<DatabaseQueryResult<T>>;
+  transaction?<T>(callback: (client: DatabaseClient) => Promise<T>): Promise<T>;
   health(): Promise<DatabaseHealth>;
   close(): Promise<void>;
 }

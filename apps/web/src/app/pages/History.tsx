@@ -1,34 +1,71 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { MessageSquarePlus, Pin, Search } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLanguage } from "../i18n";
+import { getChatConversations, type ChatConversationSummaryApiRecord } from "../api";
 
 export default function History() {
   const { t } = useLanguage();
-  const pinned = t.history.items.slice(0, 1);
-  const recent = t.history.items.slice(1);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [items, setItems] = useState<ChatConversationSummaryApiRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const filteredItems = items.filter((item) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return [item.title, item.preview, item.agentId].some((value) => value.toLowerCase().includes(query));
+  });
+  const pinned = filteredItems.slice(0, 1);
+  const recent = filteredItems.slice(1);
 
-  const renderItem = (item: (typeof t.history.items)[number], index: number) => (
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+
+    getChatConversations()
+      .then((response) => {
+        if (!active) return;
+        setItems(response.conversations);
+      })
+      .catch((loadError) => {
+        if (!active) return;
+        setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить историю.");
+        setItems([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const renderItem = (item: ChatConversationSummaryApiRecord, index: number) => (
     <motion.div
-      key={`${item.title}-${item.date}`}
+      key={item.id}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.05 }}
     >
       <Link
-        to="/workspace/chat"
+        to={`/workspace/chat?conversationId=${encodeURIComponent(item.id)}`}
         className="block rounded-2xl border border-white/5 bg-[#0A0A0A] p-4 transition-colors hover:border-white/15 hover:bg-[#101010]"
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h3 className="truncate text-base font-medium text-white">{item.title}</h3>
-            <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-500">{item.preview}</p>
+            <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-500">{item.preview || "В чате пока нет сообщений."}</p>
           </div>
           <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-xs text-gray-500">
-            {item.agent}
+            {item.agentId}
           </span>
         </div>
-        <div className="mt-4 text-xs text-gray-600">{item.date}</div>
+        <div className="mt-4 text-xs text-gray-600">
+          {formatHistoryDate(item.updatedAt)} · {item.messagesCount} сообщений
+        </div>
       </Link>
     </motion.div>
   );
@@ -55,25 +92,52 @@ export default function History() {
           <input
             type="text"
             placeholder={t.history.search}
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
             className="w-full rounded-xl border border-white/10 bg-[#0D0D0D] py-3 pl-10 pr-4 text-white placeholder-gray-600 transition-colors focus:border-white/20 focus:outline-none"
           />
         </div>
 
-        <section className="space-y-3">
-          <div className="flex items-center gap-2 px-1 text-sm font-medium text-gray-500">
-            <Pin className="h-4 w-4" strokeWidth={1.6} />
-            {t.history.pinned}
-          </div>
-          {pinned.map(renderItem)}
-        </section>
+        {error ? (
+          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-100">{error}</div>
+        ) : null}
 
-        <section className="space-y-3">
-          <div className="px-1 text-sm font-medium text-gray-500">{t.history.recent}</div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {recent.map(renderItem)}
+        {loading ? <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-4 text-sm text-gray-500">Загружаю историю...</div> : null}
+
+        {pinned.length > 0 ? (
+          <section className="space-y-3">
+            <div className="flex items-center gap-2 px-1 text-sm font-medium text-gray-500">
+              <Pin className="h-4 w-4" strokeWidth={1.6} />
+              {t.history.pinned}
+            </div>
+            {pinned.map(renderItem)}
+          </section>
+        ) : null}
+
+        {recent.length > 0 ? (
+          <section className="space-y-3">
+            <div className="px-1 text-sm font-medium text-gray-500">{t.history.recent}</div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {recent.map(renderItem)}
+            </div>
+          </section>
+        ) : null}
+
+        {!loading && filteredItems.length === 0 ? (
+          <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-6 text-center text-sm text-gray-500">
+            Реальных чатов пока нет.
           </div>
-        </section>
+        ) : null}
       </div>
     </div>
   );
+}
+
+function formatHistoryDate(value: string) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+  }).format(new Date(value));
 }

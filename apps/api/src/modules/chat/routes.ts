@@ -1,19 +1,96 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import { countrySchema, languageSchema } from "../../server/schemas.js";
+import type { AuthService } from "../auth/auth.service.js";
 import type { ChatService } from "./chat.service.js";
 
 const sendMessageSchema = z.object({
-  userId: z.string().default("local-user"),
+  userId: z.string().optional(),
   country: countrySchema.default("KZ"),
   language: languageSchema.default("ru"),
   conversationId: z.string().optional(),
   message: z.string().min(1),
   agentId: z.string().optional(),
+  attachments: z
+    .array(
+      z.object({
+        name: z.string().trim().min(1).max(180),
+        type: z.string().trim().max(120).optional().default("application/octet-stream"),
+        size: z.number().int().nonnegative().max(2_000_000),
+        content: z.string().max(20_000).optional(),
+        truncated: z.boolean().optional(),
+      })
+    )
+    .max(5)
+    .optional(),
 });
 
-export async function registerChatRoutes(app: FastifyInstance, chat: ChatService) {
+const regenerateMessageSchema = z.object({
+  userId: z.string().optional(),
+  country: countrySchema.default("KZ"),
+  language: languageSchema.default("ru"),
+  conversationId: z.string().min(1),
+  agentId: z.string().optional(),
+});
+
+const selectAnswerSchema = z.object({
+  userId: z.string().optional(),
+  conversationId: z.string().min(1),
+});
+
+const feedbackSchema = z.object({
+  userId: z.string().optional(),
+  conversationId: z.string().min(1),
+  rating: z.enum(["up", "down", "best", "bad", "needs_fix"]).default("up"),
+  selectedAsBest: z.boolean().optional().default(false),
+  reasonTags: z.array(z.string().trim().min(1).max(80)).max(12).optional().default([]),
+  comment: z.string().trim().max(1_000).optional(),
+});
+
+const conversationParamsSchema = z.object({
+  conversationId: z.string().min(1),
+});
+
+export async function registerChatRoutes(app: FastifyInstance, chat: ChatService, auth: AuthService) {
+  app.get("/chat/conversations", async (request, reply) => {
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await chat.listConversations(user.value.userId));
+  });
+
+  app.get("/chat/conversations/:conversationId", async (request, reply) => {
+    const params = conversationParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Conversation id is required.",
+        },
+      });
+    }
+
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(
+      reply,
+      await chat.getConversation({
+        userId: user.value.userId,
+        conversationId: params.data.conversationId,
+      })
+    );
+  });
+
+  app.get("/memory/items", async (request, reply) => {
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await chat.listMemoryItems(user.value.userId));
+  });
+
   app.post("/chat/messages", async (request, reply) => {
     const input = sendMessageSchema.safeParse(request.body);
 
@@ -26,6 +103,79 @@ export async function registerChatRoutes(app: FastifyInstance, chat: ChatService
       });
     }
 
-    return sendResult(reply, await chat.sendMessage(input.data));
+    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await chat.sendMessage({ ...input.data, userId: user.value.userId }));
+  });
+
+  app.post("/chat/messages/regenerate", async (request, reply) => {
+    const input = regenerateMessageSchema.safeParse(request.body);
+
+    if (!input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Conversation is required.",
+        },
+      });
+    }
+
+    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await chat.regenerateLastAnswer({ ...input.data, userId: user.value.userId }));
+  });
+
+  app.post("/chat/answers/:assistantMessageId/select", async (request, reply) => {
+    const params = z.object({ assistantMessageId: z.string().min(1) }).safeParse(request.params);
+    const input = selectAnswerSchema.safeParse(request.body);
+
+    if (!params.success || !input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Conversation and assistant answer are required.",
+        },
+      });
+    }
+
+    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(
+      reply,
+      await chat.selectBestAnswer({
+        userId: user.value.userId,
+        conversationId: input.data.conversationId,
+        assistantMessageId: params.data.assistantMessageId,
+      })
+    );
+  });
+
+  app.post("/chat/messages/:messageId/feedback", async (request, reply) => {
+    const params = z.object({ messageId: z.string().min(1) }).safeParse(request.params);
+    const input = feedbackSchema.safeParse(request.body);
+
+    if (!params.success || !input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Conversation and feedback are required.",
+        },
+      });
+    }
+
+    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(
+      reply,
+      await chat.submitMessageFeedback({
+        ...input.data,
+        userId: user.value.userId,
+        messageId: params.data.messageId,
+      })
+    );
   });
 }

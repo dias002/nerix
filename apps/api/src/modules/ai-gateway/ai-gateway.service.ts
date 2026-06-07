@@ -4,11 +4,13 @@ import type { AgentService } from "../agents/agent.service.js";
 import type { BillingService } from "../billing/billing.service.js";
 import { inferModality } from "./modality-classifier.js";
 import { chooseProvider } from "./provider-router.js";
+import type { AiCompletionProvider } from "./completion-provider.js";
 
 export class AiGatewayService {
   constructor(
     private readonly agents: AgentService,
-    private readonly billing: BillingService
+    private readonly billing: BillingService,
+    private readonly completionProvider: AiCompletionProvider
   ) {}
 
   async route(input: Partial<AiRouteRequest> & { prompt?: string }) {
@@ -45,5 +47,19 @@ export class AiGatewayService {
       modality,
       routingReason: provider.reason,
     });
+  }
+
+  async complete(input: { provider: string; model: string; prompt: string; agentId: string }) {
+    const agentResult = await this.agents.requireAgent(input.agentId);
+    if (!agentResult.ok) return agentResult;
+
+    return ok(
+      await this.completionProvider.complete({
+        provider: input.provider,
+        model: input.model,
+        prompt: input.prompt,
+        systemPrompt: agentResult.value.systemPrompt,
+      })
+    );
   }
 }

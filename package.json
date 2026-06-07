@@ -13,10 +13,15 @@
     "api:dev": "npm --prefix apps/api run dev",
     "api:build": "npm run shared:build && npm --prefix apps/api run build",
     "api:test": "npm --prefix apps/api run test",
+    "web:e2e": "NERIX_E2E_RUNNING=1 playwright test -c playwright.config.ts",
+    "web:e2e:serve": "playwright test -c playwright.config.ts",
     "shared:build": "npm --prefix packages/shared run build",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
     "test": "npm run api:test",
     "check": "npm run api:build && npm run api:test && npm run web:build"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }

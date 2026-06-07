@@ -11,7 +11,7 @@ export default function DownloadAppBanner({ className = "" }: DownloadAppBannerP
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 1, y: 0 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -32,14 +32,16 @@ export default function DownloadAppBanner({ className = "" }: DownloadAppBannerP
 
         <div className="flex shrink-0 items-center gap-2">
           {[t.download.ios, t.download.android].map((label) => (
-            <button
+            <span
               key={label}
-              type="button"
-              className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white text-black px-4 text-sm font-medium transition-colors hover:bg-gray-200"
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-500"
             >
               <Download className="h-4 w-4" strokeWidth={1.8} />
               {label}
-            </button>
+              <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-600">
+                {t.download.soon}
+              </span>
+            </span>
           ))}
         </div>
       </div>

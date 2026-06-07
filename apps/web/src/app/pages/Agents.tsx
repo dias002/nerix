@@ -1,21 +1,64 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { Bot, Briefcase, Code, GraduationCap, FileText, ArrowRight } from "lucide-react";
 import { useLanguage } from "../i18n";
+import { getAgents } from "../api";
 
 export default function Agents() {
   const { t } = useLanguage();
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [apiAgents, setApiAgents] = useState<Array<{ id: string; name: string; description: string }> | null>(null);
   const icons = [Bot, Briefcase, Code, GraduationCap, FileText];
   const ids = ["general", "business", "code", "study", "docs"];
-  const agents = t.agents.items.map((agent, index) => ({
-    ...agent,
-    id: ids[index],
-    icon: icons[index],
-  }));
+  const agents = useMemo(() => {
+    if (!apiAgents) {
+      return t.agents.items.map((agent, index) => ({
+        ...agent,
+        id: ids[index],
+        icon: icons[index],
+      }));
+    }
+
+    return apiAgents.map((agent, index) => {
+      const translationIndex = ids.indexOf(agent.id);
+      const fallback = t.agents.items[translationIndex >= 0 ? translationIndex : 0];
+      return {
+        title: fallback?.title ?? agent.name,
+        description: fallback?.description || agent.description || agent.name,
+        strengths: fallback?.strengths ?? [],
+        examples: fallback?.examples ?? [],
+        id: agent.id,
+        icon: icons[translationIndex >= 0 ? translationIndex : index % icons.length],
+      };
+    });
+  }, [apiAgents, icons, ids, t.agents.items]);
   const selectedAgent = agents[selectedIndex];
   const SelectedIcon = selectedAgent.icon;
+
+  useEffect(() => {
+    let active = true;
+
+    getAgents()
+      .then((response) => {
+        if (!active) return;
+        setApiAgents(response.agents);
+      })
+      .catch(() => {
+        if (!active) return;
+        setApiAgents(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedIndex >= agents.length) {
+      setSelectedIndex(0);
+    }
+  }, [agents.length, selectedIndex]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-8 md:p-12">

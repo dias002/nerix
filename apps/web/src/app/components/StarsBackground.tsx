@@ -84,7 +84,7 @@ export default function StarsBackground() {
       }
     };
 
-    const drawPlanet = (time: number) => {
+    const drawPlanet = (time: number, isLightTheme: boolean) => {
       const scroll = scrollRef.current;
       const pointerX = (pointerRef.current.x - 0.5) * 18;
       const pointerY = (pointerRef.current.y - 0.5) * 12;
@@ -121,8 +121,22 @@ export default function StarsBackground() {
         ctx.restore();
       };
 
-      drawRingSegment(planetRadius * 2.25, planetRadius * 0.42, 1.4, "rgba(255, 255, 255, 0.2)", Math.PI, Math.PI * 2);
-      drawRingSegment(planetRadius * 1.82, planetRadius * 0.32, 8, "rgba(255, 255, 255, 0.06)", Math.PI, Math.PI * 2);
+      drawRingSegment(
+        planetRadius * 2.25,
+        planetRadius * 0.42,
+        1.4,
+        isLightTheme ? "rgba(17, 24, 39, 0.16)" : "rgba(255, 255, 255, 0.2)",
+        Math.PI,
+        Math.PI * 2
+      );
+      drawRingSegment(
+        planetRadius * 1.82,
+        planetRadius * 0.32,
+        8,
+        isLightTheme ? "rgba(17, 24, 39, 0.05)" : "rgba(255, 255, 255, 0.06)",
+        Math.PI,
+        Math.PI * 2
+      );
 
       const planetGradient = ctx.createRadialGradient(
         planetX - planetRadius * 0.34,
@@ -132,9 +146,15 @@ export default function StarsBackground() {
         planetY,
         planetRadius
       );
-      planetGradient.addColorStop(0, "rgba(130, 130, 130, 0.92)");
-      planetGradient.addColorStop(0.45, "rgba(42, 42, 42, 0.96)");
-      planetGradient.addColorStop(1, "rgba(3, 3, 3, 1)");
+      if (isLightTheme) {
+        planetGradient.addColorStop(0, "rgba(255, 255, 255, 0.98)");
+        planetGradient.addColorStop(0.52, "rgba(214, 220, 231, 0.96)");
+        planetGradient.addColorStop(1, "rgba(148, 163, 184, 0.9)");
+      } else {
+        planetGradient.addColorStop(0, "rgba(130, 130, 130, 0.92)");
+        planetGradient.addColorStop(0.45, "rgba(42, 42, 42, 0.96)");
+        planetGradient.addColorStop(1, "rgba(3, 3, 3, 1)");
+      }
 
       ctx.beginPath();
       ctx.arc(planetX, planetY, planetRadius, 0, Math.PI * 2);
@@ -150,7 +170,7 @@ export default function StarsBackground() {
         planetRadius * 1.05
       );
       shadow.addColorStop(0, "rgba(0, 0, 0, 0)");
-      shadow.addColorStop(1, "rgba(0, 0, 0, 0.72)");
+      shadow.addColorStop(1, isLightTheme ? "rgba(15, 23, 42, 0.18)" : "rgba(0, 0, 0, 0.72)");
       ctx.beginPath();
       ctx.arc(planetX, planetY, planetRadius, 0, Math.PI * 2);
       ctx.fillStyle = shadow;
@@ -159,11 +179,25 @@ export default function StarsBackground() {
       ctx.beginPath();
       ctx.arc(planetX, planetY, planetRadius, 0, Math.PI * 2);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+      ctx.strokeStyle = isLightTheme ? "rgba(17, 24, 39, 0.1)" : "rgba(255, 255, 255, 0.06)";
       ctx.stroke();
 
-      drawRingSegment(planetRadius * 2.25, planetRadius * 0.42, 1.6, "rgba(255, 255, 255, 0.34)", 0.08 * Math.PI, 0.92 * Math.PI);
-      drawRingSegment(planetRadius * 1.82, planetRadius * 0.32, 7, "rgba(255, 255, 255, 0.14)", 0.12 * Math.PI, 0.88 * Math.PI);
+      drawRingSegment(
+        planetRadius * 2.25,
+        planetRadius * 0.42,
+        1.6,
+        isLightTheme ? "rgba(17, 24, 39, 0.22)" : "rgba(255, 255, 255, 0.34)",
+        0.08 * Math.PI,
+        0.92 * Math.PI
+      );
+      drawRingSegment(
+        planetRadius * 1.82,
+        planetRadius * 0.32,
+        7,
+        isLightTheme ? "rgba(17, 24, 39, 0.07)" : "rgba(255, 255, 255, 0.14)",
+        0.12 * Math.PI,
+        0.88 * Math.PI
+      );
     };
 
     setCanvasSize();
@@ -176,7 +210,9 @@ export default function StarsBackground() {
     let time = 0;
 
     const animate = () => {
-      ctx.fillStyle = "#000000";
+      const isLightTheme = document.documentElement.classList.contains("light");
+
+      ctx.fillStyle = isLightTheme ? "#F4F6FA" : "#000000";
       ctx.fillRect(0, 0, width, height);
 
       const scroll = scrollRef.current;
@@ -198,11 +234,13 @@ export default function StarsBackground() {
         const twinkle = Math.sin(time * 0.025 + star.phase) * 0.28 + 0.72;
         ctx.beginPath();
         ctx.arc(x, y, star.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity * twinkle})`;
+        ctx.fillStyle = isLightTheme
+          ? `rgba(17, 24, 39, ${star.opacity * twinkle * 0.28})`
+          : `rgba(255, 255, 255, ${star.opacity * twinkle})`;
         ctx.fill();
       });
 
-      drawPlanet(time);
+      drawPlanet(time, isLightTheme);
 
       spawnMeteor();
       for (let i = meteors.length - 1; i >= 0; i--) {
@@ -213,8 +251,8 @@ export default function StarsBackground() {
         ctx.moveTo(m.x, m.y);
         ctx.lineTo(tailX, tailY);
         const grad = ctx.createLinearGradient(m.x, m.y, tailX, tailY);
-        grad.addColorStop(0, `rgba(255, 255, 255, ${m.opacity})`);
-        grad.addColorStop(1, "rgba(255, 255, 255, 0)");
+        grad.addColorStop(0, isLightTheme ? `rgba(17, 24, 39, ${m.opacity * 0.34})` : `rgba(255, 255, 255, ${m.opacity})`);
+        grad.addColorStop(1, isLightTheme ? "rgba(17, 24, 39, 0)" : "rgba(255, 255, 255, 0)");
         ctx.strokeStyle = grad;
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -232,8 +270,8 @@ export default function StarsBackground() {
         width * 0.5, height * 0.5, 0,
         width * 0.5, height * 0.5, width * 0.6
       );
-      gradient.addColorStop(0, "rgba(255, 255, 255, 0.03)");
-      gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+      gradient.addColorStop(0, isLightTheme ? "rgba(255, 255, 255, 0.28)" : "rgba(255, 255, 255, 0.03)");
+      gradient.addColorStop(1, isLightTheme ? "rgba(244, 246, 250, 0)" : "rgba(0, 0, 0, 0)");
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
 
@@ -254,12 +292,7 @@ export default function StarsBackground() {
   return (
     <>
       <canvas ref={canvasRef} className="fixed inset-0 z-0 pointer-events-none" />
-      <div
-        className="fixed inset-0 z-0 pointer-events-none bg-black/20"
-        style={{
-          background: "radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.6) 100%)",
-        }}
-      />
+      <div className="stars-overlay fixed inset-0 z-0 pointer-events-none bg-black/20" />
     </>
   );
 }

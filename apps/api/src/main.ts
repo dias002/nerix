@@ -1,14 +1,16 @@
 import { config } from "./config.js";
-import { createPostgresDatabaseClient, getPostgresConfig } from "./database/index.js";
+import { createPostgresDatabaseClient, getPostgresConfig, runDatabaseMigrations } from "./database/index.js";
 import { createApp } from "./server/create-app.js";
 import { createDependencies } from "./server/dependencies.js";
 
 const database = createPostgresDatabaseClient(getPostgresConfig());
+await runDatabaseMigrations(database);
 
 const app = await createApp({
   logger: true,
   dependencies: createDependencies({
     database,
+    persistence: "postgres",
   }),
 });
 
