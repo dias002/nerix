@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nerix Mobile Contact Sheet</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #050505;
+        color: #ffffff;
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      .sheet {
+        width: 1440px;
+        padding: 52px;
+      }
+
+      .header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 32px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+        padding-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 42px;
+        font-weight: 520;
+        letter-spacing: 0;
+      }
+
+      .meta {
+        margin: 0;
+        color: rgba(255, 255, 255, 0.62);
+        font-size: 18px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 390px);
+        gap: 28px;
+        justify-content: center;
+      }
+
+      .frame {
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 28px;
+        background: #000000;
+      }
+
+      .label {
+        min-height: 48px;
+        padding: 14px 18px;
+        color: rgba(255, 255, 255, 0.78);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        font-size: 16px;
+      }
+
+      img {
+        display: block;
+        width: 390px;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <header class="header">
+        <h1>Nerix UI Export</h1>
+        <p class="meta">Mobile screens / upload-ready contact sheet</p>
+      </header>
+
+      <section class="grid">
+        <article class="frame">
+          <div class="label">01 Landing Mobile</div>
+          <img src="../screenshots/mobile/01-landing-mobile.png" alt="Landing mobile" />
+        </article>
+        <article class="frame">
+          <div class="label">02 About Mobile</div>
+          <img src="../screenshots/mobile/02-about-mobile.png" alt="About mobile" />
+        </article>
+        <article class="frame">
+          <div class="label">03 Workspace Home Mobile</div>
+          <img src="../screenshots/mobile/03-workspace-home-mobile.png" alt="Workspace home mobile" />
+        </article>
+        <article class="frame">
+          <div class="label">04 Chat Mobile</div>
+          <img src="../screenshots/mobile/04-chat-mobile.png" alt="Chat mobile" />
+        </article>
+        <article class="frame">
+          <div class="label">05 Agents Mobile</div>
+          <img src="../screenshots/mobile/05-agents-mobile.png" alt="Agents mobile" />
+        </article>
+        <article class="frame">
+          <div class="label">06 Settings Mobile</div>
+          <img src="../screenshots/mobile/06-settings-mobile.png" alt="Settings mobile" />
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
