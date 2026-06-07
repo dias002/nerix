@@ -20,45 +20,50 @@ import SettingsProfile from "./pages/SettingsProfile";
 import SettingsAppearance from "./pages/SettingsAppearance";
 import SettingsNotifications from "./pages/SettingsNotifications";
 
-export const router = createBrowserRouter([
-  {
-    path: "/",
-    Component: Home,
-  },
-  {
-    path: "/about",
-    Component: About,
-  },
-  {
-    path: "/business",
-    Component: Business,
-  },
-  {
-    path: "/auth",
-    Component: AuthPage,
-  },
-  {
-    path: "/auth/callback",
-    Component: AuthCallback,
-  },
-  {
-    path: "/workspace",
-    Component: WorkspaceLayout,
-    children: [
-      { index: true, Component: WorkspaceHome },
-      { path: "chat", Component: Chat },
-      { path: "history", Component: History },
-      { path: "agents", Component: Agents },
-      { path: "memory", Component: Memory },
-      { path: "mailings", Component: Mailings },
-      { path: "business", Component: BusinessCabinet },
-      { path: "business/ideas", Component: BusinessIdeas },
-      { path: "admin", Component: Admin },
-      { path: "balance", Component: Balance },
-      { path: "settings", Component: Settings },
-      { path: "settings/profile", Component: SettingsProfile },
-      { path: "settings/appearance", Component: SettingsAppearance },
-      { path: "settings/notifications", Component: SettingsNotifications },
-    ],
-  },
-]);
+const basename = import.meta.env.BASE_URL === "/" ? undefined : import.meta.env.BASE_URL.replace(/\/$/, "");
+
+export const router = createBrowserRouter(
+  [
+    {
+      path: "/",
+      Component: Home,
+    },
+    {
+      path: "/about",
+      Component: About,
+    },
+    {
+      path: "/business",
+      Component: Business,
+    },
+    {
+      path: "/auth",
+      Component: AuthPage,
+    },
+    {
+      path: "/auth/callback",
+      Component: AuthCallback,
+    },
+    {
+      path: "/workspace",
+      Component: WorkspaceLayout,
+      children: [
+        { index: true, Component: WorkspaceHome },
+        { path: "chat", Component: Chat },
+        { path: "history", Component: History },
+        { path: "agents", Component: Agents },
+        { path: "memory", Component: Memory },
+        { path: "mailings", Component: Mailings },
+        { path: "business", Component: BusinessCabinet },
+        { path: "business/ideas", Component: BusinessIdeas },
+        { path: "admin", Component: Admin },
+        { path: "balance", Component: Balance },
+        { path: "settings", Component: Settings },
+        { path: "settings/profile", Component: SettingsProfile },
+        { path: "settings/appearance", Component: SettingsAppearance },
+        { path: "settings/notifications", Component: SettingsNotifications },
+      ],
+    },
+  ],
+  { basename }
+);
