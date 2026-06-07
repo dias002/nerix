@@ -190,7 +190,7 @@ export default function Balance() {
               <div className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 text-sm text-gray-500 md:col-span-2 xl:col-span-4">
                 Список тарифов пуст.
               </div>
-            )}
+            ) : null}
           </div>
         </section>
 
