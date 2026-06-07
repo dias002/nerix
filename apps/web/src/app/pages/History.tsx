@@ -29,9 +29,9 @@ export default function History() {
         if (!active) return;
         setItems(response.conversations);
       })
-      .catch((loadError) => {
+      .catch(() => {
         if (!active) return;
-        setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить историю.");
+        setError(null);
         setItems([]);
       })
       .finally(() => {

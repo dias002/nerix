@@ -847,10 +847,15 @@ async function request<T>(path: string, init: RequestInit = {}) {
     headers.set("X-Nerix-Local-Role", localRoleOverride);
   }
 
-  const response = await fetch(`${apiUrl}${path}`, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    throw new Error(isNetworkFetchError(error) ? "nerix_api_unavailable" : "nerix_api_request_failed");
+  }
 
   if (!response.ok) {
     const body = await safeJson<ApiErrorResponse>(response);
@@ -858,6 +863,22 @@ async function request<T>(path: string, init: RequestInit = {}) {
   }
 
   return response.json() as Promise<T>;
+}
+
+export function toPublicApiError(error: unknown, fallback = "Не удалось выполнить действие.") {
+  if (error instanceof Error && error.message === "nerix_api_unavailable") {
+    return "API Nerix сейчас не подключен. Действие станет доступно после запуска сервера.";
+  }
+
+  if (error instanceof Error && error.message === "nerix_api_request_failed") {
+    return fallback;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+}
+
+function isNetworkFetchError(error: unknown) {
+  return error instanceof TypeError || (error instanceof Error && /failed to fetch|network|load failed/i.test(error.message));
 }
 
 async function safeJson<T>(response: Response) {

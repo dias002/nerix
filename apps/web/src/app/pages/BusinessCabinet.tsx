@@ -67,7 +67,8 @@ export default function BusinessCabinet() {
       })
       .catch(() => {
         if (cancelled) return;
-        setWorkspaceError("Не удалось загрузить реальные данные бизнес-кабинета из API.");
+        setWorkspaceData(null);
+        setWorkspaceError(null);
       })
       .finally(() => {
         if (!cancelled) setWorkspaceLoading(false);
@@ -136,7 +137,7 @@ export default function BusinessCabinet() {
     if (!trimmed) return;
 
     if (!workspaceData || !selectedDeal) {
-      setWorkspaceError("Сначала загрузите реальные данные CRM из API.");
+      setWorkspaceError("CRM появится после подключения API.");
       return;
     }
 
@@ -146,7 +147,7 @@ export default function BusinessCabinet() {
       setWorkspaceData(updatedWorkspace);
       setWorkspaceError(null);
     } catch {
-      setWorkspaceError("Не удалось сохранить пометку в API.");
+      setWorkspaceError("Не удалось сохранить пометку. Проверьте подключение API.");
     } finally {
       setNoteSaving(false);
       setNoteDraft("");

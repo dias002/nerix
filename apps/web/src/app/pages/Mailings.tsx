@@ -25,6 +25,7 @@ import {
   importMailingContacts,
   sendMailingCampaign,
   syncMailingCampaign,
+  toPublicApiError,
   type MailingAudienceApiRecord,
   type MailingCampaignApiRecord,
   type MailingContactApiRecord,
@@ -144,8 +145,12 @@ export default function Mailings() {
       setCampaigns(campaignsResponse.campaigns);
       setSelectedAudienceId((current) => current || audiencesResponse.audiences[0]?.id || "");
       setSelectedCampaignId((current) => current || campaignsResponse.campaigns[0]?.id || "");
-    } catch (loadError) {
-      setError(errorMessage(loadError));
+    } catch {
+      setAudiences([]);
+      setCampaigns([]);
+      setSelectedAudienceId("");
+      setSelectedCampaignId("");
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -678,5 +683,5 @@ function recipientStatusLabel(status: MailingRecipientApiRecord["status"]) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Не удалось выполнить действие.";
+  return toPublicApiError(error, "Не удалось выполнить действие.");
 }

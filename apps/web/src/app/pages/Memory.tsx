@@ -22,9 +22,9 @@ export default function Memory() {
         if (!active) return;
         setMemories(response.items);
       })
-      .catch((loadError) => {
+      .catch(() => {
         if (!active) return;
-        setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить память.");
+        setError(null);
         setMemories([]);
       })
       .finally(() => {

@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
 import { LoaderCircle, Lock, Mail, User, X } from "lucide-react";
-import { startOAuth } from "../api";
+import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 
@@ -57,7 +57,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
       window.localStorage.removeItem("nerix-guest-chat-requests");
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.auth.error);
+      setError(toPublicApiError(err, t.auth.error));
     } finally {
       setPending(false);
     }
@@ -71,7 +71,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
       const response = await startOAuth(provider, returnTo);
       window.location.href = response.authorizationUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.auth.error);
+      setError(toPublicApiError(err, t.auth.error));
       setPending(false);
     }
   };

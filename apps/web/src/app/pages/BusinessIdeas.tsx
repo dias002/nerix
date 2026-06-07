@@ -37,7 +37,10 @@ export default function BusinessIdeas() {
         setWorkspaceError(null);
       })
       .catch(() => {
-        if (!cancelled) setWorkspaceError("Не удалось загрузить реальные идеи из бизнес API.");
+        if (!cancelled) {
+          setWorkspaceData(null);
+          setWorkspaceError(null);
+        }
       });
 
     return () => {
@@ -68,7 +71,7 @@ export default function BusinessIdeas() {
     const nextStatus: BusinessIdeaStatus = saved ? "suggested" : "planned";
 
     if (!workspaceData) {
-      setWorkspaceError("Сначала загрузите реальные идеи из бизнес API.");
+      setWorkspaceError("Идеи появятся после подключения бизнес API.");
       return;
     }
 
@@ -78,7 +81,7 @@ export default function BusinessIdeas() {
       setWorkspaceData(updatedWorkspace);
       setWorkspaceError(null);
     } catch {
-      setWorkspaceError("Не удалось сохранить статус идеи в API.");
+      setWorkspaceError("Не удалось сохранить статус идеи. Проверьте подключение API.");
     } finally {
       setSavingIdeaId(null);
     }

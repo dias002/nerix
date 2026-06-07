@@ -23,6 +23,7 @@ import {
 import {
   getAdminUsers,
   getAdminOverview,
+  toPublicApiError,
   updateAdminPlanPrice,
   type AdminOverviewApiResponse,
   type AdminPricingApiRecord,
@@ -105,8 +106,9 @@ export default function Admin() {
     setError(null);
     try {
       setOverview(await getAdminOverview());
-    } catch (loadError) {
-      setError(errorMessage(loadError));
+    } catch {
+      setOverview(null);
+      setError(null);
     } finally {
       setLoading(false);
     }
@@ -123,8 +125,9 @@ export default function Admin() {
     setUsersError(null);
     try {
       setAdminUsers(await getAdminUsers(query));
-    } catch (loadError) {
-      setUsersError(errorMessage(loadError));
+    } catch {
+      setAdminUsers(null);
+      setUsersError(null);
     } finally {
       setUsersLoading(false);
     }
@@ -153,7 +156,7 @@ export default function Admin() {
       setOverview((current) => ({ ...(current ?? emptyOverview), pricing: response.pricing }));
       setNotice("Прайс обновлен.");
     } catch (saveError) {
-      setError(errorMessage(saveError));
+      setError(toPublicApiError(saveError, "Не удалось сохранить цену."));
     } finally {
       setSavingPrice(null);
     }
@@ -790,8 +793,4 @@ function createEmptyAdminUsers(query: string): AdminUsersApiResponse {
     privacyNote:
       "Реальные пользователи загрузятся из API. Содержимое чатов, файлов и проектов не выводится.",
   };
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Не удалось загрузить админ-панель.";
 }

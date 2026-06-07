@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, LoaderCircle, Lock, Mail, User } from "lucide-react";
-import { startOAuth } from "../api";
+import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 
@@ -55,7 +55,7 @@ export default function AuthPage() {
 
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.auth.error);
+      setError(toPublicApiError(err, t.auth.error));
     } finally {
       setPending(false);
     }
@@ -69,7 +69,7 @@ export default function AuthPage() {
       const response = await startOAuth(provider, from);
       window.location.href = response.authorizationUrl;
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.auth.error);
+      setError(toPublicApiError(err, t.auth.error));
       setPending(false);
     }
   };

@@ -22,6 +22,7 @@ import {
   regenerateChatMessage,
   selectBestChatAnswer,
   sendChatMessage,
+  toPublicApiError,
   type ChatAttachmentInput,
   type ChatApiMessage,
   type ChatApiResponse,
@@ -146,7 +147,7 @@ export default function Chat() {
       })
       .catch((loadError) => {
         if (!active) return;
-        setUnavailableNotice(loadError instanceof Error ? loadError.message : "Не удалось открыть чат.");
+        setUnavailableNotice(toPublicApiError(loadError, "Не удалось открыть чат."));
       });
 
     return () => {
