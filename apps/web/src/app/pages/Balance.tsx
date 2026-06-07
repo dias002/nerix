@@ -33,28 +33,23 @@ export default function Balance() {
     useState<CurrentSubscriptionApiResponse["subscription"]>(null);
   const [pendingPlanId, setPendingPlanId] = useState<PlanId | null>(null);
   const [checkoutNoticePlanId, setCheckoutNoticePlanId] = useState<PlanId | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    setLoadError(null);
 
-    Promise.all([getWallet(), getLedger(), getPlans(country), getCurrentSubscription()])
-      .then(([walletResponse, ledgerResponse, plansResponse, subscriptionResponse]) => {
-        if (!active) return;
-        setWallet(walletResponse);
-        setLedger(ledgerResponse.entries);
-        setPlans(plansResponse.plans);
-        setCurrentSubscription(subscriptionResponse.subscription);
-      })
-      .catch(() => {
-        if (!active) return;
-        setWallet(null);
-        setLedger(null);
-        setPlans(null);
-        setCurrentSubscription(null);
-        setLoadError("Не удалось загрузить реальные данные баланса и тарифов из API.");
-      });
+    Promise.allSettled([getWallet(), getLedger(), getPlans(country), getCurrentSubscription()]).then((results) => {
+      if (!active) return;
+
+      const walletResult = results[0];
+      const ledgerResult = results[1];
+      const plansResult = results[2];
+      const subscriptionResult = results[3];
+
+      setWallet(walletResult.status === "fulfilled" ? walletResult.value : null);
+      setLedger(ledgerResult.status === "fulfilled" ? ledgerResult.value.entries : null);
+      setPlans(plansResult.status === "fulfilled" ? plansResult.value.plans : null);
+      setCurrentSubscription(subscriptionResult.status === "fulfilled" ? subscriptionResult.value.subscription : null);
+    });
 
     return () => {
       active = false;
@@ -133,10 +128,6 @@ export default function Balance() {
           <p className="mt-2 text-gray-400">{t.balance.subtitle}</p>
         </div>
 
-        {loadError ? (
-          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-100">{loadError}</div>
-        ) : null}
-
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {stats.map((stat, index) => (
             <motion.div
@@ -191,9 +182,13 @@ export default function Balance() {
                       : t.balance.topUp}
                 </button>
               </motion.div>
-            )) : (
+            )) : plans === null ? (
               <div className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 text-sm text-gray-500 md:col-span-2 xl:col-span-4">
-                Тарифы загрузятся из API.
+                Тарифы пока не загружены.
+              </div>
+            ) : plans.length === 0 ? (
+              <div className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 text-sm text-gray-500 md:col-span-2 xl:col-span-4">
+                Список тарифов пуст.
               </div>
             )}
           </div>

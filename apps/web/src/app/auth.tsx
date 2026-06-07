@@ -45,8 +45,9 @@ const roleOverrideStorageKey = "nerix-local-role-override";
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
   const [isLoading, setIsLoading] = useState(() => Boolean(readStoredSession()?.accessToken));
-  const [roleOverride, setRoleOverrideState] = useState<LocalRoleOverride>(() => readRoleOverride());
-  const canUseRoleSwitcher = isLocalRoleSwitcherEnabled();
+  const hasSessionToken = Boolean(session?.accessToken);
+  const canUseRoleSwitcher = isLocalRoleSwitcherEnabled(hasSessionToken);
+  const [roleOverride, setRoleOverrideState] = useState<LocalRoleOverride>(() => readRoleOverride(canUseRoleSwitcher));
   const effectiveRoleOverride = canUseRoleSwitcher ? roleOverride : "real";
   const effectiveUser = useMemo(
     () => applyLocalRoleOverride(session?.user ?? null, effectiveRoleOverride),
@@ -113,10 +114,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async login(input) {
         const response = await loginUser(input);
+        setRoleOverrideState("real");
         updateSession(response);
       },
       async register(input) {
         const response = await registerUser(input);
+        setRoleOverrideState("real");
         updateSession(response);
       },
       completeOAuth(nextSession) {
@@ -134,10 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       },
       logout() {
-        if (canUseRoleSwitcher) {
-          setRoleOverrideState("real");
-          window.localStorage.removeItem(roleOverrideStorageKey);
-        }
+        setRoleOverrideState("real");
+        window.localStorage.removeItem(roleOverrideStorageKey);
         clearSession();
       },
     }),
@@ -291,8 +292,8 @@ function readStoredSession() {
   }
 }
 
-function readRoleOverride(): LocalRoleOverride {
-  if (typeof window === "undefined" || !isLocalRoleSwitcherEnabled()) return "real";
+function readRoleOverride(canUseRoleSwitcher: boolean): LocalRoleOverride {
+  if (typeof window === "undefined" || !canUseRoleSwitcher) return "real";
 
   const saved = window.localStorage.getItem(roleOverrideStorageKey);
   return isLocalRoleOverride(saved) ? saved : "real";
@@ -302,7 +303,12 @@ function isLocalRoleOverride(value: string | null): value is LocalRoleOverride {
   return value === "real" || value === "user" || value === "business_owner" || value === "business_employee" || value === "admin";
 }
 
-function isLocalRoleSwitcherEnabled() {
+function isLocalRoleSwitcherEnabled(hasSessionToken: boolean) {
   if (typeof window === "undefined") return false;
-  return import.meta.env.DEV || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  if (import.meta.env.DEV) return true;
+
+  const hostname = window.location.hostname;
+  if (hostname === "localhost" || hostname === "127.0.0.1") return true;
+
+  return !hasSessionToken;
 }
