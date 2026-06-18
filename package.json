@@ -1,8 +1,8 @@
 {
-  "name": "nerix",
+  "name": "nomduchat",
   "private": true,
   "version": "0.1.0",
-  "description": "Nerix AI agent platform monorepo.",
+  "description": "nomduchat AI agent platform monorepo.",
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -12,9 +12,11 @@
     "web:build": "npm run shared:build && npm --prefix apps/web run build",
     "api:dev": "npm --prefix apps/api run dev",
     "api:build": "npm run shared:build && npm --prefix apps/api run build",
+    "api:migrate": "npm run api:build && npm --prefix apps/api run migrate:build",
     "api:test": "npm --prefix apps/api run test",
-    "web:e2e": "NERIX_E2E_RUNNING=1 playwright test -c playwright.config.ts",
+    "web:e2e": "NOMDUCHAT_E2E_RUNNING=1 playwright test -c playwright.config.ts",
     "web:e2e:serve": "playwright test -c playwright.config.ts",
+    "mailings:api": "node scripts/mailings-api.mjs",
     "shared:build": "npm --prefix packages/shared run build",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",

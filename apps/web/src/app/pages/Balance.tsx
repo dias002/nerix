@@ -21,7 +21,7 @@ export default function Balance() {
   const { refreshUser, user } = useAuth();
   const country = useMemo(() => {
     if (typeof window !== "undefined") {
-      return window.localStorage.getItem("nerix-country") === "RU" ? "RU" : "KZ";
+      return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
     }
 
     return user?.country === "RU" ? "RU" : "KZ";
@@ -103,7 +103,7 @@ export default function Balance() {
         country,
       });
 
-      if (!checkout.checkout.checkoutUrl.startsWith("nerix://mock-checkout")) {
+      if (!checkout.checkout.checkoutUrl.startsWith("nomduchat://mock-checkout")) {
         window.location.href = checkout.checkout.checkoutUrl;
         return;
       }

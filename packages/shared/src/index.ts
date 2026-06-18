@@ -45,7 +45,7 @@ export type WalletBalance = {
   userId: string;
   availableCredits: number;
   reservedCredits: number;
-  currency: "NERIX";
+  currency: "NOMDUCHAT";
 };
 
 export type AiRouteRequest = {

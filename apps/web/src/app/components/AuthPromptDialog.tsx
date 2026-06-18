@@ -25,7 +25,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
   const authCountry = useMemo(() => {
     if (typeof window === "undefined") return "KZ";
-    return window.localStorage.getItem("nerix-country") === "RU" ? "RU" : "KZ";
+    return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
   }, []);
   const returnTo = `${location.pathname}${location.search}`;
 
@@ -54,7 +54,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
         await login({ email, password });
       }
 
-      window.localStorage.removeItem("nerix-guest-chat-requests");
+      window.localStorage.removeItem("nomduchat-guest-chat-requests");
       onClose();
     } catch (err) {
       setError(toPublicApiError(err, t.auth.error));

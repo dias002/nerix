@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { isCountryCode, type CountryCode, type Language } from "@nerix/shared";
+import { isCountryCode, type CountryCode, type Language } from "@nomduchat/shared";
 import { config } from "../../config.js";
 import type { DatabaseClient } from "../../database/index.js";
 import { toPublicUserId } from "../users/local-user.js";
@@ -438,7 +438,7 @@ function mapRow(row: AuthUserRow): AuthUserRecord {
 
   return {
     id: toPublicUserId(row.id),
-    name: row.display_name ?? "Nerix User",
+    name: row.display_name ?? "nomduchat User",
     email: row.email,
     phone: row.phone,
     country: isCountryCode(row.country_code) ? row.country_code : "KZ",

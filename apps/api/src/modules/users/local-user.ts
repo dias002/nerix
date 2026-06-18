@@ -21,6 +21,6 @@ export async function ensureLocalUser(database: DatabaseClient) {
       values ($1, $2, null, $3, $4, $5)
       on conflict (id) do nothing
     `,
-    [LOCAL_USER_DATABASE_ID, "local@nerix.ai", "Local User", "KZ", "ru"]
+    [LOCAL_USER_DATABASE_ID, "local@nomduchat.ai", "Local User", "KZ", "ru"]
   );
 }

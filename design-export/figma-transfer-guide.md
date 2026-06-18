@@ -1,6 +1,6 @@
-# Nerix Figma Transfer Guide
+# nomduchat Figma Transfer Guide
 
-Use this folder to move only the visual part of Nerix into Figma.
+Use this folder to move only the visual part of nomduchat into Figma.
 
 ## What Is Inside
 
@@ -15,9 +15,9 @@ reference             Notes for rebuilding editable components
 
 1. Open the target Figma file.
 2. Create two pages:
-   - `Nerix Screens`
-   - `Nerix Components`
-3. If Figma allows many images, drag all PNG files from `screenshots/desktop` and `screenshots/mobile` into `Nerix Screens`.
+   - `nomduchat Screens`
+   - `nomduchat Components`
+3. If Figma allows many images, drag all PNG files from `screenshots/desktop` and `screenshots/mobile` into `nomduchat Screens`.
 4. If Figma limits upload to 10 files, drag only these two files:
    - `contact-sheets/desktop-contact-sheet.png`
    - `contact-sheets/mobile-contact-sheet.png`
@@ -33,7 +33,7 @@ reference             Notes for rebuilding editable components
    - settings rows;
    - landing sections;
    - language/country controls.
-8. Move rebuilt components into `Nerix Components`.
+8. Move rebuilt components into `nomduchat Components`.
 9. Hide or lock screenshot layers when the editable version is ready.
 
 ## If You Want Editable Layers Faster

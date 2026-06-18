@@ -8,7 +8,7 @@ test("admin panel shows memory aggregates and editable pricing", async ({ page }
   await page.getByRole("link", { name: "Админ", exact: true }).click();
 
   await expect(page).toHaveURL(/\/workspace\/admin/);
-  await expect(page.getByRole("heading", { name: "Панель управления Nerix" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Панель управления nomduchat" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Направление" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Приоритеты админа" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Отчет по оплатам" })).toBeVisible();

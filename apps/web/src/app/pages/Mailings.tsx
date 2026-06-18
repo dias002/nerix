@@ -145,12 +145,12 @@ export default function Mailings() {
       setCampaigns(campaignsResponse.campaigns);
       setSelectedAudienceId((current) => current || audiencesResponse.audiences[0]?.id || "");
       setSelectedCampaignId((current) => current || campaignsResponse.campaigns[0]?.id || "");
-    } catch {
+    } catch (loadError) {
       setAudiences([]);
       setCampaigns([]);
       setSelectedAudienceId("");
       setSelectedCampaignId("");
-      setError(null);
+      setError(errorMessage(loadError));
     } finally {
       setLoading(false);
     }
@@ -547,7 +547,11 @@ export default function Mailings() {
                       <button
                         type="button"
                         onClick={() => void handleSendCampaign(campaign.id)}
-                        disabled={busyAction === `send-${campaign.id}` || campaign.status === "sending"}
+                        disabled={
+                          busyAction === `send-${campaign.id}` ||
+                          campaign.status === "sending" ||
+                          campaign.status === "sent"
+                        }
                         className="inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-60"
                       >
                         <Send className="h-4 w-4" strokeWidth={1.8} />

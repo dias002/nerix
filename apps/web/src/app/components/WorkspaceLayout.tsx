@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Home, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, Users, Zap } from "lucide-react";
+import { ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Home, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
 import { useLanguage } from "../i18n";
@@ -12,11 +12,11 @@ export default function WorkspaceLayout() {
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("nerix-sidebar-collapsed") === "true";
+    return window.localStorage.getItem("nomduchat-sidebar-collapsed") === "true";
   });
 
   useEffect(() => {
-    window.localStorage.setItem("nerix-sidebar-collapsed", String(sidebarCollapsed));
+    window.localStorage.setItem("nomduchat-sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
   const permissions = user?.permissions;
@@ -30,7 +30,14 @@ export default function WorkspaceLayout() {
           icon: ShieldCheck,
           label: t.nav.admin,
           visible: true,
-          active: () => location.pathname === "/workspace/admin" && adminTab !== "users" && adminTab !== "memory" && adminTab !== "pricing",
+          active: () => location.pathname === "/workspace/admin" && adminTab !== "users" && adminTab !== "memory" && adminTab !== "pricing" && adminTab !== "control",
+        },
+        {
+          path: "/workspace/admin?tab=control",
+          icon: SlidersHorizontal,
+          label: t.nav.control,
+          visible: true,
+          active: () => location.pathname === "/workspace/admin" && adminTab === "control",
         },
         {
           path: "/workspace/admin?tab=users",

@@ -1,0 +1,88 @@
+services:
+  - type: web
+    name: nomduchat-api
+    runtime: node
+    rootDir: .
+    plan: starter
+    buildCommand: npm install && npm run api:build
+    preDeployCommand: npm --prefix apps/api run migrate:build
+    startCommand: npm --prefix apps/api run start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 4000
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_RUN_MIGRATIONS
+        value: "false"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: WEB_APP_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: PAYMENT_WEBHOOK_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SMTP_BZ_API_KEY
+        sync: false
+      - key: MAILINGS_API_TOKEN
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: VK_CLIENT_ID
+        sync: false
+      - key: VK_CLIENT_SECRET
+        sync: false
+      - key: KASPI_CHECKOUT_URL
+        sync: false
+      - key: KASPI_API_TOKEN
+        sync: false
+      - key: YOOKASSA_SHOP_ID
+        sync: false
+      - key: YOOKASSA_SECRET_KEY
+        sync: false
+      - key: STORAGE_ENDPOINT
+        sync: false
+      - key: STORAGE_REGION
+        value: auto
+      - key: STORAGE_BUCKET
+        sync: false
+      - key: STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: STORAGE_PUBLIC_BASE_URL
+        sync: false
+      - key: STORAGE_FORCE_PATH_STYLE
+        value: "false"
+      - key: AI_PROVIDER_POLICY
+        value: production_rules
+
+  - type: web
+    name: nomduchat-web
+    runtime: static
+    rootDir: .
+    buildCommand: npm install && npm run web:build
+    staticPublishPath: ./apps/web/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: nomduchat-api
+          envVarKey: API_PUBLIC_URL

@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { Language } from "@nerix/shared";
+import type { Language } from "@nomduchat/shared";
 import {
   type AuthApiResponse,
   getCurrentUser,
@@ -39,14 +39,13 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const storageKey = "nerix-auth-session";
-const roleOverrideStorageKey = "nerix-local-role-override";
+const storageKey = "nomduchat-auth-session";
+const roleOverrideStorageKey = "nomduchat-local-role-override";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(() => readStoredSession());
   const [isLoading, setIsLoading] = useState(() => Boolean(readStoredSession()?.accessToken));
-  const hasSessionToken = Boolean(session?.accessToken);
-  const canUseRoleSwitcher = isLocalRoleSwitcherEnabled(hasSessionToken);
+  const canUseRoleSwitcher = isLocalRoleSwitcherEnabled();
   const [roleOverride, setRoleOverrideState] = useState<LocalRoleOverride>(() => readRoleOverride(canUseRoleSwitcher));
   const effectiveRoleOverride = canUseRoleSwitcher ? roleOverride : "real";
   const effectiveUser = useMemo(
@@ -182,7 +181,7 @@ function applyLocalRoleOverride(user: UserApiRecord | null, role: LocalRoleOverr
   return {
     ...baseUser,
     name: roleLabel(role),
-    email: baseUser.email ?? `${role}@local.nerix`,
+    email: baseUser.email ?? `${role}@local.nomduchat`,
     systemRole,
     workspaceRole,
     activePlanId: role === "business_owner" || role === "business_employee" ? "business" : null,
@@ -195,7 +194,7 @@ function createLocalUser(role: LocalRoleOverride): UserApiRecord {
   return {
     id: `local-${role}`,
     name: roleLabel(role),
-    email: `${role}@local.nerix`,
+    email: `${role}@local.nomduchat`,
     phone: null,
     country: "KZ",
     language: "ru",
@@ -303,12 +302,12 @@ function isLocalRoleOverride(value: string | null): value is LocalRoleOverride {
   return value === "real" || value === "user" || value === "business_owner" || value === "business_employee" || value === "admin";
 }
 
-function isLocalRoleSwitcherEnabled(hasSessionToken: boolean) {
+function isLocalRoleSwitcherEnabled() {
   if (typeof window === "undefined") return false;
   if (import.meta.env.DEV) return true;
 
   const hostname = window.location.hostname;
   if (hostname === "localhost" || hostname === "127.0.0.1") return true;
 
-  return !hasSessionToken;
+  return false;
 }

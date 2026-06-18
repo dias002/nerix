@@ -20,7 +20,7 @@ type LanguageContextValue = {
 };
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
-const storageKey = "nerix-language";
+const storageKey = "nomduchat-language";
 
 function isLanguage(value: string | null): value is Language {
   return value === "ru" || value === "kk" || value === "en";

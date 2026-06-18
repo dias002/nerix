@@ -1,4 +1,4 @@
-import type { CountryCode, Language } from "@nerix/shared";
+import type { CountryCode, Language } from "@nomduchat/shared";
 import { DomainError, fail, ok } from "../../domain/result.js";
 import type { AiGatewayService } from "../ai-gateway/ai-gateway.service.js";
 import type { ConversationRepository } from "./conversation.repository.js";

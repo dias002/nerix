@@ -12,6 +12,11 @@ export default function GlassPanel({ children, className = "", depth = "medium" 
     medium: "shadow-[0_4px_16px_rgba(0,0,0,0.5)]",
     heavy: "shadow-[0_8px_32px_rgba(0,0,0,0.6)]",
   };
+  const depthStyles = {
+    subtle: "var(--panel-shadow-subtle)",
+    medium: "var(--panel-shadow-medium)",
+    heavy: "var(--panel-shadow-heavy)",
+  };
 
   return (
     <div
@@ -23,12 +28,7 @@ export default function GlassPanel({ children, className = "", depth = "medium" 
         ${className}
       `}
       style={{
-        boxShadow: `
-          ${depth === "heavy" ? "0 8px 32px rgba(0, 0, 0, 0.6)," : ""}
-          ${depth === "medium" ? "0 4px 16px rgba(0, 0, 0, 0.5)," : ""}
-          0 2px 8px rgba(0, 0, 0, 0.4),
-          inset 0 1px 0 rgba(255, 255, 255, 0.05)
-        `.trim(),
+        boxShadow: depthStyles[depth],
       }}
     >
       {children}

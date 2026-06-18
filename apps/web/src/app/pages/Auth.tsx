@@ -23,7 +23,7 @@ export default function AuthPage() {
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
   const authCountry = useMemo(() => {
     if (typeof window === "undefined") return "KZ";
-    return window.localStorage.getItem("nerix-country") === "RU" ? "RU" : "KZ";
+    return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
   }, []);
 
   if (!isLoading && isAuthenticated) {

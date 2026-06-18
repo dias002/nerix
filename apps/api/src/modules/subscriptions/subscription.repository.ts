@@ -668,8 +668,14 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
             on conflict (plan_id, country_code) do update set
               provider = excluded.provider,
               currency = excluded.currency,
-              amount_minor = excluded.amount_minor,
-              price_source = excluded.price_source,
+              amount_minor = case
+                when plan_prices.price_source = 'admin_fixed_rate' then plan_prices.amount_minor
+                else excluded.amount_minor
+              end,
+              price_source = case
+                when plan_prices.price_source = 'admin_fixed_rate' then plan_prices.price_source
+                else excluded.price_source
+              end,
               updated_at = now()
           `,
           [

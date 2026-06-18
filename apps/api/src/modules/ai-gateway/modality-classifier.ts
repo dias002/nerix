@@ -1,4 +1,4 @@
-import type { AiModality } from "@nerix/shared";
+import type { AiModality } from "@nomduchat/shared";
 
 const modalityNeedles: Array<{ modality: AiModality; needles: string[] }> = [
   { modality: "code", needles: ["код", "code", "bug", "ошибка", "рефактор", "api", "typescript"] },

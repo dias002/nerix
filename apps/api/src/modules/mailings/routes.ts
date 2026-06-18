@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { config } from "../../config.js";
 import { DomainError, fail, ok, type Result } from "../../domain/result.js";
 import { readBearerToken, readLocalRoleOverride } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
@@ -165,11 +166,15 @@ async function resolveMailingUser(
   request: FastifyRequest,
   auth: AuthService
 ): Promise<Result<{ userId: string }>> {
+  const accessToken = readBearerToken(request.headers.authorization);
+  if (config.MAILINGS_API_TOKEN && accessToken === config.MAILINGS_API_TOKEN) {
+    return ok({ userId: config.MAILINGS_API_USER_ID });
+  }
+
   if (readLocalRoleOverride(request) === "admin") {
     return ok({ userId: LOCAL_USER_PUBLIC_ID });
   }
 
-  const accessToken = readBearerToken(request.headers.authorization);
   if (!accessToken) {
     return fail(new DomainError("unauthorized", "Admin access token is required for mailings.", 401));
   }

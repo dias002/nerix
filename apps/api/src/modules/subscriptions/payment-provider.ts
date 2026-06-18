@@ -24,7 +24,7 @@ export class MockSubscriptionPaymentProvider implements SubscriptionPaymentProvi
   async createCheckout(input: CreateCheckoutInput) {
     return {
       providerCheckoutId: `mock_${randomUUID()}`,
-      checkoutUrl: `nerix://mock-checkout/${this.code}/${input.plan.id}`,
+      checkoutUrl: `nomduchat://mock-checkout/${this.code}/${input.plan.id}`,
     };
   }
 }
@@ -86,7 +86,7 @@ export class YooKassaSubscriptionPaymentProvider implements SubscriptionPaymentP
           type: "redirect",
           return_url: config.YOOKASSA_RETURN_URL,
         },
-        description: `Nerix ${input.plan.name} subscription`,
+        description: `nomduchat ${input.plan.name} subscription`,
         metadata: {
           userId: input.userId,
           planId: input.plan.id,

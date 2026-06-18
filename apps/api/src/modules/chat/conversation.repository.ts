@@ -868,7 +868,7 @@ export class PostgresConversationRepository implements ConversationRepository {
             1,
             0,
             created_at,
-            'Сотрудник работал через чат Nerix. Запрос учтен в бизнес-аналитике.'
+            'Сотрудник работал через чат nomduchat. Запрос учтен в бизнес-аналитике.'
           from activity
           on conflict (workspace_id, user_id, report_date) do update
             set requests_count = business_employee_daily_reports.requests_count + 1,
@@ -895,7 +895,7 @@ function mapConversationRow(row: ConversationRow, messages: ConversationMessage[
     id: row.id,
     userId: toPublicUserId(row.user_id),
     agentId: row.agent_slug ?? "general",
-    title: row.title ?? "Nerix conversation",
+    title: row.title ?? "nomduchat conversation",
     messages,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -907,7 +907,7 @@ function mapConversationSummaryRow(row: ConversationSummaryRow): ConversationSum
     id: row.id,
     userId: toPublicUserId(row.user_id),
     agentId: row.agent_slug ?? "general",
-    title: row.title ?? "Nerix conversation",
+    title: row.title ?? "nomduchat conversation",
     preview: row.preview ?? "",
     messagesCount: Number(row.messages_count ?? 0),
     createdAt: new Date(row.created_at).toISOString(),

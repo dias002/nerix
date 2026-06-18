@@ -1,8 +1,20 @@
 import { motion } from "motion/react";
 import { Link } from "react-router";
-import { User, Bell, Globe, Shield, LogIn, LogOut, ChevronDown, ChevronRight, Check, Moon, Sun } from "lucide-react";
+import {
+  Bell,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Globe,
+  LogIn,
+  LogOut,
+  Moon,
+  Shield,
+  Sun,
+  User,
+} from "lucide-react";
 import { useMemo, useState } from "react";
-import { countryCodes, normalizeCountryCode, type CountryCode } from "@nerix/shared";
+import { countryCodes, normalizeCountryCode, type CountryCode } from "@nomduchat/shared";
 import { useAuth } from "../auth";
 import LanguageSwitch from "../components/LanguageSwitch";
 import { useLanguage } from "../i18n";
@@ -15,7 +27,7 @@ export default function Settings() {
   const [countryOpen, setCountryOpen] = useState(false);
   const [country, setCountry] = useState<CountryCode>(() => {
     if (typeof window === "undefined") return "KZ";
-    return normalizeCountryCode(window.localStorage.getItem("nerix-country") ?? "KZ");
+    return normalizeCountryCode(window.localStorage.getItem("nomduchat-country") ?? "KZ");
   });
   const displayNames = useMemo(() => {
     const locale = language === "kk" ? "kk" : language;
@@ -36,20 +48,26 @@ export default function Settings() {
     [displayNames, language]
   );
 
+  const selectedCountry = countryOptions.find((option) => option.code === country);
+
   const handleCountryChange = (value: string) => {
     const nextCountry = normalizeCountryCode(value);
     setCountry(nextCountry);
-    window.localStorage.setItem("nerix-country", nextCountry);
+    window.localStorage.setItem("nomduchat-country", nextCountry);
     setCountryOpen(false);
   };
-
-  const selectedCountry = countryOptions.find((option) => option.code === country);
 
   const settingsGroups = [
     {
       title: t.settings.main,
       items: [
-        { id: "profile", label: t.settings.profile, icon: User, value: user?.email ?? user?.name ?? t.auth.guest, path: "/workspace/settings/profile" },
+        {
+          id: "profile",
+          label: t.settings.profile,
+          icon: User,
+          value: user?.email ?? user?.name ?? t.auth.guest,
+          path: "/workspace/settings/profile",
+        },
         {
           id: "appearance",
           label: t.settings.appearance,
@@ -57,41 +75,50 @@ export default function Settings() {
           value: theme === "light" ? t.settings.light : t.settings.dark,
           path: "/workspace/settings/appearance",
         },
-        { id: "notifications", label: t.settings.notifications, icon: Bell, value: t.settings.off, path: "/workspace/settings/notifications" },
-      ]
+        {
+          id: "notifications",
+          label: t.settings.notifications,
+          icon: Bell,
+          value: t.settings.off,
+          path: "/workspace/settings/notifications",
+        },
+      ],
     },
     {
       title: t.settings.extra,
       items: [
         { id: "language", label: t.settings.language, icon: Globe },
         { id: "country", label: t.settings.country, icon: Globe },
-        { id: "security", label: t.settings.security, icon: Shield, value: isAuthenticated ? t.settings.protected : t.auth.guestHint },
-      ]
-    }
+        {
+          id: "security",
+          label: t.settings.security,
+          icon: Shield,
+          value: isAuthenticated ? t.settings.protected : t.auth.guestHint,
+        },
+      ],
+    },
   ];
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-8 md:p-12">
-      <div className="max-w-2xl mx-auto space-y-10">
+      <div className="mx-auto max-w-5xl space-y-10">
         <div>
-          <h2 className="text-2xl font-medium text-white mb-2">{t.settings.title}</h2>
+          <h2 className="mb-2 text-2xl font-medium text-white">{t.settings.title}</h2>
           <p className="text-gray-400">{t.settings.subtitle}</p>
         </div>
 
         <div className="space-y-8">
           {settingsGroups.map((group, groupIdx) => (
             <div key={group.title}>
-              <h3 className="text-xs font-medium text-gray-500 uppercase mb-3 px-2">
-                {group.title}
-              </h3>
-              <div className="bg-[#0D0D0D] border border-white/10 rounded-2xl">
+              <h3 className="mb-3 px-2 text-xs font-medium uppercase text-gray-500">{group.title}</h3>
+              <div className="rounded-2xl border border-white/10 bg-[#0D0D0D]">
                 {group.items.map((item, itemIdx) => {
                   const rowClassName = `relative w-full p-4 text-left transition-colors ${
                     itemIdx !== group.items.length - 1 ? "border-b border-white/5" : ""
                   }`;
                   const leftContent = (
                     <div className="flex items-center gap-3">
-                      <item.icon className="w-5 h-5 text-gray-400" />
+                      <item.icon className="h-5 w-5 text-gray-400" />
                       <span className="text-gray-200">{item.label}</span>
                     </div>
                   );
@@ -144,7 +171,7 @@ export default function Settings() {
                             </button>
                             {countryOpen ? (
                               <div className="absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-xl border border-white/10 bg-[#080808] shadow-2xl shadow-black/60">
-                                <div className="max-h-72 overflow-y-auto py-1 custom-scrollbar">
+                                <div className="custom-scrollbar max-h-72 overflow-y-auto py-1">
                                   {countryOptions.map((option) => (
                                     <button
                                       key={option.code}
@@ -152,7 +179,9 @@ export default function Settings() {
                                       onClick={() => handleCountryChange(option.code)}
                                       className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
                                     >
-                                      <span className="truncate">{option.name} ({option.code})</span>
+                                      <span className="truncate">
+                                        {option.name} ({option.code})
+                                      </span>
                                       {option.code === country ? (
                                         <Check className="h-4 w-4 shrink-0 text-white" strokeWidth={1.8} />
                                       ) : null}

@@ -1,9 +1,9 @@
-Create a complete high-fidelity UI/UX design for a futuristic AI platform called “Nerix”.
+Create a complete high-fidelity UI/UX design for a futuristic AI platform called “nomduchat”.
 
 The design must be inspired by the page architecture and interaction style of Claude.ai, but visually adapted into a black-and-white sci-fi minimalist interface.
 
 Important concept:
-Nerix should feel like one intelligent AI system, not a collection of visible agents.
+nomduchat should feel like one intelligent AI system, not a collection of visible agents.
 Do NOT show AI agents, agent cards, agent avatars, agent grid, or “30 agents” anywhere in the interface.
 The user should only see a clean AI platform with a home page, chat workspace, memory, projects, and settings.
 
@@ -25,8 +25,8 @@ Desktop web app structure:
 1. Landing / Home page
    - No top navigation.
    - Large black-and-white dynamic starry sky hero background.
-   - Logo “NERIX” in the top-left corner.
-   - Big headline: “Welcome to Nerix”
+   - Logo “NOMDUCHAT” in the top-left corner.
+   - Big headline: “Welcome to nomduchat”
    - Subtitle: “Where intelligence meets the infinite.”
    - One minimal white CTA button: “Enter”
    - Use cinematic scroll cues, such as “Scroll to explore”.
@@ -94,14 +94,14 @@ Mobile app structure:
 Create mobile frames that match the same product identity:
 1. Mobile Home
    - Black-and-white dynamic starry sky.
-   - NERIX logo.
-   - “Welcome to Nerix”
+   - NOMDUCHAT logo.
+   - “Welcome to nomduchat”
    - CTA button “Enter”
    - No visible agents.
 
 2. Mobile Chat
    - Claude-like minimal chat architecture adapted for mobile.
-   - Top bar only with NERIX and menu icon.
+   - Top bar only with NOMDUCHAT and menu icon.
    - No top navigation links.
    - Chat area with starry background, centered prompt, input field at bottom.
    - Use black glass panels and thin white borders.

@@ -51,7 +51,7 @@ type AgentOption = {
 const fallbackAgentIds = ["general", "business", "code", "study"] as const;
 const maxAttachedFiles = 5;
 const maxFileContentChars = 12_000;
-const guestRequestStorageKey = "nerix-guest-chat-requests";
+const guestRequestStorageKey = "nomduchat-guest-chat-requests";
 const textFilePattern = /\.(txt|md|markdown|csv|json|jsonl|ts|tsx|js|jsx|html|css|py|java|cs|go|rs|sql|xml|yaml|yml|log)$/i;
 
 export default function Chat() {
@@ -100,7 +100,7 @@ export default function Chat() {
 
   const selectedAgent = agentOptions.find((agent) => agent.id === selectedAgentId);
   const activeAgentId = selectedAgent?.id;
-  const modelLabel = selectedAgent ? `Nerix · ${selectedAgent.title}` : t.chat.model;
+  const modelLabel = selectedAgent ? `nomduchat · ${selectedAgent.title}` : t.chat.model;
   const canSend = Boolean(inputValue.trim()) || attachedFiles.length > 0;
 
   const scrollToBottom = () => {

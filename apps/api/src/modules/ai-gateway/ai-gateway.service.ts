@@ -1,4 +1,4 @@
-import type { AiRouteRequest } from "@nerix/shared";
+import type { AiRouteRequest } from "@nomduchat/shared";
 import { DomainError, fail, ok } from "../../domain/result.js";
 import type { AgentService } from "../agents/agent.service.js";
 import type { BillingService } from "../billing/billing.service.js";

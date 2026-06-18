@@ -1,6 +1,6 @@
 # Token Payment Automation
 
-This document describes the production flow for selling Nerix token plans through a merchant account.
+This document describes the production flow for selling nomduchat token plans through a merchant account.
 
 ## Flow
 
@@ -14,7 +14,7 @@ This document describes the production flow for selling Nerix token plans throug
 6. API completes the checkout, creates or replaces the active subscription, and grants plan credits to the exact `userId`.
 7. Wallet ledger stores a `topup` entry with `reference_type = subscription` and `reference_id = subscription.id`.
 
-Credits are internal Nerix credits. AI provider costs are paid from the platform provider account as users consume those credits.
+Credits are internal nomduchat credits. AI provider costs are paid from the platform provider account as users consume those credits.
 
 ## Webhooks
 
@@ -72,5 +72,5 @@ YOOKASSA_RETURN_URL=https://your-domain.kz/workspace/balance
 Set `PAYMENT_WEBHOOK_SECRET` when webhook requests go through your own gateway. Send it as:
 
 ```text
-x-nerix-webhook-secret: <secret>
+x-nomduchat-webhook-secret: <secret>
 ```

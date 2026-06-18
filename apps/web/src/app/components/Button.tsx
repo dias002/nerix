@@ -37,10 +37,10 @@ export default function Button({
 
   const shadowStyles = {
     primary: {
-      boxShadow: "0 4px 16px rgba(255, 255, 255, 0.12), 0 2px 6px rgba(255, 255, 255, 0.08)",
+      boxShadow: "var(--button-shadow-primary)",
     },
     secondary: {
-      boxShadow: "inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.4)",
+      boxShadow: "var(--button-shadow-secondary)",
     },
     ghost: {},
   };

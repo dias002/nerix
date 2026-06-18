@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { LedgerEntryType, WalletBalance } from "@nerix/shared";
+import type { LedgerEntryType, WalletBalance } from "@nomduchat/shared";
 import type { DatabaseClient } from "../../database/index.js";
 import { ensureLocalUser, LOCAL_USER_PUBLIC_ID, toDatabaseUserId, toPublicUserId } from "../users/local-user.js";
 import type { CreditReservation, LedgerEntryRecord, WalletRecord } from "./wallet.types.js";
@@ -22,7 +22,7 @@ export class InMemoryWalletRepository implements WalletRepository {
         userId: "local-user",
         availableCredits: 12500,
         reservedCredits: 0,
-        currency: "NERIX",
+        currency: "NOMDUCHAT",
         ledger: [],
       },
     ],
@@ -109,7 +109,7 @@ export class InMemoryWalletRepository implements WalletRepository {
       userId,
       availableCredits: 0,
       reservedCredits: 0,
-      currency: "NERIX",
+      currency: "NOMDUCHAT",
       ledger: [],
     };
     this.wallets.set(userId, wallet);
@@ -122,7 +122,7 @@ type WalletRow = {
   user_id: string;
   available_credits: string | number;
   reserved_credits: string | number;
-  currency: "NERIX";
+  currency: "NOMDUCHAT";
 } & Record<string, unknown>;
 
 type LedgerRow = {
@@ -145,7 +145,7 @@ type ReservationRow = {
   amount_refunded: string | number;
   available_credits: string | number;
   reserved_credits: string | number;
-  currency: "NERIX";
+  currency: "NOMDUCHAT";
 } & Record<string, unknown>;
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -398,7 +398,7 @@ export class PostgresWalletRepository implements WalletRepository {
           le.created_at
         from ledger_entries le
         join wallets w on w.id = le.wallet_id
-        where w.user_id = $1 and w.currency = 'NERIX'
+        where w.user_id = $1 and w.currency = 'NOMDUCHAT'
         order by le.created_at desc
       `,
       [databaseUserId]
@@ -424,7 +424,7 @@ export class PostgresWalletRepository implements WalletRepository {
     await client.query(
       `
         insert into wallets (user_id, available_credits, reserved_credits, currency)
-        values ($1, $2, 0, 'NERIX')
+        values ($1, $2, 0, 'NOMDUCHAT')
         on conflict (user_id, currency) do nothing
       `,
       [databaseUserId, seedCredits]
@@ -436,7 +436,7 @@ export class PostgresWalletRepository implements WalletRepository {
       `
         select id, user_id, available_credits, reserved_credits, currency
         from wallets
-        where user_id = $1 and currency = 'NERIX'
+        where user_id = $1 and currency = 'NOMDUCHAT'
         limit 1
         ${forUpdate ? "for update" : ""}
       `,
@@ -461,7 +461,7 @@ export class PostgresWalletRepository implements WalletRepository {
           w.currency
         from credit_reservations r
         join wallets w on w.id = r.wallet_id
-        where r.id = $1 and r.user_id = $2 and w.currency = 'NERIX'
+        where r.id = $1 and r.user_id = $2 and w.currency = 'NOMDUCHAT'
         limit 1
         for update of r, w
       `,
@@ -513,7 +513,7 @@ function publicWalletFromValues(
     userId: toPublicUserId(databaseUserId),
     availableCredits,
     reservedCredits,
-    currency: "NERIX",
+    currency: "NOMDUCHAT",
   };
 }
 

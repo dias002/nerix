@@ -1,5 +1,5 @@
-import type { CountryCode } from "@nerix/shared";
-import type { WalletBalance } from "@nerix/shared";
+import type { CountryCode } from "@nomduchat/shared";
+import type { WalletBalance } from "@nomduchat/shared";
 
 export type SubscriptionCountry = Extract<CountryCode, "KZ" | "RU">;
 export type PaymentProviderCode = "kaspi" | "yookassa";

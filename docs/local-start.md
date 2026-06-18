@@ -8,7 +8,7 @@ Start locally with the foundation that will not need to be thrown away later:
 2. Build a real backend in `apps/api`.
 3. Store shared contracts in `packages/shared`.
 4. Run PostgreSQL and Redis locally through Docker.
-5. Implement internal Nerix credits before connecting paid AI providers.
+5. Implement internal nomduchat credits before connecting paid AI providers.
 
 ## Recommended Order
 
@@ -44,7 +44,7 @@ The API scaffold is present, but dependencies still need to be installed before 
 The frontend and Flutter app must never call AI providers directly. All requests must go through:
 
 ```text
-Client -> Nerix API -> AI Gateway -> Provider
+Client -> nomduchat API -> AI Gateway -> Provider
 ```
 
-This protects API keys, lets Nerix count usage, apply country/provider rules, charge internal credits, and block abuse.
+This protects API keys, lets nomduchat count usage, apply country/provider rules, charge internal credits, and block abuse.

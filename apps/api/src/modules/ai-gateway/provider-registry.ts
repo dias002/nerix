@@ -1,4 +1,4 @@
-import type { AiModality } from "@nerix/shared";
+import type { AiModality } from "@nomduchat/shared";
 
 export type ProviderCode = "mock-provider" | "openai" | "anthropic" | "gemini";
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isCountryCode, type CountryCode } from "@nerix/shared";
+import { isCountryCode, type CountryCode } from "@nomduchat/shared";
 
 export const countrySchema = z
   .string()

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Users buy internal Nerix credits, not provider tokens directly. Nerix spends provider APIs from the backend and charges the user's internal wallet through the ledger.
+Users buy internal nomduchat credits, not provider tokens directly. nomduchat spends provider APIs from the backend and charges the user's internal wallet through the ledger.
 
 ## Current Product Decision
 
@@ -43,12 +43,12 @@ For Kazakhstan, convert to KZT only after payment costs, provider costs, VAT/tax
 
 ```text
 User chooses package
--> Nerix creates payment intent/order
+-> nomduchat creates payment intent/order
 -> Payment provider opens checkout
--> Provider sends webhook to Nerix API
--> Nerix verifies/parses provider event
--> Nerix completes pending checkout
--> Nerix writes ledger topup entry
+-> Provider sends webhook to nomduchat API
+-> nomduchat verifies/parses provider event
+-> nomduchat completes pending checkout
+-> nomduchat writes ledger topup entry
 -> User wallet balance increases
 ```
 

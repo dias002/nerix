@@ -4,7 +4,9 @@ import { createApp } from "./server/create-app.js";
 import { createDependencies } from "./server/dependencies.js";
 
 const database = createPostgresDatabaseClient(getPostgresConfig());
-await runDatabaseMigrations(database);
+if (config.DATABASE_RUN_MIGRATIONS) {
+  await runDatabaseMigrations(database);
+}
 
 const app = await createApp({
   logger: true,
@@ -16,7 +18,7 @@ const app = await createApp({
 
 await app.listen({
   port: config.API_PORT,
-  host: "127.0.0.1",
+  host: config.API_HOST,
 });
 
 const shutdown = async () => {

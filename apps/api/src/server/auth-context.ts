@@ -28,7 +28,7 @@ export function readBearerToken(authorization: string | undefined) {
 export function readLocalRoleOverride(request: FastifyRequest): LocalRoleOverride | null {
   if (!isLocalRoleBypassAllowed(request)) return null;
 
-  const rawRole = request.headers["x-nerix-local-role"];
+  const rawRole = request.headers["x-nomduchat-local-role"];
   const role = Array.isArray(rawRole) ? rawRole[0] : rawRole;
   if (role === "user" || role === "business_owner" || role === "business_employee" || role === "admin") {
     return role;

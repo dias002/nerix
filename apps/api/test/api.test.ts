@@ -16,7 +16,7 @@ test("GET /health returns service status", async () => {
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), {
     ok: true,
-    service: "nerix-api",
+    service: "nomduchat-api",
     version: "0.1.0",
   });
 
@@ -73,7 +73,7 @@ test("auth register, login, and me use signed access tokens", async () => {
     payload: {
       email: "user@example.com",
       password: "secure-password",
-      name: "Nerix User",
+      name: "nomduchat User",
       country: "KZ",
       language: "ru",
     },
@@ -194,6 +194,15 @@ test("auth profile exposes role permissions and protects admin-only routes", asy
     });
     assert.equal(deniedAdminUsersResponse.statusCode, 403);
 
+    const deniedAdminControlResponse = await app.inject({
+      method: "GET",
+      url: "/admin/control",
+      headers: {
+        authorization: `Bearer ${userLoginResponse.json().accessToken}`,
+      },
+    });
+    assert.equal(deniedAdminControlResponse.statusCode, 403);
+
     const adminOverviewResponse = await app.inject({
       method: "GET",
       url: "/admin/overview",
@@ -209,6 +218,96 @@ test("auth profile exposes role permissions and protects admin-only routes", asy
     assert.ok(adminOverviewResponse.json().paymentReport.providers.some((provider: { provider: string }) => provider.provider === "yookassa"));
     assert.ok(Array.isArray(adminOverviewResponse.json().pricing.exchangeRates));
     assert.ok(Array.isArray(adminOverviewResponse.json().pricing.plans));
+
+    const adminControlResponse = await app.inject({
+      method: "GET",
+      url: "/admin/control",
+      headers: {
+        authorization: `Bearer ${adminRegisterResponse.json().accessToken}`,
+      },
+    });
+    assert.equal(adminControlResponse.statusCode, 200);
+    assert.ok(Array.isArray(adminControlResponse.json().featureFlags));
+    assert.ok(Array.isArray(adminControlResponse.json().aiProviders));
+    assert.ok(Array.isArray(adminControlResponse.json().agents));
+    assert.ok(adminControlResponse.json().agents.some((agent: { id: string }) => agent.id === "image"));
+    assert.ok(Array.isArray(adminControlResponse.json().promotions));
+    assert.ok(Array.isArray(adminControlResponse.json().contentBlocks));
+    assert.ok(typeof adminControlResponse.json().note === "string");
+
+    const adminProviderControlResponse = await app.inject({
+      method: "PATCH",
+      url: "/admin/control/ai-providers/mock-provider",
+      headers: {
+        authorization: `Bearer ${adminRegisterResponse.json().accessToken}`,
+      },
+      payload: {
+        enabled: true,
+        model: "mock-control",
+        trafficMode: "primary",
+      },
+    });
+    assert.equal(adminProviderControlResponse.statusCode, 200);
+    assert.ok(Array.isArray(adminProviderControlResponse.json().aiProviders));
+
+    const adminAgentControlResponse = await app.inject({
+      method: "PATCH",
+      url: "/admin/control/agents/image",
+      headers: {
+        authorization: `Bearer ${adminRegisterResponse.json().accessToken}`,
+      },
+      payload: {
+        enabled: false,
+      },
+    });
+    assert.equal(adminAgentControlResponse.statusCode, 200);
+    assert.ok(
+      adminAgentControlResponse.json().agents.some((agent: { id: string; enabled: boolean }) => {
+        return agent.id === "image" && agent.enabled === false;
+      })
+    );
+
+    const adminFeatureControlResponse = await app.inject({
+      method: "PATCH",
+      url: "/admin/control/feature-flags/chat.files",
+      headers: {
+        authorization: `Bearer ${adminRegisterResponse.json().accessToken}`,
+      },
+      payload: {
+        enabled: false,
+        rolloutPercent: 50,
+      },
+    });
+    assert.equal(adminFeatureControlResponse.statusCode, 200);
+    assert.ok(Array.isArray(adminFeatureControlResponse.json().featureFlags));
+
+    const adminPromotionControlResponse = await app.inject({
+      method: "PATCH",
+      url: "/admin/control/promotions/launch-offer",
+      headers: {
+        authorization: `Bearer ${adminRegisterResponse.json().accessToken}`,
+      },
+      payload: {
+        active: false,
+        title: "Test launch offer",
+      },
+    });
+    assert.equal(adminPromotionControlResponse.statusCode, 200);
+    assert.ok(Array.isArray(adminPromotionControlResponse.json().promotions));
+
+    const adminContentControlResponse = await app.inject({
+      method: "PATCH",
+      url: "/admin/control/content-blocks/home.hero",
+      headers: {
+        authorization: `Bearer ${adminRegisterResponse.json().accessToken}`,
+      },
+      payload: {
+        locale: "ru",
+        title: "Test hero",
+      },
+    });
+    assert.equal(adminContentControlResponse.statusCode, 200);
+    assert.ok(Array.isArray(adminContentControlResponse.json().contentBlocks));
 
     const adminPricingResponse = await app.inject({
       method: "PATCH",
@@ -266,7 +365,7 @@ test("local admin role header opens admin aggregates only in dev/test mode", asy
     method: "GET",
     url: "/admin/overview",
     headers: {
-      "x-nerix-local-role": "user",
+      "x-nomduchat-local-role": "user",
     },
   });
   assert.equal(deniedResponse.statusCode, 401);
@@ -275,7 +374,7 @@ test("local admin role header opens admin aggregates only in dev/test mode", asy
     method: "GET",
     url: "/admin/overview",
     headers: {
-      "x-nerix-local-role": "admin",
+      "x-nomduchat-local-role": "admin",
     },
   });
   assert.equal(adminResponse.statusCode, 200);
@@ -283,6 +382,70 @@ test("local admin role header opens admin aggregates only in dev/test mode", asy
   assert.ok(Array.isArray(adminResponse.json().pricing.plans));
 
   await app.close();
+});
+
+test("local admin role header cannot open mailings in production mode", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  const app = await createApp();
+
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/mailings/audiences",
+      headers: {
+        "x-nomduchat-local-role": "admin",
+      },
+    });
+
+    assert.equal(response.statusCode, 401);
+  } finally {
+    await app.close();
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  }
+});
+
+test("mailings service token opens mailing API in production mode", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+
+  await withConfig({ MAILINGS_API_TOKEN: "repo-mailings-token", MAILINGS_API_USER_ID: "local-user" }, async () => {
+    const app = await createApp();
+
+    try {
+      const deniedResponse = await app.inject({
+        method: "GET",
+        url: "/mailings/audiences",
+        headers: {
+          authorization: "Bearer wrong-token",
+        },
+      });
+      assert.equal(deniedResponse.statusCode, 401);
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/mailings/audiences",
+        headers: {
+          authorization: "Bearer repo-mailings-token",
+        },
+      });
+
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(response.json().audiences, []);
+    } finally {
+      await app.close();
+    }
+  });
+
+  if (previousNodeEnv === undefined) {
+    delete process.env.NODE_ENV;
+  } else {
+    process.env.NODE_ENV = previousNodeEnv;
+  }
 });
 
 test("authenticated workspace routes use bearer user instead of request userId", async () => {
@@ -394,7 +557,7 @@ test("OAuth start reports unavailable providers until credentials are configured
   await app.close();
 });
 
-test("Google OAuth callback creates a Nerix session", async () => {
+test("Google OAuth callback creates a nomduchat session", async () => {
   await withConfig(
     {
       GOOGLE_CLIENT_ID: "google-client",
@@ -465,6 +628,59 @@ test("GET /agents returns enabled agent registry", async () => {
   const body = response.json();
   assert.ok(body.agents.length >= 4);
   assert.equal(body.agents[0].id, "general");
+  assert.ok(body.agents.some((agent: { id: string }) => agent.id === "image"));
+  assert.ok(body.agents.some((agent: { id: string }) => agent.id === "video"));
+  assert.ok(body.agents.some((agent: { id: string }) => agent.id === "music"));
+
+  await app.close();
+});
+
+test("admin can disable an agent from the aggregator", async () => {
+  const app = await createApp();
+
+  const disableResponse = await app.inject({
+    method: "PATCH",
+    url: "/admin/control/agents/music",
+    headers: {
+      "x-nomduchat-local-role": "admin",
+    },
+    payload: {
+      enabled: false,
+    },
+  });
+
+  assert.equal(disableResponse.statusCode, 200);
+  assert.ok(
+    disableResponse.json().agents.some((agent: { id: string; enabled: boolean }) => {
+      return agent.id === "music" && agent.enabled === false;
+    })
+  );
+
+  const publicAgentsResponse = await app.inject({
+    method: "GET",
+    url: "/agents",
+  });
+  assert.equal(publicAgentsResponse.statusCode, 200);
+  assert.ok(!publicAgentsResponse.json().agents.some((agent: { id: string }) => agent.id === "music"));
+
+  const directAgentResponse = await app.inject({
+    method: "GET",
+    url: "/agents/music",
+  });
+  assert.equal(directAgentResponse.statusCode, 404);
+
+  const autoRouteResponse = await app.inject({
+    method: "POST",
+    url: "/ai/route",
+    payload: {
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      prompt: "Напиши песню про nomduchat",
+    },
+  });
+  assert.equal(autoRouteResponse.statusCode, 200);
+  assert.equal(autoRouteResponse.json().agentId, "general");
 
   await app.close();
 });
@@ -580,7 +796,7 @@ test("POST /chat/messages returns a persisted local conversation response", asyn
       userId: "local-user",
       country: "KZ",
       language: "ru",
-      message: "Помоги написать структуру лендинга для Nerix",
+      message: "Помоги написать структуру лендинга для nomduchat",
     },
   });
 

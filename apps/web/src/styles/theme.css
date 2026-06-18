@@ -3,7 +3,7 @@
 :root {
   --font-size: 16px;
 
-  /* Nerix Monochrome Palette */
+  /* nomduchat Monochrome Palette */
   --black: #000000;
   --void: #0A0A0A;
   --deep: #111111;
@@ -19,6 +19,11 @@
   --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-heavy: 0 8px 32px rgba(0, 0, 0, 0.6);
   --shadow-inset: inset 0 1px 2px rgba(255, 255, 255, 0.05);
+  --button-shadow-primary: 0 4px 16px rgba(255, 255, 255, 0.12), 0 2px 6px rgba(255, 255, 255, 0.08);
+  --button-shadow-secondary: inset 0 1px 2px rgba(255, 255, 255, 0.05), 0 2px 8px rgba(0, 0, 0, 0.4);
+  --panel-shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --panel-shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --panel-shadow-heavy: 0 8px 32px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 
   --background: var(--black);
   --foreground: var(--white);
@@ -74,6 +79,16 @@
   --glass-bg: rgba(17, 24, 39, 0.035);
   --glass-border: rgba(17, 24, 39, 0.12);
   --glass-hover: rgba(17, 24, 39, 0.06);
+  --shadow-soft: none;
+  --shadow-medium: none;
+  --shadow-heavy: none;
+  --shadow-inset: none;
+  --button-shadow-primary: none;
+  --button-shadow-secondary: none;
+  --panel-shadow-subtle: none;
+  --panel-shadow-medium: none;
+  --panel-shadow-heavy: none;
+  --text-shadow-inset: none;
   --background: #F4F6FA;
   --foreground: #111827;
   --card: #FFFFFF;
@@ -193,10 +208,13 @@ html.light [class~="border-white/30"] {
   border-color: rgba(17, 24, 39, 0.12) !important;
 }
 
-html.light [class~="shadow-black/30"],
-html.light [class~="shadow-black/50"],
-html.light [class~="shadow-black/60"] {
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.12) !important;
+html.light [class~="shadow"],
+html.light [class*="shadow-"] {
+  box-shadow: none !important;
+}
+
+html.light [class*="drop-shadow"] {
+  filter: none !important;
 }
 
 html.light .placeholder\:text-gray-600::placeholder,

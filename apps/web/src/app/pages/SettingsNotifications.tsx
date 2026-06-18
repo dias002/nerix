@@ -3,7 +3,7 @@ import { Bell, CreditCard, MessageSquare } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { SettingsDetailShell } from "./SettingsProfile";
 
-const storageKey = "nerix-notifications";
+const storageKey = "nomduchat-notifications";
 
 type NotificationState = {
   chat: boolean;

@@ -4,7 +4,7 @@ test("business cabinet user flow", async ({ page }) => {
   const noteText = `Проверка e2e: клиент хочет бизнес-бота ${Date.now()}.`;
 
   await page.goto("/workspace/business");
-  await expect(page.getByRole("heading", { name: "Бизнес-кабинет Nerix" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Бизнес-кабинет nomduchat" })).toBeVisible();
   await expect(page.getByText("Business тариф: кабинет, роли, CRM и агент компании")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Команда и сотрудники" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Воронка продаж" })).toBeVisible();
@@ -40,5 +40,5 @@ test("business cabinet user flow", async ({ page }) => {
 
   await page.getByRole("link", { name: /Назад в бизнес-кабинет/ }).click();
   await expect(page).toHaveURL(/\/workspace\/business$/);
-  await expect(page.getByRole("heading", { name: "Бизнес-кабинет Nerix" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Бизнес-кабинет nomduchat" })).toBeVisible();
 });

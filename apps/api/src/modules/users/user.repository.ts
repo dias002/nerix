@@ -1,4 +1,4 @@
-import { isCountryCode, type Language } from "@nerix/shared";
+import { isCountryCode, type Language } from "@nomduchat/shared";
 import { config } from "../../config.js";
 import type { DatabaseClient } from "../../database/index.js";
 import { ensureLocalUser, LOCAL_USER_PUBLIC_ID, toDatabaseUserId, toPublicUserId } from "./local-user.js";
@@ -15,7 +15,7 @@ export class InMemoryUserRepository implements UserRepository {
       {
         id: "local-user",
         name: "Local User",
-        email: "local@nerix.ai",
+        email: "local@nomduchat.ai",
         phone: null,
         country: "KZ",
         language: "ru",
@@ -107,7 +107,7 @@ function mapUserRow(row: UserRow): UserRecord {
 
   return {
     id: toPublicUserId(row.id),
-    name: row.display_name ?? "Nerix User",
+    name: row.display_name ?? "nomduchat User",
     email: row.email,
     phone: row.phone,
     country: isCountryCode(row.country_code) ? row.country_code : "KZ",

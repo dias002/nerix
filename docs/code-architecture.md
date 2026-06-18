@@ -83,7 +83,7 @@ No provider key should ever be added to `apps/web` or `apps/mobile`.
 ## Important Rules
 
 - AI provider keys must only live in `apps/api`.
-- Web and Flutter must call Nerix API, never provider APIs directly.
+- Web and Flutter must call nomduchat API, never provider APIs directly.
 - Billing must stay append-only through ledger entries.
 - Provider routing must be explicit by country and modality.
 - Long jobs such as image/video/music should go through queues later.

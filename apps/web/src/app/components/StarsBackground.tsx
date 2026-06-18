@@ -84,7 +84,46 @@ export default function StarsBackground() {
       }
     };
 
+    const drawLightSun = (time: number) => {
+      const pointerX = (pointerRef.current.x - 0.5) * 10;
+      const pointerY = (pointerRef.current.y - 0.5) * 8;
+      const sunRadius = Math.min(width, height) < 700 ? 58 : 96;
+      const sunX = width * 0.9 + Math.sin(time * 0.003) * 4 + pointerX;
+      const sunY = height * 0.18 + Math.cos(time * 0.0028) * 3 + pointerY;
+      const pulse = Math.sin(time * 0.006) * 0.025 + 1;
+
+      const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunRadius * 3.2);
+      glow.addColorStop(0, "rgba(255, 216, 96, 0.58)");
+      glow.addColorStop(0.28, "rgba(255, 227, 154, 0.28)");
+      glow.addColorStop(0.72, "rgba(255, 255, 255, 0.12)");
+      glow.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(0, 0, width, height);
+
+      const body = ctx.createRadialGradient(
+        sunX - sunRadius * 0.22,
+        sunY - sunRadius * 0.26,
+        sunRadius * 0.05,
+        sunX,
+        sunY,
+        sunRadius * 0.72 * pulse
+      );
+      body.addColorStop(0, "rgba(255, 255, 255, 1)");
+      body.addColorStop(0.42, "rgba(255, 242, 190, 0.96)");
+      body.addColorStop(0.78, "rgba(255, 207, 98, 0.82)");
+      body.addColorStop(1, "rgba(255, 191, 57, 0)");
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, sunRadius * 0.72 * pulse, 0, Math.PI * 2);
+      ctx.fillStyle = body;
+      ctx.fill();
+    };
+
     const drawPlanet = (time: number, isLightTheme: boolean) => {
+      if (isLightTheme) {
+        drawLightSun(time);
+        return;
+      }
+
       const scroll = scrollRef.current;
       const pointerX = (pointerRef.current.x - 0.5) * 18;
       const pointerY = (pointerRef.current.y - 0.5) * 12;

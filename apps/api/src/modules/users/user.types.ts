@@ -1,4 +1,4 @@
-import type { CountryCode, Language } from "@nerix/shared";
+import type { CountryCode, Language } from "@nomduchat/shared";
 
 export type SystemRole = "user" | "admin";
 export type WorkspaceRole = "personal" | "business_owner" | "business_employee";

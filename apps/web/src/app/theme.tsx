@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 
 export type AppearanceMode = "dark" | "light";
 
-const storageKey = "nerix-appearance";
+const storageKey = "nomduchat-appearance";
 
 type ThemeContextValue = {
   theme: AppearanceMode;

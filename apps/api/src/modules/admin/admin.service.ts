@@ -1,6 +1,11 @@
 import { ok } from "../../domain/result.js";
 import type { DatabaseClient } from "../../database/index.js";
+import { getConfiguredProviders, getProviderPolicyMode } from "../ai-gateway/provider-registry.js";
+import { seedAgents } from "../agents/agent.repository.js";
+import type { AgentService } from "../agents/agent.service.js";
+import type { AgentRecord } from "../agents/agent.types.js";
 import type { PlanId, SubscriptionCountry } from "../subscriptions/subscription.types.js";
+import { providerForCountry, subscriptionPlans } from "../subscriptions/plans.js";
 import { toPublicUserId } from "../users/local-user.js";
 
 export type AdminMetricRecord = {
@@ -32,6 +37,82 @@ export type AdminOverview = {
   };
   paymentReport: AdminPaymentReport;
   pricing: AdminPricingState;
+};
+
+export type AdminFeatureFlagRecord = {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  audience: string;
+  rolloutPercent: number;
+  updatedAt: string;
+};
+
+export type AdminAiProviderSettingRecord = {
+  code: string;
+  name: string;
+  enabled: boolean;
+  backendConfigured: boolean;
+  model: string;
+  trafficMode: "primary" | "reserve" | "paused";
+  modalities: string[];
+  reason: string;
+  updatedAt: string;
+};
+
+export type AdminAgentRecord = {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  enabled: boolean;
+  inputTypes: string[];
+  outputTypes: string[];
+  defaultModel: string;
+  fallbackModels: string[];
+  priceMultiplier: number;
+};
+
+export type AdminPromotionRecord = {
+  slug: string;
+  title: string;
+  body: string;
+  placement: string;
+  audience: string;
+  active: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  priority: number;
+  updatedAt: string;
+};
+
+export type AdminContentBlockRecord = {
+  key: string;
+  locale: string;
+  title: string;
+  body: string;
+  placement: string;
+  active: boolean;
+  updatedAt: string;
+};
+
+export type AdminAuditRecord = {
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
+};
+
+export type AdminControlState = {
+  featureFlags: AdminFeatureFlagRecord[];
+  aiProviders: AdminAiProviderSettingRecord[];
+  agents: AdminAgentRecord[];
+  promotions: AdminPromotionRecord[];
+  contentBlocks: AdminContentBlockRecord[];
+  auditLog: AdminAuditRecord[];
+  policyMode: string;
+  note: string;
 };
 
 export type AdminPaymentProviderCode = "kaspi" | "yookassa";
@@ -132,6 +213,7 @@ type PlanPriceRow = {
   provider: string;
   currency: "KZT" | "RUB";
   amount_minor: string | number;
+  price_source: string;
 } & Record<string, unknown>;
 
 type PaymentReportRow = {
@@ -169,6 +251,57 @@ type AdminUserSearchRow = {
   projects: unknown;
 } & Record<string, unknown>;
 
+type FeatureFlagRow = {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  audience: string;
+  rollout_percent: string | number;
+  updated_at: Date | string;
+} & Record<string, unknown>;
+
+type AiProviderSettingRow = {
+  provider_code: string;
+  name: string;
+  enabled: boolean;
+  model: string;
+  traffic_mode: string;
+  modalities: string[];
+  metadata: unknown;
+  updated_at: Date | string;
+} & Record<string, unknown>;
+
+type PromotionRow = {
+  slug: string;
+  title: string;
+  body: string;
+  placement: string;
+  audience: string;
+  active: boolean;
+  starts_at: Date | string | null;
+  ends_at: Date | string | null;
+  priority: string | number;
+  updated_at: Date | string;
+} & Record<string, unknown>;
+
+type ContentBlockRow = {
+  key: string;
+  locale: string;
+  title: string;
+  body: string;
+  placement: string;
+  active: boolean;
+  updated_at: Date | string;
+} & Record<string, unknown>;
+
+type AuditLogRow = {
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  created_at: Date | string;
+} & Record<string, unknown>;
+
 export type AdminPricingState = {
   exchangeRates: Array<{
     pair: "USD/RUB" | "USD/KZT" | "RUB/KZT";
@@ -193,6 +326,7 @@ export type AdminPricingState = {
       provider: "kaspi" | "yookassa";
       currency: "KZT" | "RUB";
       amountMinor: number;
+      priceSource: "mashagpt_benchmark_draft" | "admin_fixed_rate";
     }>;
   }>;
 };
@@ -203,8 +337,13 @@ const nbkDailyUrl = "https://nationalbank.kz/rss/rates_all.xml";
 
 export class AdminService {
   private exchangeRateCache: { expiresAt: number; rates: AdminPricingState["exchangeRates"] } | null = null;
+  private pricingSeeded = false;
+  private controlSeeded = false;
 
-  constructor(private readonly database: DatabaseClient) {}
+  constructor(
+    private readonly database: DatabaseClient,
+    private readonly agents: AgentService
+  ) {}
 
   async overview() {
     const [
@@ -303,18 +442,23 @@ export class AdminService {
 
   async updatePlanPrice(input: { planId: PlanId; country: SubscriptionCountry; amountMinor: number }) {
     try {
+      await this.ensurePricingSeeded();
+      const provider = providerForCountry(input.country);
+      const currency = currencyForCountry(input.country);
       await this.database.query(
         `
-          update plan_prices pp
-          set amount_minor = $3,
-              price_source = 'admin_fixed_rate',
-              updated_at = now()
-          from plans p
-          where pp.plan_id = p.id
-            and p.slug = $1
-            and pp.country_code = $2
+          insert into plan_prices (plan_id, country_code, provider, currency, amount_minor, price_source)
+          select id, $2, $3, $4, $5, 'admin_fixed_rate'
+          from plans
+          where slug = $1
+          on conflict (plan_id, country_code) do update set
+            provider = excluded.provider,
+            currency = excluded.currency,
+            amount_minor = excluded.amount_minor,
+            price_source = 'admin_fixed_rate',
+            updated_at = now()
         `,
-        [input.planId, input.country, input.amountMinor]
+        [input.planId, input.country, provider, currency, input.amountMinor]
       );
     } catch {
       return this.pricingState();
@@ -374,7 +518,7 @@ export class AdminService {
             coalesce(payments.items, '[]'::jsonb) as payments,
             coalesce(projects.items, '[]'::jsonb) as projects
           from matched_users u
-          left join wallets w on w.user_id = u.id and w.currency = 'NERIX'
+          left join wallets w on w.user_id = u.id and w.currency = 'NOMDUCHAT'
           left join lateral (
             select s.plan_slug, s.status
             from subscriptions s
@@ -502,6 +646,421 @@ export class AdminService {
     }
   }
 
+  async controlState() {
+    try {
+      await this.ensureControlSeeded();
+      const [featureFlags, aiProviders, agentsResult, promotions, contentBlocks, auditLog] = await Promise.all([
+        this.featureFlags(),
+        this.aiProviderSettings(),
+        this.agents.listAllAgents(),
+        this.promotions(),
+        this.contentBlocks(),
+        this.auditLog(),
+      ]);
+
+      return ok<AdminControlState>({
+        featureFlags,
+        aiProviders,
+        agents: agentsResult.ok ? agentsResult.value.map(mapAdminAgentRecord) : [],
+        promotions,
+        contentBlocks,
+        auditLog,
+        policyMode: getProviderPolicyMode(),
+        note: "Эти настройки хранятся в базе и позволяют менять поведение приложения без правки кода.",
+      });
+    } catch {
+      return this.fallbackControlStateResult();
+    }
+  }
+
+  async updateFeatureFlag(input: {
+    key: string;
+    enabled?: boolean;
+    label?: string;
+    description?: string;
+    audience?: string;
+    rolloutPercent?: number;
+    actorUserId?: string | null;
+  }) {
+    try {
+      await this.ensureControlSeeded();
+      const current = (await this.featureFlags()).find((flag) => flag.key === input.key);
+      const next = {
+        key: input.key,
+        label: input.label ?? current?.label ?? input.key,
+        description: input.description ?? current?.description ?? "",
+        enabled: input.enabled ?? current?.enabled ?? false,
+        audience: input.audience ?? current?.audience ?? "all",
+        rolloutPercent: input.rolloutPercent ?? current?.rolloutPercent ?? 100,
+      };
+
+      await this.database.query(
+        `
+          insert into feature_flags (key, label, description, enabled, audience, rollout_percent, updated_by_user_id)
+          values ($1, $2, $3, $4, $5, $6, $7)
+          on conflict (key) do update set
+            label = excluded.label,
+            description = excluded.description,
+            enabled = excluded.enabled,
+            audience = excluded.audience,
+            rollout_percent = excluded.rollout_percent,
+            updated_by_user_id = excluded.updated_by_user_id,
+            updated_at = now()
+        `,
+        [next.key, next.label, next.description, next.enabled, next.audience, next.rolloutPercent, input.actorUserId ?? null]
+      );
+      await this.recordAudit(input.actorUserId, "feature_flag.updated", "feature_flag", input.key, {
+        before: current ?? null,
+        after: next,
+      });
+    } catch {
+      return this.controlState();
+    }
+
+    return this.controlState();
+  }
+
+  async updateAiProvider(input: {
+    code: string;
+    enabled?: boolean;
+    model?: string;
+    trafficMode?: "primary" | "reserve" | "paused";
+    actorUserId?: string | null;
+  }) {
+    try {
+      await this.ensureControlSeeded();
+      const current = (await this.aiProviderSettings()).find((provider) => provider.code === input.code);
+      const configured = getConfiguredProviders().find((provider) => provider.code === input.code);
+      const next = {
+        code: input.code,
+        name: configured?.name ?? current?.name ?? input.code,
+        enabled: input.enabled ?? current?.enabled ?? Boolean(configured?.enabled),
+        model: input.model ?? current?.model ?? defaultProviderModel(input.code),
+        trafficMode: input.trafficMode ?? current?.trafficMode ?? "paused",
+        modalities: configured?.modalities ?? current?.modalities ?? [],
+      };
+
+      await this.database.query(
+        `
+          insert into ai_provider_settings (provider_code, name, enabled, model, traffic_mode, modalities, updated_by_user_id)
+          values ($1, $2, $3, $4, $5, $6, $7)
+          on conflict (provider_code) do update set
+            name = excluded.name,
+            enabled = excluded.enabled,
+            model = excluded.model,
+            traffic_mode = excluded.traffic_mode,
+            modalities = excluded.modalities,
+            updated_by_user_id = excluded.updated_by_user_id,
+            updated_at = now()
+        `,
+        [next.code, next.name, next.enabled, next.model, next.trafficMode, next.modalities, input.actorUserId ?? null]
+      );
+      await this.recordAudit(input.actorUserId, "ai_provider.updated", "ai_provider", input.code, {
+        before: current ?? null,
+        after: next,
+      });
+    } catch {
+      return this.controlState();
+    }
+
+    return this.controlState();
+  }
+
+  async updateAgent(input: { id: string; enabled?: boolean; actorUserId?: string | null }) {
+    try {
+      const currentResult = await this.agents.listAllAgents();
+      const current = currentResult.ok ? currentResult.value.find((agent) => agent.id === input.id) : null;
+      const nextEnabled = input.enabled ?? current?.enabled ?? false;
+      const updateResult = await this.agents.updateAgentEnabled(input.id, nextEnabled);
+      if (!updateResult.ok) return updateResult;
+
+      await this.recordAudit(input.actorUserId, "agent.updated", "agent", input.id, {
+        before: current ? mapAdminAgentRecord(current) : null,
+        after: mapAdminAgentRecord(updateResult.value),
+      });
+    } catch {
+      return this.controlState();
+    }
+
+    return this.controlState();
+  }
+
+  async updatePromotion(input: {
+    slug: string;
+    title?: string;
+    body?: string;
+    placement?: string;
+    audience?: string;
+    active?: boolean;
+    startsAt?: string | null;
+    endsAt?: string | null;
+    priority?: number;
+    actorUserId?: string | null;
+  }) {
+    try {
+      await this.ensureControlSeeded();
+      const current = (await this.promotions()).find((promotion) => promotion.slug === input.slug);
+      const next = {
+        slug: input.slug,
+        title: input.title ?? current?.title ?? input.slug,
+        body: input.body ?? current?.body ?? "",
+        placement: input.placement ?? current?.placement ?? "global",
+        audience: input.audience ?? current?.audience ?? "all",
+        active: input.active ?? current?.active ?? false,
+        startsAt: input.startsAt === undefined ? current?.startsAt ?? null : input.startsAt,
+        endsAt: input.endsAt === undefined ? current?.endsAt ?? null : input.endsAt,
+        priority: input.priority ?? current?.priority ?? 100,
+      };
+
+      await this.database.query(
+        `
+          insert into promotions (slug, title, body, placement, audience, active, starts_at, ends_at, priority, updated_by_user_id)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          on conflict (slug) do update set
+            title = excluded.title,
+            body = excluded.body,
+            placement = excluded.placement,
+            audience = excluded.audience,
+            active = excluded.active,
+            starts_at = excluded.starts_at,
+            ends_at = excluded.ends_at,
+            priority = excluded.priority,
+            updated_by_user_id = excluded.updated_by_user_id,
+            updated_at = now()
+        `,
+        [
+          next.slug,
+          next.title,
+          next.body,
+          next.placement,
+          next.audience,
+          next.active,
+          next.startsAt,
+          next.endsAt,
+          next.priority,
+          input.actorUserId ?? null,
+        ]
+      );
+      await this.recordAudit(input.actorUserId, "promotion.updated", "promotion", input.slug, {
+        before: current ?? null,
+        after: next,
+      });
+    } catch {
+      return this.controlState();
+    }
+
+    return this.controlState();
+  }
+
+  async updateContentBlock(input: {
+    key: string;
+    locale?: string;
+    title?: string;
+    body?: string;
+    placement?: string;
+    active?: boolean;
+    actorUserId?: string | null;
+  }) {
+    const locale = input.locale ?? "ru";
+    try {
+      await this.ensureControlSeeded();
+      const current = (await this.contentBlocks()).find((block) => block.key === input.key && block.locale === locale);
+      const next = {
+        key: input.key,
+        locale,
+        title: input.title ?? current?.title ?? "",
+        body: input.body ?? current?.body ?? "",
+        placement: input.placement ?? current?.placement ?? "app",
+        active: input.active ?? current?.active ?? true,
+      };
+
+      await this.database.query(
+        `
+          insert into content_blocks (key, locale, title, body, placement, active, updated_by_user_id)
+          values ($1, $2, $3, $4, $5, $6, $7)
+          on conflict (key, locale) do update set
+            title = excluded.title,
+            body = excluded.body,
+            placement = excluded.placement,
+            active = excluded.active,
+            updated_by_user_id = excluded.updated_by_user_id,
+            updated_at = now()
+        `,
+        [next.key, next.locale, next.title, next.body, next.placement, next.active, input.actorUserId ?? null]
+      );
+      await this.recordAudit(input.actorUserId, "content_block.updated", "content_block", `${input.key}:${locale}`, {
+        before: current ?? null,
+        after: next,
+      });
+    } catch {
+      return this.controlState();
+    }
+
+    return this.controlState();
+  }
+
+  private async ensureControlSeeded() {
+    if (this.controlSeeded) return;
+
+    for (const flag of defaultFeatureFlags()) {
+      await this.database.query(
+        `
+          insert into feature_flags (key, label, description, enabled, audience, rollout_percent)
+          values ($1, $2, $3, $4, $5, $6)
+          on conflict (key) do nothing
+        `,
+        [flag.key, flag.label, flag.description, flag.enabled, flag.audience, flag.rolloutPercent]
+      );
+    }
+
+    for (const provider of getConfiguredProviders()) {
+      await this.database.query(
+        `
+          insert into ai_provider_settings (provider_code, name, enabled, model, traffic_mode, modalities, metadata)
+          values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+          on conflict (provider_code) do update set
+            name = excluded.name,
+            modalities = excluded.modalities,
+            metadata = ai_provider_settings.metadata || excluded.metadata,
+            updated_at = now()
+        `,
+        [
+          provider.code,
+          provider.name,
+          provider.enabled,
+          provider.modelByModality.text ?? defaultProviderModel(provider.code),
+          provider.enabled ? "primary" : "paused",
+          provider.modalities,
+          JSON.stringify({
+            backendConfigured: provider.enabled,
+            reason: provider.reason,
+          }),
+        ]
+      );
+    }
+
+    for (const promotion of defaultPromotions()) {
+      await this.database.query(
+        `
+          insert into promotions (slug, title, body, placement, audience, active, priority)
+          values ($1, $2, $3, $4, $5, $6, $7)
+          on conflict (slug) do nothing
+        `,
+        [
+          promotion.slug,
+          promotion.title,
+          promotion.body,
+          promotion.placement,
+          promotion.audience,
+          promotion.active,
+          promotion.priority,
+        ]
+      );
+    }
+
+    for (const block of defaultContentBlocks()) {
+      await this.database.query(
+        `
+          insert into content_blocks (key, locale, title, body, placement, active)
+          values ($1, $2, $3, $4, $5, $6)
+          on conflict (key, locale) do nothing
+        `,
+        [block.key, block.locale, block.title, block.body, block.placement, block.active]
+      );
+    }
+
+    this.controlSeeded = true;
+  }
+
+  private async featureFlags() {
+    const result = await this.database.query<FeatureFlagRow>(
+      `
+        select key, label, description, enabled, audience, rollout_percent, updated_at
+        from feature_flags
+        order by key asc
+      `
+    );
+
+    return result.rows.map(mapFeatureFlagRow);
+  }
+
+  private async aiProviderSettings() {
+    const configuredProviders = new Map<string, ReturnType<typeof getConfiguredProviders>[number]>(
+      getConfiguredProviders().map((provider) => [provider.code, provider])
+    );
+    const result = await this.database.query<AiProviderSettingRow>(
+      `
+        select provider_code, name, enabled, model, traffic_mode, modalities, metadata, updated_at
+        from ai_provider_settings
+        order by provider_code asc
+      `
+    );
+
+    return result.rows.map((row) => mapAiProviderSettingRow(row, configuredProviders.get(row.provider_code)));
+  }
+
+  private async promotions() {
+    const result = await this.database.query<PromotionRow>(
+      `
+        select slug, title, body, placement, audience, active, starts_at, ends_at, priority, updated_at
+        from promotions
+        order by priority asc, created_at asc
+      `
+    );
+
+    return result.rows.map(mapPromotionRow);
+  }
+
+  private async contentBlocks() {
+    const result = await this.database.query<ContentBlockRow>(
+      `
+        select key, locale, title, body, placement, active, updated_at
+        from content_blocks
+        order by placement asc, key asc, locale asc
+      `
+    );
+
+    return result.rows.map(mapContentBlockRow);
+  }
+
+  private async auditLog() {
+    const result = await this.database.query<AuditLogRow>(
+      `
+        select action, entity_type, entity_id, created_at
+        from audit_logs
+        where action like 'feature_flag.%'
+           or action like 'ai_provider.%'
+           or action like 'agent.%'
+           or action like 'promotion.%'
+           or action like 'content_block.%'
+        order by created_at desc
+        limit 20
+      `
+    );
+
+    return result.rows.map(mapAuditLogRow);
+  }
+
+  private async recordAudit(
+    actorUserId: string | null | undefined,
+    action: string,
+    entityType: string,
+    entityId: string,
+    metadata: Record<string, unknown>
+  ) {
+    try {
+      await this.database.query(
+        `
+          insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+          values ($1, $2, $3, $4, $5::jsonb)
+        `,
+        [actorUserId ?? null, action, entityType, entityId, JSON.stringify(metadata)]
+      );
+    } catch {
+      return undefined;
+    }
+  }
+
   private async count(table: string, where?: string) {
     try {
       const result = await this.database.query<CountRow>(
@@ -524,6 +1083,7 @@ export class AdminService {
 
   private async pricingState(): Promise<AdminPricingState> {
     try {
+      await this.ensurePricingSeeded();
       const result = await this.database.query<PlanPriceRow>(
         `
           select
@@ -536,7 +1096,8 @@ export class AdminService {
             pp.country_code,
             pp.provider,
             pp.currency,
-            pp.amount_minor
+            pp.amount_minor,
+            pp.price_source
           from plans p
           join plan_prices pp on pp.plan_id = p.id
           where p.enabled = true
@@ -564,6 +1125,7 @@ export class AdminService {
             provider: row.provider === "kaspi" ? "kaspi" : "yookassa",
             currency: row.currency,
             amountMinor: Number(row.amount_minor),
+            priceSource: row.price_source === "admin_fixed_rate" ? "admin_fixed_rate" : "mashagpt_benchmark_draft",
           });
           plans.set(row.slug, existing);
         }
@@ -584,6 +1146,61 @@ export class AdminService {
         plans: [],
       };
     }
+  }
+
+  private async ensurePricingSeeded() {
+    if (this.pricingSeeded) return;
+
+    for (const plan of subscriptionPlans) {
+      await this.database.query(
+        `
+          insert into plans (slug, name, monthly_credits, context_tokens, description, enabled, sort_order)
+          values ($1, $2, $3, $4, $5, $6, $7)
+          on conflict (slug) do update set
+            name = excluded.name,
+            monthly_credits = excluded.monthly_credits,
+            context_tokens = excluded.context_tokens,
+            description = excluded.description,
+            enabled = excluded.enabled,
+            sort_order = excluded.sort_order,
+            updated_at = now()
+        `,
+        [plan.id, plan.name, plan.monthlyCredits, plan.contextTokens, plan.description, plan.enabled, sortOrder(plan.id)]
+      );
+
+      for (const planPrice of plan.prices) {
+        await this.database.query(
+          `
+            insert into plan_prices (plan_id, country_code, provider, currency, amount_minor, price_source)
+            select id, $2, $3, $4, $5, $6
+            from plans
+            where slug = $1
+            on conflict (plan_id, country_code) do update set
+              provider = excluded.provider,
+              currency = excluded.currency,
+              amount_minor = case
+                when plan_prices.price_source = 'admin_fixed_rate' then plan_prices.amount_minor
+                else excluded.amount_minor
+              end,
+              price_source = case
+                when plan_prices.price_source = 'admin_fixed_rate' then plan_prices.price_source
+                else excluded.price_source
+              end,
+              updated_at = now()
+          `,
+          [
+            plan.id,
+            planPrice.country,
+            planPrice.provider,
+            planPrice.currency,
+            planPrice.amountMinor,
+            planPrice.priceSource,
+          ]
+        );
+      }
+    }
+
+    this.pricingSeeded = true;
   }
 
   private async paymentReport(): Promise<AdminPaymentReport> {
@@ -722,6 +1339,257 @@ export class AdminService {
       return [];
     }
   }
+
+  private async fallbackControlStateResult() {
+    const agentsResult = await this.agents.listAllAgents().catch(() => null);
+    return ok<AdminControlState>(fallbackControlState(agentsResult?.ok ? agentsResult.value : undefined));
+  }
+}
+
+function fallbackControlState(agents?: AgentRecord[]): AdminControlState {
+  const configuredProviders = new Map(getConfiguredProviders().map((provider) => [provider.code, provider]));
+  const fallbackAgents =
+    agents?.map(mapAdminAgentRecord) ??
+    seedAgents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      category: agent.category,
+      description: agent.description,
+      enabled: true,
+      inputTypes: agent.inputTypes,
+      outputTypes: agent.outputTypes,
+      defaultModel: agent.defaultModel,
+      fallbackModels: agent.fallbackModels ?? [],
+      priceMultiplier: agent.priceMultiplier ?? 1,
+    }));
+
+  return {
+    featureFlags: defaultFeatureFlags(),
+    aiProviders: getConfiguredProviders().map((provider) => ({
+      code: provider.code,
+      name: provider.name,
+      enabled: provider.enabled,
+      backendConfigured: provider.enabled,
+      model: provider.modelByModality.text ?? defaultProviderModel(provider.code),
+      trafficMode: provider.enabled ? "primary" : "paused",
+      modalities: provider.modalities,
+      reason: provider.reason,
+      updatedAt: new Date().toISOString(),
+    })),
+    agents: fallbackAgents,
+    promotions: defaultPromotions().map((promotion) => ({
+      ...promotion,
+      startsAt: null,
+      endsAt: null,
+      updatedAt: new Date().toISOString(),
+    })),
+    contentBlocks: defaultContentBlocks().map((block) => ({
+      ...block,
+      updatedAt: new Date().toISOString(),
+    })),
+    auditLog: [],
+    policyMode: getProviderPolicyMode(),
+    note: configuredProviders.size > 0
+      ? "API управления пока работает в fallback-режиме без записи в базу."
+      : "API управления пока не подключен.",
+  };
+}
+
+function defaultFeatureFlags(): AdminFeatureFlagRecord[] {
+  const updatedAt = new Date().toISOString();
+  return [
+    {
+      key: "auth.registration",
+      label: "Регистрация",
+      description: "Показывать регистрацию после гостевых запросов и разрешать создание аккаунтов.",
+      enabled: true,
+      audience: "guests",
+      rolloutPercent: 100,
+      updatedAt,
+    },
+    {
+      key: "auth.google",
+      label: "Google вход",
+      description: "Разрешить вход через Google, если OAuth ключи заданы на backend.",
+      enabled: false,
+      audience: "all",
+      rolloutPercent: 100,
+      updatedAt,
+    },
+    {
+      key: "auth.vk",
+      label: "VK вход",
+      description: "Разрешить вход через VK, если OAuth ключи заданы на backend.",
+      enabled: false,
+      audience: "ru",
+      rolloutPercent: 100,
+      updatedAt,
+    },
+    {
+      key: "chat.files",
+      label: "Файлы в чате",
+      description: "Разрешить загрузку текстовых файлов в чат.",
+      enabled: true,
+      audience: "all",
+      rolloutPercent: 100,
+      updatedAt,
+    },
+    {
+      key: "chat.voice",
+      label: "Голосовой ввод",
+      description: "Разрешить голосовой ввод в чате через браузер.",
+      enabled: true,
+      audience: "all",
+      rolloutPercent: 100,
+      updatedAt,
+    },
+    {
+      key: "business.cabinet",
+      label: "Business кабинет",
+      description: "Показывать бизнес-кабинет, роли, CRM и идеи.",
+      enabled: true,
+      audience: "business",
+      rolloutPercent: 100,
+      updatedAt,
+    },
+  ];
+}
+
+function defaultPromotions(): Array<Omit<AdminPromotionRecord, "startsAt" | "endsAt" | "updatedAt">> {
+  return [
+    {
+      slug: "launch-offer",
+      title: "Стартовый месяц nomduchat Pro",
+      body: "Короткое предложение на тарифы для пользователей, которые дошли до баланса.",
+      placement: "balance",
+      audience: "new_users",
+      active: true,
+      priority: 10,
+    },
+    {
+      slug: "business-demo",
+      title: "Демо Business кабинета",
+      body: "Аудит обращений и схема AI-бота перед подключением Business.",
+      placement: "business",
+      audience: "business_interest",
+      active: false,
+      priority: 20,
+    },
+  ];
+}
+
+function defaultContentBlocks(): Array<Omit<AdminContentBlockRecord, "updatedAt">> {
+  return [
+    {
+      key: "home.hero",
+      locale: "ru",
+      title: "nomduchat",
+      body: "Единый кабинет для общения с 40+ AI-моделями, работы с файлами, бизнес-агентами и памятью.",
+      placement: "home",
+      active: true,
+    },
+    {
+      key: "business.hero",
+      locale: "ru",
+      title: "Business кабинет nomduchat",
+      body: "AI-агент, CRM, роли сотрудников, аналитика обращений и база знаний компании в одном контуре.",
+      placement: "business",
+      active: true,
+    },
+    {
+      key: "agents.intro",
+      locale: "ru",
+      title: "Агенты nomduchat",
+      body: "Выбирайте режим под задачу: текст, код, учеба, бизнес и ежедневные сценарии.",
+      placement: "agents",
+      active: true,
+    },
+  ];
+}
+
+function mapFeatureFlagRow(row: FeatureFlagRow): AdminFeatureFlagRecord {
+  return {
+    key: row.key,
+    label: row.label,
+    description: row.description,
+    enabled: row.enabled,
+    audience: row.audience,
+    rolloutPercent: Number(row.rollout_percent),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapAiProviderSettingRow(
+  row: AiProviderSettingRow,
+  configured?: ReturnType<typeof getConfiguredProviders>[number]
+): AdminAiProviderSettingRecord {
+  const metadata = toObject(row.metadata);
+  const trafficMode =
+    row.traffic_mode === "primary" || row.traffic_mode === "reserve" || row.traffic_mode === "paused"
+      ? row.traffic_mode
+      : "paused";
+  return {
+    code: row.provider_code,
+    name: row.name,
+    enabled: row.enabled,
+    backendConfigured: Boolean(configured?.enabled ?? metadata.backendConfigured),
+    model: row.model,
+    trafficMode,
+    modalities: Array.isArray(row.modalities) ? row.modalities.map(String) : configured?.modalities ?? [],
+    reason: typeof metadata.reason === "string" ? metadata.reason : configured?.reason ?? "Настройка хранится в админ-панели.",
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapAdminAgentRecord(agent: AgentRecord): AdminAgentRecord {
+  return {
+    id: agent.id,
+    name: agent.name,
+    category: agent.category,
+    description: agent.description,
+    enabled: agent.enabled,
+    inputTypes: agent.inputTypes,
+    outputTypes: agent.outputTypes,
+    defaultModel: agent.defaultModel,
+    fallbackModels: agent.fallbackModels,
+    priceMultiplier: agent.priceMultiplier,
+  };
+}
+
+function mapPromotionRow(row: PromotionRow): AdminPromotionRecord {
+  return {
+    slug: row.slug,
+    title: row.title,
+    body: row.body,
+    placement: row.placement,
+    audience: row.audience,
+    active: row.active,
+    startsAt: row.starts_at ? toIsoString(row.starts_at) : null,
+    endsAt: row.ends_at ? toIsoString(row.ends_at) : null,
+    priority: Number(row.priority),
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapContentBlockRow(row: ContentBlockRow): AdminContentBlockRecord {
+  return {
+    key: row.key,
+    locale: row.locale,
+    title: row.title,
+    body: row.body,
+    placement: row.placement,
+    active: row.active,
+    updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function mapAuditLogRow(row: AuditLogRow): AdminAuditRecord {
+  return {
+    action: row.action,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    createdAt: toIsoString(row.created_at),
+  };
 }
 
 function formatNumber(value: number) {
@@ -775,7 +1643,7 @@ async function fetchText(url: string) {
   try {
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Nerix exchange-rate updater",
+        "User-Agent": "nomduchat exchange-rate updater",
       },
       signal: controller.signal,
     });
@@ -875,7 +1743,7 @@ function mapAdminUserRow(row: AdminUserSearchRow): AdminUserRecord {
 
   return {
     id: toPublicUserId(row.id),
-    name: row.display_name ?? row.email ?? "Nerix User",
+    name: row.display_name ?? row.email ?? "nomduchat User",
     email: row.email,
     phone: row.phone,
     country: row.country_code,
@@ -917,6 +1785,21 @@ function parseArray<T>(value: unknown): T[] {
   return [];
 }
 
+function toObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
 function toIsoString(value: unknown) {
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "string") return value;
@@ -929,4 +1812,19 @@ function isPlanId(value: string): value is PlanId {
 
 function isCountry(value: string): value is SubscriptionCountry {
   return value === "KZ" || value === "RU";
+}
+
+function currencyForCountry(country: SubscriptionCountry) {
+  return country === "KZ" ? "KZT" : "RUB";
+}
+
+function sortOrder(planId: PlanId) {
+  return planId === "base" ? 10 : planId === "ultra" ? 20 : planId === "pro" ? 30 : 40;
+}
+
+function defaultProviderModel(code: string) {
+  if (code === "openai") return "gpt-5.2";
+  if (code === "anthropic") return "anthropic-text-configured";
+  if (code === "gemini") return "gemini-text-configured";
+  return "mock-text";
 }

@@ -1,0 +1,104 @@
+name: nomduchat Mailings
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Mailing action"
+        required: true
+        default: "sync_campaign"
+        type: choice
+        options:
+          - create_audience
+          - import_contacts
+          - create_campaign
+          - send_campaign
+          - sync_campaign
+          - create_and_send
+      dry_run:
+        description: "Print payload without calling write/send endpoints"
+        required: true
+        default: true
+        type: boolean
+      audience_id:
+        description: "Existing nomduchat audience id"
+        required: false
+        type: string
+      audience_name:
+        description: "Audience name when creating one"
+        required: false
+        type: string
+      campaign_id:
+        description: "Existing campaign id for send/sync"
+        required: false
+        type: string
+      campaign_name:
+        description: "Campaign name when creating one"
+        required: false
+        type: string
+      from_email:
+        description: "Verified sender email in SMTP.BZ"
+        required: false
+        type: string
+      from_name:
+        description: "Sender display name"
+        required: false
+        type: string
+      reply_to:
+        description: "Reply-to email"
+        required: false
+        type: string
+      subject:
+        description: "Email subject"
+        required: false
+        type: string
+      html_file:
+        description: "Repo path to HTML body"
+        required: false
+        type: string
+      text_file:
+        description: "Repo path to text body"
+        required: false
+        type: string
+      contacts_file:
+        description: "Repo path to contacts CSV/TXT"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  run-mailing:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run mailing action
+        env:
+          NOMDUCHAT_API_URL: ${{ secrets.NOMDUCHAT_API_URL }}
+          NOMDUCHAT_MAILINGS_API_TOKEN: ${{ secrets.NOMDUCHAT_MAILINGS_API_TOKEN }}
+          NOMDUCHAT_MAILING_ACTION: ${{ inputs.action }}
+          NOMDUCHAT_MAILING_DRY_RUN: ${{ inputs.dry_run }}
+          NOMDUCHAT_MAILING_AUDIENCE_ID: ${{ inputs.audience_id }}
+          NOMDUCHAT_MAILING_AUDIENCE_NAME: ${{ inputs.audience_name }}
+          NOMDUCHAT_MAILING_CAMPAIGN_ID: ${{ inputs.campaign_id }}
+          NOMDUCHAT_MAILING_CAMPAIGN_NAME: ${{ inputs.campaign_name }}
+          NOMDUCHAT_MAILING_FROM_EMAIL: ${{ inputs.from_email }}
+          NOMDUCHAT_MAILING_FROM_NAME: ${{ inputs.from_name }}
+          NOMDUCHAT_MAILING_REPLY_TO: ${{ inputs.reply_to }}
+          NOMDUCHAT_MAILING_SUBJECT: ${{ inputs.subject }}
+          NOMDUCHAT_MAILING_HTML: ${{ secrets.NOMDUCHAT_MAILING_HTML }}
+          NOMDUCHAT_MAILING_HTML_FILE: ${{ inputs.html_file }}
+          NOMDUCHAT_MAILING_TEXT: ${{ secrets.NOMDUCHAT_MAILING_TEXT }}
+          NOMDUCHAT_MAILING_TEXT_FILE: ${{ inputs.text_file }}
+          NOMDUCHAT_MAILING_CONTACTS: ${{ secrets.NOMDUCHAT_MAILING_CONTACTS }}
+          NOMDUCHAT_MAILING_CONTACTS_FILE: ${{ inputs.contacts_file }}
+        run: npm run mailings:api

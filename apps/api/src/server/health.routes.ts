@@ -4,7 +4,7 @@ import type { DatabaseClient } from "../database/index.js";
 export async function registerHealthRoutes(app: FastifyInstance, database: DatabaseClient) {
   app.get("/health", async () => ({
     ok: true,
-    service: "nerix-api",
+    service: "nomduchat-api",
     version: "0.1.0",
   }));
 

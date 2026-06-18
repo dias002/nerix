@@ -1,4 +1,4 @@
-import type { LedgerEntryType, WalletBalance } from "@nerix/shared";
+import type { LedgerEntryType, WalletBalance } from "@nomduchat/shared";
 
 export type LedgerEntryRecord = {
   id: string;

@@ -1,4 +1,4 @@
-import type { Agent, AgentCategory, AiModality } from "@nerix/shared";
+import type { Agent, AgentCategory, AiModality } from "@nomduchat/shared";
 
 export type AgentRecord = Agent & {
   systemPrompt: string;

@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const useRunningServers = process.env.NERIX_E2E_RUNNING === "1";
+const useRunningServers = process.env.NOMDUCHAT_E2E_RUNNING === "1";
 
 export default defineConfig({
   testDir: "apps/web/e2e",

@@ -72,7 +72,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
   const subscriptions = new SubscriptionService(subscriptionRepository, billing);
   const mailings = new MailingService(mailingRepository, options.mailingTransport ?? new SmtpBzClient());
   const business = new BusinessService(businessRepository, subscriptions);
-  const admin = new AdminService(database);
+  const admin = new AdminService(database, agents);
 
   return {
     database,

@@ -1,5 +1,6 @@
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import { config } from "../config.js";
 import { registerHealthRoutes } from "./health.routes.js";
 import { createDependencies, type AppDependencies } from "./dependencies.js";
 import { registerAdminRoutes } from "../modules/admin/routes.js";
@@ -23,9 +24,18 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
     logger: options.logger ?? false,
   });
   const dependencies = options.dependencies ?? createDependencies();
+  const allowedOrigins = new Set(config.CORS_ORIGINS);
+  const allowAnyOrigin = allowedOrigins.has("*");
 
   await app.register(cors, {
-    origin: true,
+    origin(origin, callback) {
+      if (!origin || allowAnyOrigin || allowedOrigins.has(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(null, false);
+    },
   });
 
   await registerHealthRoutes(app, dependencies.database);

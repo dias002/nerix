@@ -1,4 +1,4 @@
-import type { CountryCode, Language } from "@nerix/shared";
+import type { CountryCode, Language } from "@nomduchat/shared";
 import { DomainError, fail, ok } from "../../domain/result.js";
 import type { AuthRepository } from "./auth.repository.js";
 import {

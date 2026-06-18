@@ -69,7 +69,7 @@ test("billing service reserves, captures, and refunds credits", async () => {
 
   const reservation = await dependencies.billing.reserve({
     userId: "local-user",
-    prompt: "Напиши архитектуру API для Nerix",
+    prompt: "Напиши архитектуру API для nomduchat",
     agentId: "general",
     referenceId: "test-request",
   });
@@ -131,8 +131,14 @@ test("database migrations include runtime columns for auth and subscriptions", a
 
   const sql = queries.join("\n").toLowerCase();
   assert.match(sql, /create extension if not exists "uuid-ossp"/);
+  assert.match(sql, /create extension if not exists pg_trgm/);
+  assert.match(sql, /create table if not exists users/);
+  assert.match(sql, /create table if not exists wallets/);
+  assert.match(sql, /create table if not exists ledger_entries/);
   assert.match(sql, /alter table users[\s\S]*password_hash/);
   assert.match(sql, /alter table users[\s\S]*system_role/);
+  assert.match(sql, /create table if not exists ai_providers/);
+  assert.match(sql, /create table if not exists agents/);
   assert.match(sql, /create table if not exists plans/);
   assert.match(sql, /create table if not exists subscription_checkouts/);
   assert.match(sql, /provider_checkout_id/);
@@ -143,6 +149,12 @@ test("database migrations include runtime columns for auth and subscriptions", a
   assert.match(sql, /create table if not exists business_employee_daily_reports/);
   assert.match(sql, /last_activity_at/);
   assert.match(sql, /create table if not exists business_client_reports/);
+  assert.match(sql, /create table if not exists conversations/);
+  assert.match(sql, /create table if not exists messages/);
+  assert.match(sql, /create index if not exists conversations_user_updated_idx/);
+  assert.match(sql, /create index if not exists messages_conversation_created_idx/);
+  assert.match(sql, /create table if not exists files/);
+  assert.match(sql, /create index if not exists files_user_created_idx/);
   assert.match(sql, /create table if not exists user_projects/);
   assert.match(sql, /create table if not exists user_media_assets/);
   assert.match(sql, /create table if not exists custom_ai_bots/);
@@ -151,6 +163,12 @@ test("database migrations include runtime columns for auth and subscriptions", a
   assert.match(sql, /create table if not exists message_feedback/);
   assert.match(sql, /create table if not exists ai_error_events/);
   assert.match(sql, /create table if not exists ai_improvement_tasks/);
+  assert.match(sql, /create table if not exists memory_items/);
+  assert.match(sql, /create table if not exists usage_events/);
+  assert.match(sql, /create index if not exists usage_events_user_created_idx/);
+  assert.match(sql, /create table if not exists generation_jobs/);
+  assert.match(sql, /create table if not exists audit_logs/);
+  assert.match(sql, /create index if not exists subscription_checkouts_provider_checkout_idx/);
 });
 
 test("auth password hashes and access tokens reject invalid credentials", async () => {
@@ -192,7 +210,7 @@ test("AI completion providers use mock fallback and OpenAI Responses request sha
     model: "mock-text",
     prompt: "hello",
   });
-  assert.match(mock.content, /mock-ответ Nerix/);
+  assert.match(mock.content, /mock-ответ nomduchat/);
 
   await withConfig({ OPENAI_API_KEY: "sk-test" }, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -211,7 +229,7 @@ test("AI completion providers use mock fallback and OpenAI Responses request sha
         provider: "openai",
         model: "gpt-5.2",
         prompt: "Скажи коротко",
-        systemPrompt: "Ты ассистент Nerix.",
+        systemPrompt: "Ты ассистент nomduchat.",
       });
 
       assert.equal(result.content, "OpenAI adapter response");
@@ -230,7 +248,7 @@ test("AI completion providers use mock fallback and OpenAI Responses request sha
     const body = JSON.parse(String(calls[0].init?.body));
     assert.deepEqual(body, {
       model: "gpt-5.2",
-      instructions: "Ты ассистент Nerix.",
+      instructions: "Ты ассистент nomduchat.",
       input: "Скажи коротко",
     });
   });
@@ -251,7 +269,7 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
     });
 
     assert.match(checkout.providerCheckoutId, /^mock_/);
-    assert.equal(checkout.checkoutUrl, "nerix://mock-checkout/kaspi/base");
+    assert.equal(checkout.checkoutUrl, "nomduchat://mock-checkout/kaspi/base");
   });
 
   await withConfig({ KASPI_CHECKOUT_URL: "https://pay.example.test/checkout" }, async () => {
@@ -275,7 +293,7 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
     {
       YOOKASSA_SHOP_ID: "shop-id",
       YOOKASSA_SECRET_KEY: "secret-key",
-      YOOKASSA_RETURN_URL: "https://nerix.example.test/balance",
+      YOOKASSA_RETURN_URL: "https://nomduchat.example.test/balance",
     },
     async () => {
       const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -314,7 +332,7 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
       assert.equal(body.capture, true);
       assert.deepEqual(body.confirmation, {
         type: "redirect",
-        return_url: "https://nerix.example.test/balance",
+        return_url: "https://nomduchat.example.test/balance",
       });
       assert.deepEqual(body.metadata, {
         userId: "user-1",
@@ -372,6 +390,14 @@ test("mailing service imports contacts, sends campaign, and syncs SMTP.BZ events
   if (!sendResponse.ok) return;
   assert.equal(sendResponse.value.accepted, 2);
   assert.equal(transport.lastSend?.contacts.length, 2);
+
+  const repeatedSendResponse = await mailings.sendCampaign({
+    userId: "local-user",
+    campaignId: campaignResponse.value.campaign.id,
+  });
+  assert.equal(repeatedSendResponse.ok, false);
+  if (repeatedSendResponse.ok) return;
+  assert.equal(repeatedSendResponse.error.code, "validation_failed");
 
   transport.messages = [
     {

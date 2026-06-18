@@ -43,7 +43,7 @@ export default function AuthCallback() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#050505] text-gray-400">
       <LoaderCircle className="mr-2 h-4 w-4 animate-spin" strokeWidth={1.8} />
-      Nerix
+      nomduchat
     </div>
   );
 }

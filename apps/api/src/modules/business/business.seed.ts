@@ -44,7 +44,7 @@ export type BusinessWorkspaceSeed = {
 };
 
 export const businessWorkspaceSeed: BusinessWorkspaceSeed = {
-  workspaceName: "Nerix Business Demo",
+  workspaceName: "nomduchat Business Demo",
   roles: [
     {
       key: "owner",
@@ -146,7 +146,7 @@ export const businessWorkspaceSeed: BusinessWorkspaceSeed = {
     },
     {
       title: "Сайт под ключ",
-      text: "Страница, формы, аналитика и связка с бизнес-кабинетом Nerix.",
+      text: "Страница, формы, аналитика и связка с бизнес-кабинетом nomduchat.",
       price: "проектно",
       icon: "site",
     },
@@ -237,7 +237,7 @@ export const businessWorkspaceSeed: BusinessWorkspaceSeed = {
       key: "growth",
       title: "Идеи роста",
       short: "Что усилить в первую очередь",
-      summary: "Nerix видит, где бизнес уже получает интерес, и предлагает шаги, которые можно проверить без долгой подготовки.",
+      summary: "nomduchat видит, где бизнес уже получает интерес, и предлагает шаги, которые можно проверить без долгой подготовки.",
       basedOn: ["источники заявок", "этапы CRM", "типовые вопросы"],
       ideas: [
         {
@@ -285,7 +285,7 @@ export const businessWorkspaceSeed: BusinessWorkspaceSeed = {
           title: "Добавить обязательное поле «следующий шаг»",
           effort: "20 минут",
           effect: "меньше забытых лидов",
-          text: "У части сделок нет ясного действия. Nerix будет напоминать, что именно нужно отправить клиенту дальше.",
+          text: "У части сделок нет ясного действия. nomduchat будет напоминать, что именно нужно отправить клиенту дальше.",
           next: "Включить проверку сделок без следующего шага.",
           status: "suggested",
         },
@@ -295,7 +295,7 @@ export const businessWorkspaceSeed: BusinessWorkspaceSeed = {
       key: "site",
       title: "Сайт и метрики",
       short: "Что улучшить на странице",
-      summary: "Nerix связывает посещения сайта с вопросами клиентов, чтобы улучшения были не на вкус, а по реальным сигналам.",
+      summary: "nomduchat связывает посещения сайта с вопросами клиентов, чтобы улучшения были не на вкус, а по реальным сигналам.",
       basedOn: ["визиты", "формы", "частые вопросы"],
       ideas: [
         {

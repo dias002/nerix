@@ -1,4 +1,4 @@
-# Nerix Visual System
+# nomduchat Visual System
 
 ## Style
 

@@ -1,4 +1,4 @@
-import type { AiModality, CountryCode } from "@nerix/shared";
+import type { AiModality, CountryCode } from "@nomduchat/shared";
 import { getEnabledProvidersForModality, getProviderPolicyMode, type ProviderPolicyMode } from "./provider-registry.js";
 
 export type ProviderDecision = {

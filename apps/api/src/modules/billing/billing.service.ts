@@ -29,7 +29,7 @@ export class BillingService {
       agentId: agentResult.value.id,
       estimatedCredits,
       reserveCredits: reserveCredits(estimatedCredits),
-      currency: "NERIX" as const,
+      currency: "NOMDUCHAT" as const,
     });
   }
 
@@ -64,7 +64,7 @@ export class BillingService {
     );
 
     if (!reservation) {
-      return fail(new DomainError("insufficient_credits", "Not enough Nerix credits.", 402));
+      return fail(new DomainError("insufficient_credits", "Not enough nomduchat credits.", 402));
     }
 
     return ok({

@@ -182,7 +182,7 @@ export default function BusinessCabinet() {
                 <BriefcaseBusiness className="h-4 w-4" strokeWidth={1.7} />
                 Business тариф: кабинет, роли, CRM и агент компании · {accessLabel}
               </div>
-              <h1 className="text-3xl font-medium text-white md:text-5xl">Бизнес-кабинет Nerix</h1>
+              <h1 className="text-3xl font-medium text-white md:text-5xl">Бизнес-кабинет nomduchat</h1>
               <p className="mt-4 text-base leading-relaxed text-gray-400 md:text-lg">
                 Кабинет, который открывается после оформления Business тарифа. Внутри команда до 5 сотрудников, рабочий чат по данным компании, CRM-воронка, аналитика сайта и заметки по клиентским обращениям.
               </p>

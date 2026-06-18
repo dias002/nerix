@@ -141,7 +141,7 @@ export async function registerSubscriptionRoutes(
   });
 
   app.post("/subscriptions/webhooks/yookassa", async (request, reply) => {
-    if (!verifyWebhookSecret(request.headers["x-nerix-webhook-secret"])) {
+    if (!verifyWebhookSecret(request.headers["x-nomduchat-webhook-secret"])) {
       return reply.status(401).send({
         error: {
           code: "unauthorized",
@@ -175,7 +175,7 @@ export async function registerSubscriptionRoutes(
   });
 
   app.post("/subscriptions/webhooks/kaspi", async (request, reply) => {
-    if (!verifyWebhookSecret(request.headers["x-nerix-webhook-secret"])) {
+    if (!verifyWebhookSecret(request.headers["x-nomduchat-webhook-secret"])) {
       return reply.status(401).send({
         error: {
           code: "unauthorized",

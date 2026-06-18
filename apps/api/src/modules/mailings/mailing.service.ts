@@ -98,7 +98,7 @@ export class MailingService {
       subject: input.subject.trim(),
       html: ensureUnsubscribeBlock(input.html.trim()),
       text: input.text?.trim() ?? "",
-      tag: `nerix_${Date.now()}_${randomUUID().slice(0, 8)}`,
+      tag: `nomduchat_${Date.now()}_${randomUUID().slice(0, 8)}`,
     });
     if (!campaign) return fail(new DomainError("not_found", "Audience was not found.", 404));
 
@@ -112,6 +112,9 @@ export class MailingService {
     if (!campaign) return fail(new DomainError("not_found", "Campaign was not found.", 404));
     if (campaign.status === "sending") {
       return fail(new DomainError("validation_failed", "Campaign is already sending."));
+    }
+    if (campaign.status === "sent") {
+      return fail(new DomainError("validation_failed", "Campaign was already sent. Create a new campaign to send it again."));
     }
 
     const contacts = await this.repository.listActiveContacts(input.userId, campaign.audienceId);

@@ -2,6 +2,287 @@ import type { DatabaseClient } from "./database.types.js";
 
 export async function runDatabaseMigrations(database: DatabaseClient) {
   await database.query(`create extension if not exists "uuid-ossp"`);
+  await database.query(`create extension if not exists pg_trgm`);
+
+  await database.query(`
+    create table if not exists users (
+      id uuid primary key default uuid_generate_v4(),
+      email text unique,
+      phone text unique,
+      password_hash text,
+      system_role text not null default 'user',
+      display_name text,
+      country_code text not null default 'KZ',
+      language text not null default 'ru',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists wallets (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      available_credits bigint not null default 0,
+      reserved_credits bigint not null default 0,
+      currency text not null default 'NOMDUCHAT',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (user_id, currency)
+    )
+  `);
+
+  await database.query(`
+    create table if not exists ledger_entries (
+      id uuid primary key default uuid_generate_v4(),
+      wallet_id uuid not null references wallets(id),
+      type text not null,
+      amount_credits bigint not null,
+      balance_after_credits bigint not null,
+      reference_type text,
+      reference_id text,
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists payments (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      provider text not null,
+      provider_payment_id text,
+      status text not null,
+      amount_minor bigint not null,
+      currency text not null,
+      credits_to_add bigint not null,
+      idempotency_key text unique,
+      raw_payload jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists ai_providers (
+      id uuid primary key default uuid_generate_v4(),
+      code text not null unique,
+      name text not null,
+      enabled boolean not null default true,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists ai_models (
+      id uuid primary key default uuid_generate_v4(),
+      provider_id uuid not null references ai_providers(id),
+      code text not null,
+      modality text not null,
+      input_price_per_unit numeric(12, 6) not null default 0,
+      output_price_per_unit numeric(12, 6) not null default 0,
+      enabled boolean not null default true,
+      created_at timestamptz not null default now(),
+      unique (provider_id, code)
+    )
+  `);
+
+  await database.query(`
+    create table if not exists country_provider_rules (
+      id uuid primary key default uuid_generate_v4(),
+      country_code text not null,
+      provider_id uuid not null references ai_providers(id),
+      allowed boolean not null default true,
+      reason text,
+      created_at timestamptz not null default now(),
+      unique (country_code, provider_id)
+    )
+  `);
+
+  await database.query(`
+    create table if not exists agents (
+      id uuid primary key default uuid_generate_v4(),
+      slug text not null unique,
+      name text not null,
+      category text not null,
+      description text not null default '',
+      system_prompt text not null default '',
+      default_model_id uuid references ai_models(id),
+      input_types text[] not null default array['text'],
+      output_types text[] not null default array['text'],
+      default_model text not null default 'text-primary',
+      fallback_models text[] not null default array[]::text[],
+      country_denylist text[] not null default array[]::text[],
+      price_multiplier numeric(8, 3) not null default 1,
+      enabled boolean not null default true,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists conversations (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      agent_id uuid references agents(id),
+      title text,
+      language text not null default 'ru',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists messages (
+      id uuid primary key default uuid_generate_v4(),
+      conversation_id uuid not null references conversations(id),
+      role text not null,
+      content text not null,
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists files (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      storage_key text not null,
+      original_name text not null,
+      mime_type text not null,
+      size_bytes bigint not null,
+      status text not null default 'uploaded',
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists memory_items (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      title text not null,
+      content text not null,
+      source text,
+      enabled boolean not null default true,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists usage_events (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      conversation_id uuid references conversations(id),
+      message_id uuid references messages(id),
+      agent_id uuid references agents(id),
+      provider_id uuid references ai_providers(id),
+      model_id uuid references ai_models(id),
+      input_units bigint not null default 0,
+      output_units bigint not null default 0,
+      charged_credits bigint not null default 0,
+      raw_usage jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists generation_jobs (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      agent_id uuid references agents(id),
+      modality text not null,
+      status text not null default 'queued',
+      prompt text not null,
+      result_file_id uuid references files(id),
+      reserved_credits bigint not null default 0,
+      final_credits bigint,
+      error_message text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists audit_logs (
+      id uuid primary key default uuid_generate_v4(),
+      actor_user_id uuid references users(id),
+      action text not null,
+      entity_type text,
+      entity_id text,
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists feature_flags (
+      id uuid primary key default uuid_generate_v4(),
+      key text not null unique,
+      label text not null,
+      description text not null default '',
+      enabled boolean not null default false,
+      audience text not null default 'all',
+      rollout_percent integer not null default 100 check (rollout_percent >= 0 and rollout_percent <= 100),
+      metadata jsonb not null default '{}'::jsonb,
+      updated_by_user_id uuid references users(id) on delete set null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists ai_provider_settings (
+      id uuid primary key default uuid_generate_v4(),
+      provider_code text not null unique,
+      name text not null,
+      enabled boolean not null default false,
+      model text not null default '',
+      traffic_mode text not null default 'paused',
+      modalities text[] not null default array[]::text[],
+      country_policy jsonb not null default '{}'::jsonb,
+      metadata jsonb not null default '{}'::jsonb,
+      updated_by_user_id uuid references users(id) on delete set null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists promotions (
+      id uuid primary key default uuid_generate_v4(),
+      slug text not null unique,
+      title text not null,
+      body text not null default '',
+      placement text not null default 'global',
+      audience text not null default 'all',
+      active boolean not null default false,
+      starts_at timestamptz,
+      ends_at timestamptz,
+      priority integer not null default 100,
+      metadata jsonb not null default '{}'::jsonb,
+      updated_by_user_id uuid references users(id) on delete set null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists content_blocks (
+      id uuid primary key default uuid_generate_v4(),
+      key text not null,
+      locale text not null default 'ru',
+      title text not null default '',
+      body text not null default '',
+      placement text not null default 'app',
+      active boolean not null default true,
+      metadata jsonb not null default '{}'::jsonb,
+      updated_by_user_id uuid references users(id) on delete set null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique (key, locale)
+    )
+  `);
 
   await database.query(`
     alter table users
@@ -198,9 +479,12 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    drop index if exists business_members_workspace_seat_key_idx
+  `);
+
+  await database.query(`
     create unique index if not exists business_members_workspace_seat_key_idx
       on business_members(workspace_id, seat_key)
-      where seat_key is not null
   `);
 
   await database.query(`
@@ -223,6 +507,11 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    create unique index if not exists business_groups_workspace_name_idx
+      on business_groups(workspace_id, name)
+  `);
+
+  await database.query(`
     create table if not exists business_group_members (
       id uuid primary key default uuid_generate_v4(),
       group_id uuid not null references business_groups(id) on delete cascade,
@@ -231,6 +520,11 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
       created_at timestamptz not null default now(),
       unique (group_id, member_id)
     )
+  `);
+
+  await database.query(`
+    create unique index if not exists business_group_members_group_member_idx
+      on business_group_members(group_id, member_id)
   `);
 
   await database.query(`
@@ -756,5 +1050,174 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     )
+  `);
+
+  await database.query(`
+    create index if not exists users_created_idx
+      on users(created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists users_email_trgm_idx
+      on users using gin ((coalesce(email, '')) gin_trgm_ops)
+  `);
+
+  await database.query(`
+    create index if not exists users_phone_trgm_idx
+      on users using gin ((coalesce(phone, '')) gin_trgm_ops)
+  `);
+
+  await database.query(`
+    create index if not exists users_display_name_trgm_idx
+      on users using gin ((coalesce(display_name, '')) gin_trgm_ops)
+  `);
+
+  await database.query(`
+    create index if not exists ledger_entries_wallet_created_idx
+      on ledger_entries(wallet_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists payments_user_created_idx
+      on payments(user_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists payments_provider_status_created_idx
+      on payments(provider, status, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists subscription_checkouts_provider_checkout_idx
+      on subscription_checkouts(provider, provider_checkout_id)
+  `);
+
+  await database.query(`
+    create index if not exists subscription_checkouts_provider_status_currency_idx
+      on subscription_checkouts(provider, status, currency)
+  `);
+
+  await database.query(`
+    create index if not exists subscription_events_checkout_created_idx
+      on subscription_events(checkout_id, created_at desc)
+      where checkout_id is not null
+  `);
+
+  await database.query(`
+    create index if not exists conversations_user_updated_idx
+      on conversations(user_id, updated_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists messages_conversation_created_idx
+      on messages(conversation_id, created_at asc)
+  `);
+
+  await database.query(`
+    create index if not exists memory_items_user_enabled_updated_idx
+      on memory_items(user_id, enabled, updated_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists usage_events_user_created_idx
+      on usage_events(user_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists files_user_created_idx
+      on files(user_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists mailing_audiences_user_created_idx
+      on mailing_audiences(user_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists mailing_contacts_user_audience_created_idx
+      on mailing_contacts(user_id, audience_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists mailing_contacts_user_audience_status_email_idx
+      on mailing_contacts(user_id, audience_id, status, email)
+  `);
+
+  await database.query(`
+    create index if not exists business_members_workspace_sort_idx
+      on business_members(workspace_id, sort_order asc, created_at asc)
+  `);
+
+  await database.query(`
+    create index if not exists business_groups_workspace_created_idx
+      on business_groups(workspace_id, created_at asc)
+  `);
+
+  await database.query(`
+    create index if not exists business_group_members_group_created_idx
+      on business_group_members(group_id, created_at asc)
+  `);
+
+  await database.query(`
+    create index if not exists business_deals_workspace_sort_idx
+      on business_deals(workspace_id, sort_order asc, created_at asc)
+  `);
+
+  await database.query(`
+    create index if not exists business_ideas_workspace_sort_idx
+      on business_ideas(workspace_id, sort_order asc, created_at asc)
+  `);
+
+  await database.query(`
+    create index if not exists business_employee_daily_reports_member_date_idx
+      on business_employee_daily_reports(member_id, report_date)
+      where member_id is not null
+  `);
+
+  await database.query(`
+    create index if not exists business_employee_activity_created_idx
+      on business_employee_activity(created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists user_media_assets_project_idx
+      on user_media_assets(project_id)
+      where project_id is not null
+  `);
+
+  await database.query(`
+    create index if not exists generation_jobs_user_status_created_idx
+      on generation_jobs(user_id, status, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists audit_logs_actor_created_idx
+      on audit_logs(actor_user_id, created_at desc)
+      where actor_user_id is not null
+  `);
+
+  await database.query(`
+    create index if not exists feature_flags_enabled_key_idx
+      on feature_flags(enabled, key)
+  `);
+
+  await database.query(`
+    create index if not exists ai_provider_settings_enabled_mode_idx
+      on ai_provider_settings(enabled, traffic_mode)
+  `);
+
+  await database.query(`
+    create index if not exists promotions_active_placement_idx
+      on promotions(active, placement, priority asc)
+  `);
+
+  await database.query(`
+    create index if not exists content_blocks_key_locale_idx
+      on content_blocks(key, locale)
+  `);
+
+  await database.query(`
+    create index if not exists ai_quality_reviews_status_created_idx
+      on ai_quality_reviews(status, created_at desc)
   `);
 }

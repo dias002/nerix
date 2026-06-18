@@ -1,4 +1,4 @@
-import type { Agent, AiModality, Language, WalletBalance } from "@nerix/shared";
+import type { Agent, AiModality, Language, WalletBalance } from "@nomduchat/shared";
 
 const apiUrl = (import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
 let accessToken: string | null = null;
@@ -286,6 +286,7 @@ export type AdminPricingApiRecord = {
       provider: "kaspi" | "yookassa";
       currency: "KZT" | "RUB";
       amountMinor: number;
+      priceSource: "mashagpt_benchmark_draft" | "admin_fixed_rate";
     }>;
   }>;
 };
@@ -343,6 +344,95 @@ export type AdminUsersApiResponse = {
   query: string;
   users: AdminUserApiRecord[];
   privacyNote: string;
+};
+
+export type AiProviderApiRecord = {
+  code: string;
+  name: string;
+  enabled: boolean;
+  modalities: AiModality[];
+  reason: string;
+};
+
+export type AiProvidersApiResponse = {
+  policyMode: string;
+  providers: AiProviderApiRecord[];
+};
+
+export type AdminFeatureFlagApiRecord = {
+  key: string;
+  label: string;
+  description: string;
+  enabled: boolean;
+  audience: string;
+  rolloutPercent: number;
+  updatedAt: string;
+};
+
+export type AdminAiProviderSettingApiRecord = {
+  code: string;
+  name: string;
+  enabled: boolean;
+  backendConfigured: boolean;
+  model: string;
+  trafficMode: "primary" | "reserve" | "paused";
+  modalities: AiModality[];
+  reason: string;
+  updatedAt: string;
+};
+
+export type AdminAgentApiRecord = {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  enabled: boolean;
+  inputTypes: string[];
+  outputTypes: string[];
+  defaultModel: string;
+  fallbackModels: string[];
+  priceMultiplier: number;
+};
+
+export type AdminPromotionApiRecord = {
+  slug: string;
+  title: string;
+  body: string;
+  placement: string;
+  audience: string;
+  active: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  priority: number;
+  updatedAt: string;
+};
+
+export type AdminContentBlockApiRecord = {
+  key: string;
+  locale: string;
+  title: string;
+  body: string;
+  placement: string;
+  active: boolean;
+  updatedAt: string;
+};
+
+export type AdminAuditApiRecord = {
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  createdAt: string;
+};
+
+export type AdminControlStateApiResponse = {
+  featureFlags: AdminFeatureFlagApiRecord[];
+  aiProviders: AdminAiProviderSettingApiRecord[];
+  agents: AdminAgentApiRecord[];
+  promotions: AdminPromotionApiRecord[];
+  contentBlocks: AdminContentBlockApiRecord[];
+  auditLog: AdminAuditApiRecord[];
+  policyMode: string;
+  note: string;
 };
 
 export type MailingAudienceApiRecord = {
@@ -583,6 +673,10 @@ export async function getAgents() {
   return request<{ agents: Agent[] }>("/agents");
 }
 
+export async function getAiProviders() {
+  return request<AiProvidersApiResponse>("/ai/providers");
+}
+
 export async function getChatConversations() {
   return request<{ conversations: ChatConversationSummaryApiRecord[] }>("/chat/conversations");
 }
@@ -621,6 +715,62 @@ export async function getCurrentSubscription() {
 
 export async function getAdminOverview() {
   return request<AdminOverviewApiResponse>("/admin/overview");
+}
+
+export async function getAdminControlState() {
+  return request<AdminControlStateApiResponse>("/admin/control");
+}
+
+export async function updateAdminFeatureFlag(
+  key: string,
+  input: Partial<Pick<AdminFeatureFlagApiRecord, "enabled" | "label" | "description" | "audience" | "rolloutPercent">>
+) {
+  return request<AdminControlStateApiResponse>(`/admin/control/feature-flags/${encodeURIComponent(key)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAdminAiProvider(
+  code: string,
+  input: Partial<Pick<AdminAiProviderSettingApiRecord, "enabled" | "model" | "trafficMode">>
+) {
+  return request<AdminControlStateApiResponse>(`/admin/control/ai-providers/${encodeURIComponent(code)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAdminAgent(id: string, input: Partial<Pick<AdminAgentApiRecord, "enabled">>) {
+  return request<AdminControlStateApiResponse>(`/admin/control/agents/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAdminPromotion(
+  slug: string,
+  input: Partial<
+    Pick<
+      AdminPromotionApiRecord,
+      "title" | "body" | "placement" | "audience" | "active" | "startsAt" | "endsAt" | "priority"
+    >
+  >
+) {
+  return request<AdminControlStateApiResponse>(`/admin/control/promotions/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateAdminContentBlock(
+  key: string,
+  input: Partial<Pick<AdminContentBlockApiRecord, "locale" | "title" | "body" | "placement" | "active">>
+) {
+  return request<AdminControlStateApiResponse>(`/admin/control/content-blocks/${encodeURIComponent(key)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function getAdminUsers(query = "") {
@@ -843,8 +993,8 @@ async function request<T>(path: string, init: RequestInit = {}) {
   if (accessToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${accessToken}`);
   }
-  if (localRoleOverride && !headers.has("X-Nerix-Local-Role")) {
-    headers.set("X-Nerix-Local-Role", localRoleOverride);
+  if (localRoleOverride && !headers.has("X-nomduchat-Local-Role")) {
+    headers.set("X-nomduchat-Local-Role", localRoleOverride);
   }
 
   let response: Response;
@@ -854,23 +1004,23 @@ async function request<T>(path: string, init: RequestInit = {}) {
       headers,
     });
   } catch (error) {
-    throw new Error(isNetworkFetchError(error) ? "nerix_api_unavailable" : "nerix_api_request_failed");
+    throw new Error(isNetworkFetchError(error) ? "nomduchat_api_unavailable" : "nomduchat_api_request_failed");
   }
 
   if (!response.ok) {
     const body = await safeJson<ApiErrorResponse>(response);
-    throw new Error(body?.error?.message ?? `Nerix API request failed with ${response.status}.`);
+    throw new Error(body?.error?.message ?? `nomduchat API request failed with ${response.status}.`);
   }
 
   return response.json() as Promise<T>;
 }
 
 export function toPublicApiError(error: unknown, fallback = "Не удалось выполнить действие.") {
-  if (error instanceof Error && error.message === "nerix_api_unavailable") {
-    return "API Nerix сейчас не подключен. Действие станет доступно после запуска сервера.";
+  if (error instanceof Error && error.message === "nomduchat_api_unavailable") {
+    return "API nomduchat сейчас не подключен. Действие станет доступно после запуска сервера.";
   }
 
-  if (error instanceof Error && error.message === "nerix_api_request_failed") {
+  if (error instanceof Error && error.message === "nomduchat_api_request_failed") {
     return fallback;
   }
 

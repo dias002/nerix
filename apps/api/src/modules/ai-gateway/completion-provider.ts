@@ -20,7 +20,7 @@ export class MockCompletionProvider implements AiCompletionProvider {
   async complete(_input: CompletionInput) {
     return {
       content:
-        "Это локальный mock-ответ Nerix. Архитектура уже выбирает агента, провайдера, модель и считает примерный расход Nerix-токенов.",
+        "Это локальный mock-ответ nomduchat. Архитектура уже выбирает агента, провайдера, модель и считает примерный расход nomduchat-токенов.",
     };
   }
 }
@@ -81,5 +81,5 @@ function extractOpenAiText(response: OpenAiResponse) {
       item.content?.flatMap((content) => (typeof content.text === "string" ? [content.text] : [])) ?? []
     ) ?? [];
 
-  return parts.join("\n").trim() || "Nerix получил пустой ответ от AI-провайдера.";
+  return parts.join("\n").trim() || "nomduchat получил пустой ответ от AI-провайдера.";
 }
