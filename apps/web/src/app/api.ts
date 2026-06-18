@@ -1,6 +1,7 @@
 import type { Agent, AiModality, Language, WalletBalance } from "@nomduchat/shared";
 
-const apiUrl = (import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
+const defaultApiUrl = import.meta.env.PROD ? "https://nomduchat-api.onrender.com" : "http://127.0.0.1:4000";
+const apiUrl = (import.meta.env.VITE_API_URL ?? defaultApiUrl).replace(/\/$/, "");
 let accessToken: string | null = null;
 let localRoleOverride: string | null = null;
 
