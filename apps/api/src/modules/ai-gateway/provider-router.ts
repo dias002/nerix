@@ -12,9 +12,11 @@ export function chooseProvider(input: {
   country: CountryCode;
   modality: AiModality;
   preferredModel: string;
-}): ProviderDecision {
+}): ProviderDecision | null {
   const policyMode = getProviderPolicyMode();
   const providers = getEnabledProvidersForModality(input.modality);
+  if (providers.length === 0) return null;
+
   const provider = providers.find((candidate) => candidate.code !== "mock-provider") ?? providers[0];
   const model = provider.modelByModality[input.modality] ?? input.preferredModel;
 

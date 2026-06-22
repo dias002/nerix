@@ -35,6 +35,9 @@ export class AiGatewayService {
       modality,
       preferredModel: agentResult.value.defaultModel,
     });
+    if (!provider) {
+      return fail(new DomainError("provider_unavailable", "No AI provider is configured for this request.", 503));
+    }
 
     return ok({
       agentId: agentResult.value.id,

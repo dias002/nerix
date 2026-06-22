@@ -36,7 +36,20 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5.2"),
   OPENAI_CODE_MODEL: z.string().default("gpt-5.2"),
+  OPENAI_IMAGE_MODEL: z.string().optional(),
+  OPENAI_VOICE_MODEL: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  ANTHROPIC_TEXT_MODEL: z.string().optional(),
+  ANTHROPIC_CODE_MODEL: z.string().optional(),
+  GOOGLE_AI_API_KEY: z.string().optional(),
+  GEMINI_TEXT_MODEL: z.string().optional(),
+  GEMINI_CODE_MODEL: z.string().optional(),
+  GEMINI_IMAGE_MODEL: z.string().optional(),
   AI_PROVIDER_POLICY: z.enum(["dev_allow_all", "production_rules"]).default("dev_allow_all"),
+  AI_MOCK_PROVIDER_ENABLED: z
+    .enum(["true", "false"])
+    .default(defaultNodeEnv === "production" ? "false" : "true")
+    .transform(parseBooleanFlag),
   PAYMENT_MOCK_CHECKOUT_ENABLED: z
     .enum(["true", "false"])
     .default(defaultNodeEnv === "production" ? "false" : "true")

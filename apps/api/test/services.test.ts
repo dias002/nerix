@@ -5,6 +5,8 @@ import type { DatabaseClient, DatabaseQueryResult } from "../src/database/index.
 import { runDatabaseMigrations } from "../src/database/migrations.js";
 import { estimateTextCredits, reserveCredits } from "../src/domain/credits.js";
 import {
+  AnthropicCompletionProvider,
+  GeminiCompletionProvider,
   MockCompletionProvider,
   OpenAiCompletionProvider,
 } from "../src/modules/ai-gateway/completion-provider.js";
@@ -36,28 +38,49 @@ test("modality classifier detects media and code tasks", () => {
   assert.equal(inferModality("обычный вопрос"), "text");
 });
 
-test("provider router separates supported and regional country routes", () => {
-  assert.deepEqual(
-    chooseProvider({
-      country: "KZ",
-      modality: "text",
-      preferredModel: "text-primary",
-    }),
-    {
-      provider: "mock-provider",
-      model: "mock-text",
-      policyMode: "dev_allow_all",
-      reason: "Dev policy: Local Mock Provider is available for KZ.",
-    }
-  );
+test("provider router separates supported and regional country routes", async () => {
+  await withConfig({ AI_MOCK_PROVIDER_ENABLED: true }, () => {
+    assert.deepEqual(
+      chooseProvider({
+        country: "KZ",
+        modality: "text",
+        preferredModel: "text-primary",
+      }),
+      {
+        provider: "mock-provider",
+        model: "mock-text",
+        policyMode: "dev_allow_all",
+        reason: "Dev policy: Local Mock Provider is available for KZ.",
+      }
+    );
 
-  assert.equal(
-    chooseProvider({
-      country: "RU",
-      modality: "music",
-      preferredModel: "music-primary",
-    }).provider,
-    "mock-provider"
+    assert.equal(
+      chooseProvider({
+        country: "RU",
+        modality: "music",
+        preferredModel: "music-primary",
+      })?.provider,
+      "mock-provider"
+    );
+  });
+
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: false,
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      GOOGLE_AI_API_KEY: undefined,
+    },
+    () => {
+      assert.equal(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          preferredModel: "text-primary",
+        }),
+        null
+      );
+    }
   );
 });
 
@@ -204,13 +227,15 @@ test("auth password hashes and access tokens reject invalid credentials", async 
   });
 });
 
-test("AI completion providers use mock fallback and OpenAI Responses request shape", async () => {
-  const mock = await new MockCompletionProvider().complete({
-    provider: "mock-provider",
-    model: "mock-text",
-    prompt: "hello",
+test("AI completion providers use backend company keys for OpenAI, Anthropic, and Gemini", async () => {
+  await withConfig({ AI_MOCK_PROVIDER_ENABLED: true }, async () => {
+    const mock = await new MockCompletionProvider().complete({
+      provider: "mock-provider",
+      model: "mock-text",
+      prompt: "hello",
+    });
+    assert.match(mock.content, /mock-ответ nomduchat/);
   });
-  assert.match(mock.content, /mock-ответ nomduchat/);
 
   await withConfig({ OPENAI_API_KEY: "sk-test" }, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -251,6 +276,93 @@ test("AI completion providers use mock fallback and OpenAI Responses request sha
       instructions: "Ты ассистент nomduchat.",
       input: "Скажи коротко",
     });
+  });
+
+  await withConfig({ ANTHROPIC_API_KEY: "anthropic-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({
+        content: [{ type: "text", text: "Anthropic adapter response" }],
+        usage: {
+          input_tokens: 5,
+          output_tokens: 4,
+        },
+      });
+    }, async () => {
+      const result = await new AnthropicCompletionProvider().complete({
+        provider: "anthropic",
+        model: "claude-test",
+        prompt: "Скажи коротко",
+        systemPrompt: "Ты ассистент nomduchat.",
+      });
+
+      assert.equal(result.content, "Anthropic adapter response");
+      assert.deepEqual(result.rawUsage, {
+        input_tokens: 5,
+        output_tokens: 4,
+      });
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, "https://api.anthropic.com/v1/messages");
+    assert.equal(calls[0].init?.method, "POST");
+    const headers = calls[0].init?.headers as Record<string, string>;
+    assert.equal(headers["x-api-key"], "anthropic-key");
+    assert.equal(headers["anthropic-version"], "2023-06-01");
+
+    const body = JSON.parse(String(calls[0].init?.body));
+    assert.equal(body.model, "claude-test");
+    assert.equal(body.system, "Ты ассистент nomduchat.");
+    assert.deepEqual(body.messages, [{ role: "user", content: "Скажи коротко" }]);
+  });
+
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({
+        candidates: [
+          {
+            content: {
+              parts: [{ text: "Gemini adapter response" }],
+            },
+          },
+        ],
+        usageMetadata: {
+          promptTokenCount: 6,
+          candidatesTokenCount: 3,
+        },
+      });
+    }, async () => {
+      const result = await new GeminiCompletionProvider().complete({
+        provider: "gemini",
+        model: "gemini-test",
+        prompt: "Скажи коротко",
+        systemPrompt: "Ты ассистент nomduchat.",
+      });
+
+      assert.equal(result.content, "Gemini adapter response");
+      assert.deepEqual(result.rawUsage, {
+        promptTokenCount: 6,
+        candidatesTokenCount: 3,
+      });
+    });
+
+    assert.equal(calls.length, 1);
+    const url = new URL(calls[0].url);
+    assert.equal(url.origin, "https://generativelanguage.googleapis.com");
+    assert.equal(url.pathname, "/v1beta/models/gemini-test:generateContent");
+    assert.equal(url.searchParams.get("key"), "gemini-key");
+    assert.equal(calls[0].init?.method, "POST");
+
+    const body = JSON.parse(String(calls[0].init?.body));
+    assert.deepEqual(body.systemInstruction, {
+      parts: [{ text: "Ты ассистент nomduchat." }],
+    });
+    assert.deepEqual(body.contents, [{ role: "user", parts: [{ text: "Скажи коротко" }] }]);
   });
 });
 
