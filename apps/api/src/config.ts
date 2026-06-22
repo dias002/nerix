@@ -37,6 +37,10 @@ const envSchema = z.object({
   OPENAI_TEXT_MODEL: z.string().default("gpt-5.2"),
   OPENAI_CODE_MODEL: z.string().default("gpt-5.2"),
   AI_PROVIDER_POLICY: z.enum(["dev_allow_all", "production_rules"]).default("dev_allow_all"),
+  PAYMENT_MOCK_CHECKOUT_ENABLED: z
+    .enum(["true", "false"])
+    .default(defaultNodeEnv === "production" ? "false" : "true")
+    .transform(parseBooleanFlag),
   KASPI_CHECKOUT_URL: z.string().optional(),
   KASPI_API_TOKEN: z.string().optional(),
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),

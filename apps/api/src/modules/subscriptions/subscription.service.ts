@@ -1,7 +1,8 @@
 import { DomainError, fail, ok } from "../../domain/result.js";
+import { config } from "../../config.js";
 import type { BillingService } from "../billing/billing.service.js";
 import { findPlanPrice, isPlanId, isSubscriptionCountry } from "./plans.js";
-import { createSubscriptionPaymentProvider } from "./payment-provider.js";
+import { createSubscriptionPaymentProvider, type ProviderCheckout } from "./payment-provider.js";
 import type { SubscriptionRepository } from "./subscription.repository.js";
 import type {
   PaymentProviderCode,
@@ -60,11 +61,17 @@ export class SubscriptionService {
       return fail(new DomainError("validation_failed", `Plan '${input.planId}' is not available in ${country}.`, 400));
     }
 
-    const providerCheckout = await createSubscriptionPaymentProvider(price.provider).createCheckout({
-      userId: input.userId,
-      plan,
-      price,
-    });
+    let providerCheckout: ProviderCheckout;
+    try {
+      providerCheckout = await createSubscriptionPaymentProvider(price.provider).createCheckout({
+        userId: input.userId,
+        plan,
+        price,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Payment provider is not configured.";
+      return fail(new DomainError("provider_unavailable", message, 503));
+    }
 
     const checkout = await this.repository.createCheckout({
       userId: input.userId,
@@ -89,6 +96,10 @@ export class SubscriptionService {
   }
 
   async completeMockCheckout(input: { checkoutId: string }) {
+    if (!config.PAYMENT_MOCK_CHECKOUT_ENABLED) {
+      return fail(new DomainError("provider_unavailable", "Mock checkout is disabled.", 403));
+    }
+
     const completion = await this.repository.completeCheckoutPayment(input.checkoutId);
     if (!completion) {
       return fail(new DomainError("not_found", `Checkout '${input.checkoutId}' was not found.`, 404));

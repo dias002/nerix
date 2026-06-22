@@ -36,6 +36,10 @@ export class KaspiSubscriptionPaymentProvider implements SubscriptionPaymentProv
     const providerCheckoutId = `kaspi_${randomUUID()}`;
 
     if (!config.KASPI_CHECKOUT_URL) {
+      if (!config.PAYMENT_MOCK_CHECKOUT_ENABLED) {
+        throw new Error("KASPI_CHECKOUT_URL is required for paid KZ checkout.");
+      }
+
       return new MockSubscriptionPaymentProvider(this.code).createCheckout(input);
     }
 
@@ -65,6 +69,10 @@ export class YooKassaSubscriptionPaymentProvider implements SubscriptionPaymentP
 
   async createCheckout(input: CreateCheckoutInput) {
     if (!config.YOOKASSA_SHOP_ID || !config.YOOKASSA_SECRET_KEY) {
+      if (!config.PAYMENT_MOCK_CHECKOUT_ENABLED) {
+        throw new Error("YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY are required for paid RU checkout.");
+      }
+
       return new MockSubscriptionPaymentProvider(this.code).createCheckout(input);
     }
 

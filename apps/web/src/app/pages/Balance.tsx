@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Copy, CreditCard, Landmark, TrendingDown, Wallet, Zap } from "lucide-react";
+import { CreditCard, TrendingDown, Wallet, Zap } from "lucide-react";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 import {
@@ -15,21 +15,6 @@ import {
   type PlanId,
   type PlanApiRecord,
 } from "../api";
-
-const bankTransferDetails = [
-  { label: "Компания", value: "ТОО \"removed-project\"" },
-  { label: "ИИН/БИН", value: "230240018006" },
-  { label: "КБе", value: "17" },
-  { label: "Счет", value: "KZ51 998C TB00 0160 6793" },
-  { label: "Банк", value: "АО \"Alatau City Bank\"" },
-  { label: "БИК", value: "TSESKZKA" },
-  {
-    label: "Назначение платежа",
-    value: "Оплата подписки nomduchat. Укажите email аккаунта и выбранный тариф.",
-  },
-];
-
-const bankTransferText = bankTransferDetails.map((item) => `${item.label}: ${item.value}`).join("\n");
 
 export default function Balance() {
   const { t } = useLanguage();
@@ -48,7 +33,7 @@ export default function Balance() {
     useState<CurrentSubscriptionApiResponse["subscription"]>(null);
   const [pendingPlanId, setPendingPlanId] = useState<PlanId | null>(null);
   const [checkoutNoticePlanId, setCheckoutNoticePlanId] = useState<PlanId | null>(null);
-  const [bankDetailsCopied, setBankDetailsCopied] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -112,6 +97,7 @@ export default function Balance() {
 
   const handleSubscribe = async (planId: PlanId) => {
     setPendingPlanId(planId);
+    setCheckoutError(null);
 
     try {
       const checkout = await createSubscriptionCheckout({
@@ -131,15 +117,10 @@ export default function Balance() {
       await refreshUser();
     } catch {
       setCurrentSubscription(null);
+      setCheckoutError("Оплата картой временно недоступна. Попробуйте позже.");
     } finally {
       setPendingPlanId(null);
     }
-  };
-
-  const handleCopyBankDetails = async () => {
-    await navigator.clipboard.writeText(bankTransferText);
-    setBankDetailsCopied(true);
-    window.setTimeout(() => setBankDetailsCopied(false), 1800);
   };
 
   return (
@@ -170,6 +151,11 @@ export default function Balance() {
 
         <section className="space-y-4">
           <h3 className="text-lg font-medium text-white">{t.balance.packagesTitle}</h3>
+          {checkoutError ? (
+            <p className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-relaxed text-red-100/80">
+              {checkoutError}
+            </p>
+          ) : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {subscriptionPackages.length > 0 ? subscriptionPackages.map((pack, index) => (
               <motion.div
@@ -213,40 +199,6 @@ export default function Balance() {
                 Список тарифов пуст.
               </div>
             ) : null}
-          </div>
-        </section>
-
-        <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#0A0A0A]">
-          <div className="grid gap-0 lg:grid-cols-[0.9fr_1.1fr]">
-            <div className="border-b border-white/10 bg-white/[0.03] p-6 lg:border-b-0 lg:border-r">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-black text-white">
-                <Landmark className="h-5 w-5" strokeWidth={1.7} />
-              </div>
-              <h3 className="mt-5 text-lg font-medium text-white">Оплата на ТОО</h3>
-              <p className="mt-3 text-sm leading-relaxed text-gray-500">
-                Это ручной перевод по реквизитам. После оплаты отправьте чек менеджеру, чтобы подписку активировали после проверки.
-              </p>
-              <p className="mt-3 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-xs leading-relaxed text-amber-100/80">
-                Автоматическое зачисление появится после подключения Kaspi Pay или другого платежного провайдера с webhook.
-              </p>
-              <button
-                type="button"
-                onClick={handleCopyBankDetails}
-                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-gray-200"
-              >
-                <Copy className="h-4 w-4" strokeWidth={1.8} />
-                {bankDetailsCopied ? "Скопировано" : "Скопировать реквизиты"}
-              </button>
-            </div>
-
-            <div className="divide-y divide-white/5">
-              {bankTransferDetails.map((item) => (
-                <div key={item.label} className="grid gap-2 px-6 py-4 md:grid-cols-[180px_1fr] md:items-start">
-                  <div className="text-sm text-gray-600">{item.label}</div>
-                  <div className="text-sm leading-relaxed text-gray-200">{item.value}</div>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
 

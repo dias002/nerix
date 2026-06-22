@@ -272,6 +272,17 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
     assert.equal(checkout.checkoutUrl, "nomduchat://mock-checkout/kaspi/base");
   });
 
+  await withConfig({ KASPI_CHECKOUT_URL: undefined, PAYMENT_MOCK_CHECKOUT_ENABLED: false }, async () => {
+    await assert.rejects(
+      new KaspiSubscriptionPaymentProvider().createCheckout({
+        userId: "user-1",
+        plan: basePlan,
+        price: kzPrice,
+      }),
+      /KASPI_CHECKOUT_URL/
+    );
+  });
+
   await withConfig({ KASPI_CHECKOUT_URL: "https://pay.example.test/checkout" }, async () => {
     const checkout = await new KaspiSubscriptionPaymentProvider().createCheckout({
       userId: "user-1",
@@ -339,6 +350,24 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
         planId: "base",
         country: "RU",
       });
+    }
+  );
+
+  await withConfig(
+    {
+      YOOKASSA_SHOP_ID: undefined,
+      YOOKASSA_SECRET_KEY: undefined,
+      PAYMENT_MOCK_CHECKOUT_ENABLED: false,
+    },
+    async () => {
+      await assert.rejects(
+        new YooKassaSubscriptionPaymentProvider().createCheckout({
+          userId: "user-1",
+          plan: basePlan,
+          price: ruPrice,
+        }),
+        /YOOKASSA_SHOP_ID/
+      );
     }
   );
 });
