@@ -1,9 +1,18 @@
 import type { Agent, AiModality, Language, WalletBalance } from "@nomduchat/shared";
 
-const defaultApiUrl = import.meta.env.PROD ? "https://nomduchat-api.onrender.com" : "http://127.0.0.1:4000";
+const defaultApiUrl = resolveDefaultApiUrl();
 const apiUrl = (import.meta.env.VITE_API_URL ?? defaultApiUrl).replace(/\/$/, "");
 let accessToken: string | null = null;
 let localRoleOverride: string | null = null;
+
+function resolveDefaultApiUrl() {
+  if (!import.meta.env.PROD) return "http://127.0.0.1:4000";
+  if (typeof window !== "undefined" && window.location.hostname === "www.nomduchat.com") {
+    return "https://api.nomduchat.com";
+  }
+
+  return "https://nomduchat-api.onrender.com";
+}
 
 type ApiErrorResponse = {
   error?: {
