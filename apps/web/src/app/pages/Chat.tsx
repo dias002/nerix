@@ -643,7 +643,7 @@ export default function Chat() {
                 }
               }}
               placeholder={t.chat.placeholder}
-              className="flex-1 max-h-48 min-h-[52px] bg-transparent border-none text-white focus:ring-0 resize-none py-3.5 px-2 text-[15px] custom-scrollbar"
+              className="flex-1 max-h-48 min-h-[52px] resize-none border-none bg-transparent px-2 py-3.5 text-[15px] text-white outline-none ring-0 custom-scrollbar focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
               rows={1}
             />
             <button

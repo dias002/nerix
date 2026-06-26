@@ -748,6 +748,29 @@ test("POST /ai/route allows every country in local provider policy", async () =>
   await app.close();
 });
 
+test("POST /ai/route treats websites and Telegram bots as business tasks", async () => {
+  const app = await createApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/ai/route",
+    payload: {
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      prompt: "Создай сайт и Telegram-бота для отдела продаж",
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+  assert.equal(body.agentId, "business");
+  assert.equal(body.modality, "text");
+  assert.equal(body.provider, "mock-provider");
+
+  await app.close();
+});
+
 test("POST /ai/route accepts a broad ISO country code list", async () => {
   const app = await createApp();
 
@@ -1187,6 +1210,236 @@ test("business subscription switches workspace access from demo to active", asyn
   assert.equal(workspaceResponse.json().access.subscriptionPlanId, "business");
   assert.ok(workspaceResponse.json().groups[0].name.includes("общая группа"));
   assert.ok(workspaceResponse.json().employeeReports.length > 0);
+
+  await app.close();
+});
+
+test("business operations store customer conversations, analysis, ratings, and team chat", async () => {
+  const app = await createApp();
+
+  const initialResponse = await app.inject({
+    method: "GET",
+    url: "/business/ops",
+  });
+
+  assert.equal(initialResponse.statusCode, 200);
+  assert.equal(initialResponse.json().conversations.length, 0);
+  assert.equal(initialResponse.json().metrics[0].label, "Диалоги");
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/business/ops/conversations",
+    payload: {
+      channel: "telegram",
+      customerName: "Nomdu Cafe",
+      customerContact: "@nomdu_cafe",
+      source: "@nomdu_cafe_bot",
+      trainingAllowed: true,
+      messages: [
+        {
+          role: "customer",
+          content: "Здравствуйте. Нужен Telegram-бот, цена и сроки запуска. Если дорого, подумаем позже.",
+        },
+        {
+          role: "bot",
+          content: "Могу собрать заявку. Уточните город, задачу бота и контакт менеджера.",
+        },
+      ],
+    },
+  });
+
+  assert.equal(createResponse.statusCode, 200);
+  const created = createResponse.json().conversation;
+  assert.equal(created.channel, "telegram");
+  assert.equal(created.trainingAllowed, true);
+  assert.ok(created.analysis.objections.includes("сомнение в цене"));
+  assert.ok(created.analysis.desiredProducts.includes("Telegram-бот"));
+  assert.equal(createResponse.json().overview.conversations.length, 1);
+
+  const messageResponse = await app.inject({
+    method: "POST",
+    url: `/business/ops/conversations/${created.id}/messages`,
+    payload: {
+      role: "customer",
+      content: "Готовы созвониться, передайте менеджеру расчет.",
+    },
+  });
+
+  assert.equal(messageResponse.statusCode, 200);
+  assert.equal(messageResponse.json().conversation.messages.length, 3);
+  assert.equal(messageResponse.json().conversation.status, "waiting_human");
+
+  const ratingResponse = await app.inject({
+    method: "PATCH",
+    url: `/business/ops/conversations/${created.id}/rating`,
+    payload: {
+      rating: "excellent",
+    },
+  });
+
+  assert.equal(ratingResponse.statusCode, 200);
+  assert.equal(ratingResponse.json().conversation.ownerRating, "excellent");
+  assert.equal(ratingResponse.json().overview.metrics[4].value, "1");
+
+  const teamMessageResponse = await app.inject({
+    method: "POST",
+    url: "/business/ops/team/messages",
+    payload: {
+      authorName: "Egor",
+      roleTitle: "Владелец",
+      text: "Проверьте расчет для Nomdu Cafe и заберите диалог.",
+    },
+  });
+
+  assert.equal(teamMessageResponse.statusCode, 200);
+  assert.equal(teamMessageResponse.json().message.authorName, "Egor");
+  assert.equal(teamMessageResponse.json().overview.teamMessages.length, 1);
+
+  await app.close();
+});
+
+test("business website builder creates, edits, publishes, and serves a public site", async () => {
+  const app = await createApp();
+
+  const draftResponse = await app.inject({
+    method: "POST",
+    url: "/business/websites/draft",
+    payload: {
+      country: "KZ",
+      companyName: "Nomdu Market",
+      city: "Алматы",
+      contact: "@nomdu_manager",
+      style: "premium",
+      siteType: "catalog",
+      prompt:
+        "Нужен сайт для Nomdu Market в Алматы. Продаем кофе, завтраки, доставку в офис и корпоративные наборы. Цена от 15 000 ₸. Контакт @nomdu_manager.",
+    },
+  });
+
+  assert.equal(draftResponse.statusCode, 200);
+  const draft = draftResponse.json();
+  assert.equal(draft.website.status, "draft");
+  assert.equal(draft.website.title, "Nomdu Market");
+  assert.equal(draft.website.style, "premium");
+  assert.equal(draft.website.content.pages[0].sections[0].type, "hero");
+  assert.ok(draft.website.content.pages[0].sections.some((section: { type: string }) => section.type === "pricing"));
+  assert.ok(draft.assistantSummary.includes("Nomdu Market"));
+
+  const siteId = draft.website.id;
+  const updatedContent = draft.website.content;
+  updatedContent.pages[0].sections[0].title = "Nomdu Market — кофе и завтраки в Алматы";
+
+  const updateResponse = await app.inject({
+    method: "PATCH",
+    url: `/business/websites/${siteId}`,
+    payload: {
+      title: "Nomdu Market",
+      slug: "nomdu-market",
+      content: updatedContent,
+    },
+  });
+
+  assert.equal(updateResponse.statusCode, 200);
+  assert.equal(updateResponse.json().website.slug, "nomdu-market");
+  assert.equal(updateResponse.json().website.content.pages[0].sections[0].title, "Nomdu Market — кофе и завтраки в Алматы");
+
+  const publishResponse = await app.inject({
+    method: "POST",
+    url: `/business/websites/${siteId}/publish`,
+    payload: {},
+  });
+
+  assert.equal(publishResponse.statusCode, 200);
+  assert.equal(publishResponse.json().website.status, "published");
+  assert.equal(publishResponse.json().website.publicationPath, "/site/nomdu-market");
+
+  const publicResponse = await app.inject({
+    method: "GET",
+    url: "/public/websites/nomdu-market",
+  });
+
+  assert.equal(publicResponse.statusCode, 200);
+  assert.equal(publicResponse.json().website.title, "Nomdu Market");
+  assert.equal(publicResponse.json().website.status, "published");
+
+  await app.close();
+});
+
+test("telegram bot order creates priced setup without exposing full bot token", async () => {
+  const app = await createApp();
+  const botToken = "123456:VERY_SECRET_TELEGRAM_TOKEN";
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/telegram-bots/orders",
+    payload: {
+      country: "KZ",
+      companyName: "Nomdu Market",
+      ownerName: "Egor",
+      contact: "@egor",
+      businessDescription: "Маркетплейс и B2B-продажи столовых приборов для компаний.",
+      services: "Каталог товаров, консультация, расчет партии, доставка и оптовые условия.",
+      audience: "Владельцы кафе, ресторанов и закупщики компаний.",
+      botPurpose: "Отвечать на вопросы, собирать заявку и передавать горячего клиента менеджеру.",
+      tone: "sales",
+      responseRules: "Не придумывать цены, если их нет в базе. Всегда уточнять город, объем и контакт.",
+      escalationContact: "Передавать менеджеру @egor, если клиент просит индивидуальную цену.",
+      faq: "Срок поставки зависит от партии. Для опта нужен расчет менеджера.",
+      sourceLinks: "https://nomduchat.com",
+      botUsername: "@nomdu_market_bot",
+      botToken,
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  const body = response.json();
+  assert.equal(body.order.currency, "KZT");
+  assert.equal(body.order.amountMinor, 3_500_000);
+  assert.equal(body.order.status, "ready_for_payment");
+  assert.equal(body.order.botTokenProvided, true);
+  assert.ok(body.order.setupSummary.includes("Nomdu Market"));
+  assert.ok(body.order.systemPrompt.includes("Telegram-ассистент"));
+  assert.equal(JSON.stringify(body).includes(botToken), false);
+
+  const ordersResponse = await app.inject({
+    method: "GET",
+    url: "/telegram-bots/orders",
+  });
+
+  assert.equal(ordersResponse.statusCode, 200);
+  assert.equal(ordersResponse.json().orders.length, 1);
+  assert.equal(ordersResponse.json().orders[0].companyName, "Nomdu Market");
+
+  await app.close();
+});
+
+test("telegram mini app draft generates bot elements from a short business brief", async () => {
+  const app = await createApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/telegram-bots/miniapp/draft",
+    payload: {
+      country: "RU",
+      companyName: "Nomduchat B2B",
+      businessCategory: "AI-агенты для малого бизнеса",
+      city: "Москва",
+      contact: "@nomduchat_manager",
+      mainOffer: "Telegram-боты, которые отвечают клиентам, собирают заявки и передают диалог менеджеру.",
+      priceInfo: "Запуск 7000 рублей. Токены оплачиваются отдельно.",
+      goals: ["answers", "leads", "sales"],
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  const draft = response.json().draft;
+  assert.equal(draft.currency, "RUB");
+  assert.equal(draft.amountMinor, 700_000);
+  assert.ok(draft.botUsernameSuggestions.length > 0);
+  assert.ok(draft.menuButtons.includes("Оставить заявку"));
+  assert.ok(draft.systemPrompt.includes("Telegram-ассистент"));
+  assert.equal(draft.orderPayload.companyName, "Nomduchat B2B");
+  assert.equal(draft.orderPayload.country, "RU");
 
   await app.close();
 });

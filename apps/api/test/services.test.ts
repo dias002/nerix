@@ -4,8 +4,14 @@ import { config } from "../src/config.js";
 import type { DatabaseClient, DatabaseQueryResult } from "../src/database/index.js";
 import { runDatabaseMigrations } from "../src/database/migrations.js";
 import { estimateTextCredits, reserveCredits } from "../src/domain/credits.js";
+import { InMemoryAgentRepository } from "../src/modules/agents/agent.repository.js";
+import { AgentService } from "../src/modules/agents/agent.service.js";
+import { AiGatewayService } from "../src/modules/ai-gateway/ai-gateway.service.js";
 import {
   AnthropicCompletionProvider,
+  type CompletionInput,
+  type CompletionResult,
+  type AiCompletionProvider,
   GeminiCompletionProvider,
   MockCompletionProvider,
   OpenAiCompletionProvider,
@@ -14,6 +20,10 @@ import { inferModality } from "../src/modules/ai-gateway/modality-classifier.js"
 import { chooseProvider } from "../src/modules/ai-gateway/provider-router.js";
 import { hashPassword, verifyPassword } from "../src/modules/auth/password.js";
 import { signAccessToken, verifyAccessToken } from "../src/modules/auth/token.js";
+import { BillingService } from "../src/modules/billing/billing.service.js";
+import { InMemoryWalletRepository } from "../src/modules/billing/wallet.repository.js";
+import { ChatService } from "../src/modules/chat/chat.service.js";
+import { InMemoryConversationRepository } from "../src/modules/chat/conversation.repository.js";
 import { InMemoryMailingRepository } from "../src/modules/mailings/mailing.repository.js";
 import { MailingService, parseContacts } from "../src/modules/mailings/mailing.service.js";
 import type { SmtpBzMessage } from "../src/modules/mailings/mailing.types.js";
@@ -82,6 +92,112 @@ test("provider router separates supported and regional country routes", async ()
       );
     }
   );
+
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: false,
+      OPENAI_API_KEY: "openai-key",
+      OPENAI_TEXT_MODEL: "openai-text",
+      OPENAI_CODE_MODEL: "openai-code",
+      ANTHROPIC_API_KEY: "anthropic-key",
+      ANTHROPIC_TEXT_MODEL: "anthropic-text",
+      ANTHROPIC_CODE_MODEL: "anthropic-code",
+      GOOGLE_AI_API_KEY: "gemini-key",
+      GEMINI_IMAGE_MODEL: "gemini-image",
+      GEMINI_VIDEO_MODEL: "gemini-video",
+      GEMINI_MUSIC_MODEL: "gemini-music",
+    },
+    () => {
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          preferredModel: "text-primary",
+        }),
+        {
+          provider: "openai",
+          model: "openai-text",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: OpenAI is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "code",
+          preferredModel: "code-primary",
+          agentId: "code",
+        }),
+        {
+          provider: "anthropic",
+          model: "anthropic-code",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: Anthropic is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          preferredModel: "business-primary",
+          agentId: "business",
+        }),
+        {
+          provider: "anthropic",
+          model: "anthropic-text",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: Anthropic is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "image",
+          preferredModel: "image-primary",
+          agentId: "image",
+        }),
+        {
+          provider: "gemini",
+          model: "gemini-image",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: Google Gemini is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "video",
+          preferredModel: "video-primary",
+          agentId: "video",
+        }),
+        {
+          provider: "gemini",
+          model: "gemini-video",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: Google Gemini is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "music",
+          preferredModel: "music-primary",
+          agentId: "music",
+        }),
+        {
+          provider: "gemini",
+          model: "gemini-music",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: Google Gemini is available for KZ.",
+        }
+      );
+    }
+  );
 });
 
 test("billing service reserves, captures, and refunds credits", async () => {
@@ -131,6 +247,55 @@ test("billing service reserves, captures, and refunds credits", async () => {
     refunded.value.availableCredits,
     walletBefore.value.availableCredits - reservation.value.estimate.estimatedCredits
   );
+});
+
+test("generation service creates media jobs, stores artifacts, and can be started from chat", async () => {
+  await withConfig({ AI_MOCK_PROVIDER_ENABLED: true, API_PUBLIC_URL: "http://127.0.0.1:4000" }, async () => {
+    const dependencies = createDependencies();
+
+    const generationResponse = await dependencies.generation.createJob({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      modality: "music",
+      prompt: "сделай песню для рекламы nomduchat",
+    });
+
+    assert.equal(generationResponse.ok, true);
+    if (!generationResponse.ok) return;
+
+    assert.equal(generationResponse.value.job.status, "succeeded");
+    assert.equal(generationResponse.value.job.modality, "music");
+    assert.equal(generationResponse.value.job.provider, "mock-provider");
+    assert.match(generationResponse.value.job.resultUrl ?? "", /\/generation\/jobs\/.+\/artifact$/);
+    assert.ok((generationResponse.value.job.finalCredits ?? 0) > 0);
+
+    const artifactResponse = await dependencies.generation.getArtifact({
+      userId: "local-user",
+      jobId: generationResponse.value.job.id,
+    });
+    assert.equal(artifactResponse.ok, true);
+    if (!artifactResponse.ok) return;
+    assert.match(artifactResponse.value.data.toString("utf8"), /nomduchat mock music artifact/);
+
+    const assetsResponse = await dependencies.generation.listAssets("local-user");
+    assert.equal(assetsResponse.ok, true);
+    if (!assetsResponse.ok) return;
+    assert.equal(assetsResponse.value.assets.length, 1);
+    assert.equal(assetsResponse.value.assets[0].mediaType, "music");
+
+    const chatResponse = await dependencies.chat.sendMessage({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      message: "создай видео ролик про продукт",
+      agentId: "video",
+    });
+    assert.equal(chatResponse.ok, true);
+    if (!chatResponse.ok) return;
+    assert.equal(chatResponse.value.generationJob.modality, "video");
+    assert.equal(chatResponse.value.generationJob.status, "succeeded");
+  });
 });
 
 test("database migrations include runtime columns for auth and subscriptions", async () => {
@@ -190,6 +355,9 @@ test("database migrations include runtime columns for auth and subscriptions", a
   assert.match(sql, /create table if not exists usage_events/);
   assert.match(sql, /create index if not exists usage_events_user_created_idx/);
   assert.match(sql, /create table if not exists generation_jobs/);
+  assert.match(sql, /alter table generation_jobs[\s\S]*reservation_id/);
+  assert.match(sql, /alter table generation_jobs[\s\S]*result_url/);
+  assert.match(sql, /alter table generation_jobs[\s\S]*metadata/);
   assert.match(sql, /create table if not exists audit_logs/);
   assert.match(sql, /create index if not exists subscription_checkouts_provider_checkout_idx/);
 });
@@ -364,6 +532,47 @@ test("AI completion providers use backend company keys for OpenAI, Anthropic, an
     });
     assert.deepEqual(body.contents, [{ role: "user", parts: [{ text: "Скажи коротко" }] }]);
   });
+});
+
+test("chat completions include previous messages for follow-up context", async () => {
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: true,
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      GOOGLE_AI_API_KEY: undefined,
+    },
+    async () => {
+      const agents = new AgentService(new InMemoryAgentRepository());
+      const billing = new BillingService(new InMemoryWalletRepository(), agents);
+      const completionProvider = new CapturingCompletionProvider();
+      const aiGateway = new AiGatewayService(agents, billing, completionProvider);
+      const chat = new ChatService(new InMemoryConversationRepository(), aiGateway);
+
+      const firstResponse = await chat.sendMessage({
+        userId: "local-user",
+        country: "KZ",
+        language: "ru",
+        message: "Меня зовут Диас, помоги написать теплый текст про маму.",
+      });
+      assert.equal(firstResponse.ok, true);
+      if (!firstResponse.ok) return;
+
+      const followUpResponse = await chat.sendMessage({
+        userId: "local-user",
+        country: "KZ",
+        language: "ru",
+        conversationId: firstResponse.value.conversationId,
+        message: "каких деталей тебе не хватает?",
+      });
+      assert.equal(followUpResponse.ok, true);
+
+      const followUpPrompt = completionProvider.inputs.at(-1)?.prompt ?? "";
+      assert.match(followUpPrompt, /Контекст диалога/);
+      assert.match(followUpPrompt, /Меня зовут Диас, помоги написать теплый текст про маму/);
+      assert.match(followUpPrompt, /Последнее сообщение пользователя:\nкаких деталей тебе не хватает/);
+    }
+  );
 });
 
 test("subscription payment providers build Kaspi links and YooKassa payment requests", async () => {
@@ -591,6 +800,17 @@ test("mailing contact parser extracts email and optional names from pasted rows"
     },
   ]);
 });
+
+class CapturingCompletionProvider implements AiCompletionProvider {
+  readonly inputs: CompletionInput[] = [];
+
+  async complete(input: CompletionInput): Promise<CompletionResult> {
+    this.inputs.push(input);
+    return {
+      content: "captured",
+    };
+  }
+}
 
 class FakeMailingTransport implements MailingTransport {
   messages: SmtpBzMessage[] = [];

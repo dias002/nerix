@@ -1,8 +1,9 @@
 import type { CountryCode, Language } from "@nomduchat/shared";
 import { DomainError, fail, ok } from "../../domain/result.js";
 import type { AiGatewayService } from "../ai-gateway/ai-gateway.service.js";
+import type { GenerationService } from "../generation/generation.service.js";
 import type { ConversationRepository } from "./conversation.repository.js";
-import type { MessageFeedbackRating } from "./conversation.types.js";
+import type { ConversationMessage, MessageFeedbackRating } from "./conversation.types.js";
 
 type ChatAttachment = {
   name: string;
@@ -15,7 +16,8 @@ type ChatAttachment = {
 export class ChatService {
   constructor(
     private readonly conversations: ConversationRepository,
-    private readonly aiGateway: AiGatewayService
+    private readonly aiGateway: AiGatewayService,
+    private readonly generation?: GenerationService
   ) {}
 
   async listConversations(userId: string) {
@@ -97,6 +99,7 @@ export class ChatService {
       return fail(new DomainError("not_found", "Conversation was not found.", 404));
     }
 
+    const previousMessages = [...conversation.messages];
     const userMessage = await this.conversations.appendMessage(conversation.id, {
       role: "user",
       content: message,
@@ -109,11 +112,26 @@ export class ChatService {
       return fail(new DomainError("internal_error", "User message could not be stored.", 500));
     }
 
+    if (routeResult.value.asyncJob) {
+      const mediaResult = await this.startMediaGeneration({
+        userId: input.userId,
+        country: input.country ?? "KZ",
+        language: input.language ?? "ru",
+        conversationId: conversation.id,
+        userMessageId: userMessage.id,
+        prompt,
+        route: routeResult.value,
+      });
+      if (!mediaResult.ok) return mediaResult;
+
+      return mediaResult;
+    }
+
     const completionResult = await this.completeSafely({
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt,
+      prompt: buildConversationPrompt(previousMessages, prompt),
       route: routeResult.value,
     });
     if (!completionResult.ok) return completionResult;
@@ -172,7 +190,8 @@ export class ChatService {
       return fail(new DomainError("unauthorized", "Conversation belongs to another user.", 401));
     }
 
-    const userMessage = [...conversation.messages].reverse().find((message) => message.role === "user");
+    const lastUserMessageIndex = findLastUserMessageIndex(conversation.messages);
+    const userMessage = lastUserMessageIndex >= 0 ? conversation.messages[lastUserMessageIndex] : null;
     if (!userMessage) {
       return fail(new DomainError("validation_failed", "Conversation does not have a user message to regenerate.", 400));
     }
@@ -204,11 +223,15 @@ export class ChatService {
       return routeResult;
     }
 
+    if (routeResult.value.asyncJob) {
+      return fail(new DomainError("validation_failed", "Media generation regeneration is not supported yet.", 400));
+    }
+
     const completionResult = await this.completeSafely({
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt,
+      prompt: buildConversationPrompt(conversation.messages.slice(0, lastUserMessageIndex), prompt),
       route: routeResult.value,
       stage: "regenerate_complete",
     });
@@ -391,6 +414,91 @@ export class ChatService {
       return fail(new DomainError("provider_unavailable", "AI provider is unavailable.", 503));
     }
   }
+
+  private async startMediaGeneration(input: {
+    userId: string;
+    country: CountryCode;
+    language: Language;
+    conversationId: string;
+    userMessageId: string;
+    prompt: string;
+    route: {
+      agentId: string;
+      provider: string;
+      model: string;
+      estimatedCredits: number;
+      reserveCredits: number;
+      asyncJob: boolean;
+      modality: "image" | "video" | "music" | "voice" | "text" | "code" | "file";
+      policyMode: string;
+      routingReason: string;
+    };
+  }) {
+    if (!this.generation) {
+      return fail(new DomainError("provider_unavailable", "Media generation service is not configured.", 503));
+    }
+
+    const generationResult = await this.generation.createJob({
+      userId: input.userId,
+      country: input.country,
+      language: input.language,
+      agentId: input.route.agentId,
+      modality: input.route.modality,
+      prompt: input.prompt,
+    });
+    if (!generationResult.ok) return generationResult;
+
+    const job = generationResult.value.job;
+    const content =
+      job.status === "succeeded"
+        ? `Готово. Я создал ${mediaLabel(job.modality)}: ${job.resultUrl ?? "результат сохранен в медиатеке."}`
+        : job.status === "running"
+          ? `Запустил генерацию ${mediaLabel(job.modality)}. Статус задачи: ${job.id}.`
+          : `Генерация ${mediaLabel(job.modality)} не завершилась: ${job.errorMessage ?? "ошибка провайдера"}. Кредиты возвращены.`;
+
+    const assistantMessage = await this.conversations.appendMessage(input.conversationId, {
+      role: "assistant",
+      content,
+      metadata: {
+        route: input.route,
+        generationJob: job,
+      },
+    });
+    if (!assistantMessage) {
+      return fail(new DomainError("internal_error", "Assistant message could not be stored.", 500));
+    }
+
+    const answerVariant = await this.conversations.recordAnswerVariant({
+      conversationId: input.conversationId,
+      userMessageId: input.userMessageId,
+      assistantMessageId: assistantMessage.id,
+      agentId: input.route.agentId,
+      provider: input.route.provider,
+      model: input.route.model,
+      routeMetadata: {
+        ...input.route,
+        generationJobId: job.id,
+      },
+      providerUsage: {
+        generationJobId: job.id,
+        status: job.status,
+        finalCredits: job.finalCredits ?? null,
+      },
+    });
+
+    return ok({
+      conversationId: input.conversationId,
+      assistantMessage,
+      answerVariant,
+      route: input.route,
+      generationJob: job,
+      usage: {
+        estimatedCredits: input.route.estimatedCredits,
+        reserveCredits: input.route.reserveCredits,
+        finalCredits: job.finalCredits ?? null,
+      },
+    });
+  }
 }
 
 function createConversationTitle(message: string) {
@@ -401,6 +509,48 @@ function createConversationTitle(message: string) {
 function createPromptExcerpt(prompt: string) {
   const normalized = prompt.replace(/\s+/g, " ").trim();
   return normalized.length > 500 ? `${normalized.slice(0, 497)}...` : normalized;
+}
+
+function buildConversationPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
+  const contextMessages = previousMessages
+    .filter((message) => message.content.trim() && ["system", "user", "assistant"].includes(message.role))
+    .slice(-12);
+
+  if (contextMessages.length === 0) return currentPrompt;
+
+  const context = contextMessages
+    .map((message) => `${conversationRoleLabel(message.role)}: ${trimContextContent(message.content)}`)
+    .join("\n");
+
+  return [
+    "Используй контекст текущего диалога. Учитывай имена, просьбы, уточнения и ограничения, которые уже были сказаны.",
+    "Не начинай разговор заново, если пользователь пишет короткое уточнение.",
+    "",
+    "Контекст диалога:",
+    context,
+    "",
+    "Последнее сообщение пользователя:",
+    currentPrompt,
+  ].join("\n");
+}
+
+function conversationRoleLabel(role: ConversationMessage["role"]) {
+  if (role === "assistant") return "Ассистент";
+  if (role === "system") return "Система";
+  return "Пользователь";
+}
+
+function trimContextContent(content: string) {
+  const normalized = content.replace(/\s+/g, " ").trim();
+  return normalized.length > 1_200 ? `${normalized.slice(0, 1_197)}...` : normalized;
+}
+
+function findLastUserMessageIndex(messages: ConversationMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === "user") return index;
+  }
+
+  return -1;
 }
 
 function normalizeAttachments(attachments: ChatAttachment[] | undefined) {
@@ -456,4 +606,12 @@ function isAttachmentLike(value: unknown): value is ChatAttachment {
   if (!value || typeof value !== "object") return false;
   const attachment = value as Partial<ChatAttachment>;
   return typeof attachment.name === "string" && typeof attachment.size === "number";
+}
+
+function mediaLabel(modality: string) {
+  if (modality === "image") return "изображение";
+  if (modality === "video") return "видео";
+  if (modality === "music") return "трек";
+  if (modality === "voice") return "озвучку";
+  return "медиа";
 }

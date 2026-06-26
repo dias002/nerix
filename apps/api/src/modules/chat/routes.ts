@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { Result } from "../../domain/result.js";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import { countrySchema, languageSchema } from "../../server/schemas.js";
@@ -106,7 +107,8 @@ export async function registerChatRoutes(app: FastifyInstance, chat: ChatService
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
 
-    return sendResult(reply, await chat.sendMessage({ ...input.data, userId: user.value.userId }));
+    const result = await chat.sendMessage({ ...input.data, userId: user.value.userId });
+    return sendResult(reply, result as Result<unknown>);
   });
 
   app.post("/chat/messages/regenerate", async (request, reply) => {

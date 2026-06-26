@@ -34,6 +34,7 @@ export class AiGatewayService {
       country: input.country ?? "KZ",
       modality,
       preferredModel: agentResult.value.defaultModel,
+      agentId: agentResult.value.id,
     });
     if (!provider) {
       return fail(new DomainError("provider_unavailable", "No AI provider is configured for this request.", 503));

@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
-import { ArrowLeft, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Home, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Home, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
 import { useLanguage } from "../i18n";
@@ -14,6 +14,7 @@ export default function WorkspaceLayout() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("nomduchat-sidebar-collapsed") === "true";
   });
+  const [businessMenuOpen, setBusinessMenuOpen] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem("nomduchat-sidebar-collapsed", String(sidebarCollapsed));
@@ -23,6 +24,17 @@ export default function WorkspaceLayout() {
   const isAdminNavigation = Boolean(permissions?.adminPanel);
   const adminTab = new URLSearchParams(location.search).get("tab");
   const roleOptions: LocalRoleOverride[] = ["real", "admin", "user", "business_owner", "business_employee"];
+  const isBusinessSection =
+    location.pathname === "/workspace/business" || location.pathname.startsWith("/workspace/business/");
+  const showBusinessBrand = isBusinessSection || user?.activePlanId === "business" || Boolean(user?.businessWorkspace);
+  const businessNavItems = [
+    { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.businessOverview },
+    { path: "/workspace/business/website", icon: Globe, label: t.nav.businessWebsite },
+    { path: "/workspace/business/telegram-bot", icon: Bot, label: t.nav.businessTelegramBot },
+    { path: "/workspace/business/dialogs", icon: MessageSquare, label: t.nav.businessDialogs },
+    { path: "/workspace/business/analytics", icon: BarChart3, label: t.nav.businessAnalytics },
+    { path: "/workspace/business/ideas", icon: Lightbulb, label: t.nav.businessIdeas },
+  ];
   const navItems = isAdminNavigation
     ? [
         {
@@ -69,7 +81,7 @@ export default function WorkspaceLayout() {
         { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: true },
         { path: "/workspace/agents", icon: Users, label: t.nav.agents, visible: true },
         { path: "/workspace/memory", icon: Brain, label: t.nav.memory, visible: true },
-        { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: Boolean(permissions?.business) },
+        { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: true },
         { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: true },
         { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: true },
       ];
@@ -82,6 +94,10 @@ export default function WorkspaceLayout() {
       navigate("/workspace/admin", { replace: true });
     }
   }, [isAdminNavigation, location.pathname, navigate]);
+
+  useEffect(() => {
+    setBusinessMenuOpen(isBusinessSection && !sidebarCollapsed);
+  }, [isBusinessSection, sidebarCollapsed]);
 
   const isActive = (item: (typeof navItems)[number]) => {
     if (item.active) return item.active();
@@ -110,7 +126,14 @@ export default function WorkspaceLayout() {
           <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "justify-center md:justify-between"}`}>
             <Link to="/" className="block text-xl font-medium text-white text-center transition-colors hover:text-gray-300 md:text-left">
               <span className={sidebarCollapsed ? "inline" : "md:hidden"}>N</span>
-              <span className={`${sidebarCollapsed ? "hidden" : "hidden md:inline"}`}>{t.product}</span>
+              <span className={`${sidebarCollapsed ? "hidden" : "hidden md:inline"}`}>
+                {t.product}
+                {showBusinessBrand ? (
+                  <span className="ml-2 rounded-full border border-white/10 px-2 py-0.5 align-middle text-[11px] font-medium uppercase tracking-[0.12em] text-gray-400">
+                    Business
+                  </span>
+                ) : null}
+              </span>
             </Link>
             {!sidebarCollapsed ? (
               <button
@@ -174,6 +197,48 @@ export default function WorkspaceLayout() {
                       {item.label}
                     </span>
                   </Link>
+                  {!sidebarCollapsed && item.path === "/workspace/business" ? (
+                    <div
+                      aria-hidden={!businessMenuOpen}
+                      className={`hidden overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out md:block ${
+                        businessMenuOpen ? "max-h-72 translate-y-0 opacity-100" : "max-h-0 -translate-y-1 opacity-0"
+                      }`}
+                    >
+                      <ul className="mt-1 space-y-1 border-l border-white/10 pl-4">
+                        {businessNavItems.map((subItem, index) => {
+                          const SubIcon = subItem.icon;
+                          const subActive =
+                            subItem.path === "/workspace/business"
+                              ? location.pathname === "/workspace/business"
+                              : location.pathname === subItem.path || location.pathname.startsWith(`${subItem.path}/`);
+
+                          return (
+                            <li
+                              key={subItem.path}
+                              className="transition-[opacity,transform] duration-300 ease-out"
+                              style={{
+                                transitionDelay: businessMenuOpen ? `${index * 35}ms` : "0ms",
+                                opacity: businessMenuOpen ? 1 : 0,
+                                transform: businessMenuOpen ? "translateX(0)" : "translateX(-6px)",
+                              }}
+                            >
+                              <Link
+                                to={subItem.path}
+                                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors ${
+                                  subActive
+                                    ? "bg-white/10 text-white"
+                                    : "text-gray-500 hover:bg-white/5 hover:text-white"
+                                }`}
+                              >
+                                <SubIcon className="h-4 w-4" strokeWidth={1.5} />
+                                <span className="truncate">{subItem.label}</span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
                 </li>
               );
             })}

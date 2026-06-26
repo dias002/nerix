@@ -641,6 +641,280 @@ export type BusinessWorkspaceApiResponse = {
   advisorViews: BusinessAdvisorViewApiRecord[];
 };
 
+export type BusinessCustomerChannel = "telegram" | "website" | "manual";
+export type BusinessCustomerMessageRole = "customer" | "bot" | "employee" | "system";
+export type BusinessConversationRating = "bad" | "good" | "excellent";
+export type BusinessConversationStatus = "new" | "qualified" | "waiting_human" | "won" | "lost";
+
+export type BusinessConversationAnalysisApiRecord = {
+  summary: string;
+  goal: string;
+  intent: string;
+  objections: string[];
+  desiredProducts: string[];
+  sentiment: "positive" | "neutral" | "negative";
+  outcome: string;
+  nextStep: string;
+  score: number;
+  tags: string[];
+  trainingSignal: string;
+};
+
+export type BusinessCustomerMessageApiRecord = {
+  id: string;
+  conversationId: string;
+  role: BusinessCustomerMessageRole;
+  authorName: string;
+  content: string;
+  createdAt: string;
+};
+
+export type BusinessCustomerConversationApiRecord = {
+  id: string;
+  workspaceId: string;
+  channel: BusinessCustomerChannel;
+  customerName: string;
+  customerContact: string;
+  source: string;
+  status: BusinessConversationStatus;
+  ownerRating: BusinessConversationRating | null;
+  aiRating: BusinessConversationRating;
+  analysis: BusinessConversationAnalysisApiRecord;
+  trainingAllowed: boolean;
+  createdAt: string;
+  updatedAt: string;
+  messages: BusinessCustomerMessageApiRecord[];
+};
+
+export type BusinessTeamMessageApiRecord = {
+  id: string;
+  workspaceId: string;
+  memberId: string | null;
+  authorName: string;
+  roleTitle: string;
+  text: string;
+  createdAt: string;
+};
+
+export type BusinessOpsOverviewApiResponse = {
+  workspaceId: string;
+  metrics: Array<{ label: string; value: string; detail: string }>;
+  conversations: BusinessCustomerConversationApiRecord[];
+  teamMessages: BusinessTeamMessageApiRecord[];
+};
+
+export type CreateBusinessCustomerConversationInput = {
+  channel: BusinessCustomerChannel;
+  customerName?: string;
+  customerContact?: string;
+  source?: string;
+  trainingAllowed?: boolean;
+  messages: Array<{
+    role: BusinessCustomerMessageRole;
+    authorName?: string;
+    content: string;
+  }>;
+};
+
+export type TelegramBotCountry = "KZ" | "RU";
+export type TelegramBotCurrency = "KZT" | "RUB";
+export type TelegramBotTone = "friendly" | "expert" | "sales" | "strict";
+export type TelegramBotOrderStatus =
+  | "draft"
+  | "ready_for_payment"
+  | "paid"
+  | "in_setup"
+  | "connected"
+  | "cancelled";
+
+export type TelegramBotPriceApiRecord = {
+  country: TelegramBotCountry;
+  currency: TelegramBotCurrency;
+  amountMinor: number;
+  label: string;
+};
+
+export type TelegramBotOrderApiRecord = {
+  id: string;
+  userId: string;
+  workspaceId: string | null;
+  country: TelegramBotCountry;
+  currency: TelegramBotCurrency;
+  amountMinor: number;
+  status: TelegramBotOrderStatus;
+  companyName: string;
+  ownerName: string;
+  contact: string;
+  businessDescription: string;
+  services: string;
+  audience: string;
+  botPurpose: string;
+  tone: TelegramBotTone;
+  responseRules: string;
+  escalationContact: string;
+  faq: string;
+  sourceLinks: string;
+  botUsername: string | null;
+  botTokenProvided: boolean;
+  botTokenHint: string | null;
+  setupSummary: string;
+  systemPrompt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TelegramBotProductApiResponse = {
+  product: {
+    title: string;
+    description: string;
+    prices: TelegramBotPriceApiRecord[];
+    steps: string[];
+  };
+};
+
+export type CreateTelegramBotOrderInput = {
+  country: TelegramBotCountry;
+  companyName: string;
+  ownerName?: string;
+  contact: string;
+  businessDescription: string;
+  services: string;
+  audience?: string;
+  botPurpose: string;
+  tone: TelegramBotTone;
+  responseRules: string;
+  escalationContact: string;
+  faq?: string;
+  sourceLinks?: string;
+  botUsername?: string;
+  botToken?: string;
+};
+
+export type TelegramMiniAppDraftInput = {
+  country: TelegramBotCountry;
+  companyName: string;
+  businessCategory: string;
+  city?: string;
+  contact: string;
+  website?: string;
+  mainOffer: string;
+  priceInfo?: string;
+  audience?: string;
+  goals: string[];
+  language?: "ru" | "kk" | "en";
+  telegramInitData?: string;
+};
+
+export type TelegramMiniAppDraftApiRecord = {
+  country: TelegramBotCountry;
+  currency: TelegramBotCurrency;
+  amountMinor: number;
+  priceLabel: string;
+  companyName: string;
+  botName: string;
+  botUsernameSuggestions: string[];
+  managedBotUrl: string | null;
+  audience: string;
+  botPurpose: string;
+  tone: TelegramBotTone;
+  businessDescription: string;
+  services: string;
+  responseRules: string;
+  escalationContact: string;
+  faq: string;
+  sourceLinks: string;
+  welcomeMessage: string;
+  menuButtons: string[];
+  commands: Array<{
+    command: string;
+    description: string;
+  }>;
+  setupSummary: string;
+  systemPrompt: string;
+  orderPayload: Omit<CreateTelegramBotOrderInput, "botToken">;
+};
+
+export type BusinessWebsiteCountry = "KZ" | "RU";
+export type BusinessWebsiteStatus = "draft" | "published";
+export type BusinessWebsiteStyle = "clean" | "premium" | "bold" | "warm";
+export type BusinessWebsiteType = "landing" | "services" | "catalog";
+export type BusinessWebsiteSectionType =
+  | "hero"
+  | "services"
+  | "benefits"
+  | "pricing"
+  | "faq"
+  | "contacts"
+  | "cta";
+
+export type BusinessWebsiteThemeApiRecord = {
+  background: string;
+  surface: string;
+  text: string;
+  muted: string;
+  accent: string;
+  accentText: string;
+};
+
+export type BusinessWebsiteSectionApiRecord = {
+  id: string;
+  type: BusinessWebsiteSectionType;
+  title: string;
+  subtitle?: string;
+  body?: string;
+  items?: string[];
+  buttonText?: string;
+  buttonHref?: string;
+};
+
+export type BusinessWebsiteContentApiRecord = {
+  theme: BusinessWebsiteThemeApiRecord;
+  seo: {
+    title: string;
+    description: string;
+  };
+  contact: {
+    city?: string;
+    phone?: string;
+    telegram?: string;
+    whatsapp?: string;
+    instagram?: string;
+  };
+  pages: Array<{
+    slug: "/";
+    title: string;
+    sections: BusinessWebsiteSectionApiRecord[];
+  }>;
+};
+
+export type BusinessWebsiteApiRecord = {
+  id: string;
+  userId: string;
+  workspaceId: string | null;
+  country: BusinessWebsiteCountry;
+  status: BusinessWebsiteStatus;
+  slug: string;
+  title: string;
+  prompt: string;
+  siteType: BusinessWebsiteType;
+  style: BusinessWebsiteStyle;
+  content: BusinessWebsiteContentApiRecord;
+  publicationPath: string;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+};
+
+export type CreateBusinessWebsiteDraftInput = {
+  country: BusinessWebsiteCountry;
+  prompt: string;
+  companyName?: string;
+  city?: string;
+  contact?: string;
+  style: BusinessWebsiteStyle;
+  siteType: BusinessWebsiteType;
+};
+
 export function setApiAccessToken(token: string | null) {
   accessToken = token;
 }
@@ -920,6 +1194,123 @@ export async function updateBusinessIdeaStatus(ideaId: string, status: BusinessI
   return request<BusinessWorkspaceApiResponse>(`/business/ideas/${encodeURIComponent(ideaId)}`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
+  });
+}
+
+export async function getBusinessOpsOverview() {
+  return request<BusinessOpsOverviewApiResponse>("/business/ops");
+}
+
+export async function createBusinessCustomerConversation(input: CreateBusinessCustomerConversationInput) {
+  return request<{
+    conversation: BusinessCustomerConversationApiRecord;
+    overview: BusinessOpsOverviewApiResponse;
+  }>("/business/ops/conversations", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function addBusinessCustomerMessage(
+  conversationId: string,
+  input: {
+    role: BusinessCustomerMessageRole;
+    authorName?: string;
+    content: string;
+  }
+) {
+  return request<{
+    conversation: BusinessCustomerConversationApiRecord;
+    overview: BusinessOpsOverviewApiResponse;
+  }>(`/business/ops/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function rateBusinessCustomerConversation(conversationId: string, rating: BusinessConversationRating) {
+  return request<{
+    conversation: BusinessCustomerConversationApiRecord;
+    overview: BusinessOpsOverviewApiResponse;
+  }>(`/business/ops/conversations/${encodeURIComponent(conversationId)}/rating`, {
+    method: "PATCH",
+    body: JSON.stringify({ rating }),
+  });
+}
+
+export async function addBusinessTeamMessage(input: {
+  memberId?: string | null;
+  authorName: string;
+  roleTitle?: string;
+  text: string;
+}) {
+  return request<{
+    message: BusinessTeamMessageApiRecord;
+    overview: BusinessOpsOverviewApiResponse;
+  }>("/business/ops/team/messages", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getBusinessWebsites() {
+  return request<{ websites: BusinessWebsiteApiRecord[] }>("/business/websites");
+}
+
+export async function createBusinessWebsiteDraft(input: CreateBusinessWebsiteDraftInput) {
+  return request<{
+    website: BusinessWebsiteApiRecord;
+    assistantSummary: string;
+    suggestedNextSteps: string[];
+  }>("/business/websites/draft", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateBusinessWebsite(
+  siteId: string,
+  input: Partial<Pick<BusinessWebsiteApiRecord, "title" | "slug" | "content">>
+) {
+  return request<{ website: BusinessWebsiteApiRecord }>(`/business/websites/${encodeURIComponent(siteId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function publishBusinessWebsite(siteId: string) {
+  return request<{ website: BusinessWebsiteApiRecord }>(
+    `/business/websites/${encodeURIComponent(siteId)}/publish`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    }
+  );
+}
+
+export async function getPublicBusinessWebsite(slug: string) {
+  return request<{ website: BusinessWebsiteApiRecord }>(`/public/websites/${encodeURIComponent(slug)}`);
+}
+
+export async function getTelegramBotProduct() {
+  return request<TelegramBotProductApiResponse>("/telegram-bots/product");
+}
+
+export async function getTelegramBotOrders() {
+  return request<{ orders: TelegramBotOrderApiRecord[] }>("/telegram-bots/orders");
+}
+
+export async function createTelegramBotOrder(input: CreateTelegramBotOrderInput) {
+  return request<{ order: TelegramBotOrderApiRecord }>("/telegram-bots/orders", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function createTelegramMiniAppDraft(input: TelegramMiniAppDraftInput) {
+  return request<{ draft: TelegramMiniAppDraftApiRecord }>("/telegram-bots/miniapp/draft", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

@@ -1,27 +1,37 @@
 import { expect, test } from "@playwright/test";
 
 test("business cabinet user flow", async ({ page }) => {
-  const noteText = `Проверка e2e: клиент хочет бизнес-бота ${Date.now()}.`;
+  await page.goto("/workspace/agents");
+  await expect(page.getByRole("heading", { name: "Агенты" })).toBeVisible();
+  await page.getByRole("link", { name: "Бизнес" }).click();
+  await expect(page).toHaveURL(/\/workspace\/business$/);
+  await expect(page.getByRole("heading", { name: "Бизнес-разделы nomduchat" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Основные разделы теперь в левом меню" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "AI-сайт" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "ИИ в Telegram" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Аналитика" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Идеи роста" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Аналитика" }).click();
+  await expect(page).toHaveURL(/\/workspace\/business\/analytics$/);
+  await expect(page.getByRole("heading", { name: "Аналитика сотрудников" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Отчеты сотрудников" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Команда" })).toBeVisible();
+  await page.getByRole("button", { name: "Пригласить сотрудника" }).click();
+  await expect(page.getByText(/Приглашение будет доступно|Приглашать сотрудников может/)).toBeVisible();
+
+  await page.getByRole("link", { name: "ИИ в Telegram" }).click();
+  await expect(page).toHaveURL(/\/workspace\/business\/telegram-bot$/);
+  await expect(page.getByRole("heading", { name: "ИИ-менеджер в Telegram, который не теряет клиентов" })).toBeVisible();
+  await page.getByRole("button", { name: "Создать своего ИИ-менеджера в Telegram" }).click();
+  await expect(page.getByRole("heading", { name: "Кто запускает менеджера" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Дальше" })).toBeDisabled();
+  await page.getByPlaceholder("@username, телефон или WhatsApp").fill("@nomdu_manager");
+  await page.getByPlaceholder("Например, Nomdu Coffee").fill("Nomdu Coffee");
+  await expect(page.getByRole("button", { name: "Дальше" })).toBeEnabled();
 
   await page.goto("/workspace/business");
-  await expect(page.getByRole("heading", { name: "Бизнес-кабинет nomduchat" })).toBeVisible();
-  await expect(page.getByText("Business тариф: кабинет, роли, CRM и агент компании")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Команда и сотрудники" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Воронка продаж" })).toBeVisible();
-
-  await page.getByRole("button", { name: "Пригласить" }).click();
-  await expect(page.getByText(/Business уже заняты все 5 мест|Приглашение сотрудника будет отправлено/)).toBeVisible();
-
-  const noteInput = page.getByPlaceholder("Добавьте проблему, договоренность или пометку по клиенту");
-  await expect(noteInput).toBeVisible();
-  if (await noteInput.isEnabled()) {
-    await noteInput.fill(noteText);
-    await page.getByRole("button", { name: "Добавить пометку" }).click();
-    await expect(page.getByRole("button", { name: "Добавить пометку" })).toBeVisible();
-    await expect(page.getByText(noteText).first()).toBeVisible();
-  }
-
-  await page.getByRole("link", { name: /Открыть идеи/ }).click();
+  await page.getByRole("link", { name: "Идеи роста" }).click();
   await expect(page).toHaveURL(/\/workspace\/business\/ideas$/);
   await expect(page.getByRole("heading", { name: "Идеи и подсказки для бизнеса" })).toBeVisible();
   const salesTab = page.getByRole("button", { name: "Продажи Как быстрее доводить до оплаты" });
@@ -40,5 +50,5 @@ test("business cabinet user flow", async ({ page }) => {
 
   await page.getByRole("link", { name: /Назад в бизнес-кабинет/ }).click();
   await expect(page).toHaveURL(/\/workspace\/business$/);
-  await expect(page.getByRole("heading", { name: "Бизнес-кабинет nomduchat" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Бизнес-разделы nomduchat" })).toBeVisible();
 });

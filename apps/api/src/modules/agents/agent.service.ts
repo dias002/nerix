@@ -84,7 +84,22 @@ export class AgentService {
       if (agent) return agent;
     }
 
-    if (containsAny(normalized, ["бизнес", "продажи", "клиент", "заявк", "crm"])) {
+    const hasBusinessIntent = containsAny(normalized, [
+      "бизнес",
+      "продаж",
+      "заявк",
+      "crm",
+      "telegram",
+      "телеграм",
+      "бот",
+      "воронк",
+      "менеджер",
+    ]);
+    const hasBusinessSiteRequest =
+      containsAny(normalized, ["сайт", "лендинг", "landing", "website"]) &&
+      containsAny(normalized, ["создай", "создать", "собери", "собрать", "запусти", "запустить", "сделай", "построй", "create", "build", "launch"]);
+
+    if (hasBusinessIntent || hasBusinessSiteRequest) {
       const agent = selectEnabledAgent("business");
       if (agent) return agent;
     }

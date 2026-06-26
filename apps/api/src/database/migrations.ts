@@ -204,6 +204,16 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    alter table generation_jobs
+      add column if not exists provider text,
+      add column if not exists model text,
+      add column if not exists reservation_id uuid,
+      add column if not exists result_url text,
+      add column if not exists result_mime_type text,
+      add column if not exists metadata jsonb not null default '{}'::jsonb
+  `);
+
+  await database.query(`
     create table if not exists audit_logs (
       id uuid primary key default uuid_generate_v4(),
       actor_user_id uuid references users(id),
@@ -585,6 +595,36 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    create table if not exists business_websites (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      workspace_id uuid references business_workspaces(id) on delete set null,
+      country text not null default 'KZ',
+      status text not null default 'draft',
+      slug text not null unique,
+      title text not null,
+      prompt text not null default '',
+      site_type text not null default 'landing',
+      style text not null default 'clean',
+      content jsonb not null default '{}'::jsonb,
+      publication_path text not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      published_at timestamptz
+    )
+  `);
+
+  await database.query(`
+    create index if not exists business_websites_user_updated_idx
+      on business_websites(user_id, updated_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists business_websites_workspace_status_idx
+      on business_websites(workspace_id, status)
+  `);
+
+  await database.query(`
     create table if not exists business_employee_activity (
       id uuid primary key default uuid_generate_v4(),
       workspace_id uuid not null references business_workspaces(id) on delete cascade,
@@ -648,6 +688,69 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   await database.query(`
     create index if not exists business_client_reports_workspace_created_idx
       on business_client_reports(workspace_id, created_at desc)
+  `);
+
+  await database.query(`
+    create table if not exists business_customer_conversations (
+      id uuid primary key default uuid_generate_v4(),
+      workspace_id uuid not null references business_workspaces(id) on delete cascade,
+      channel text not null default 'manual',
+      customer_name text not null default '',
+      customer_contact text not null default '',
+      source text not null default '',
+      status text not null default 'new',
+      owner_rating text,
+      ai_rating text not null default 'good',
+      analysis jsonb not null default '{}'::jsonb,
+      training_allowed boolean not null default false,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create index if not exists business_customer_conversations_workspace_updated_idx
+      on business_customer_conversations(workspace_id, updated_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists business_customer_conversations_workspace_status_idx
+      on business_customer_conversations(workspace_id, status)
+  `);
+
+  await database.query(`
+    create table if not exists business_customer_messages (
+      id uuid primary key default uuid_generate_v4(),
+      conversation_id uuid not null references business_customer_conversations(id) on delete cascade,
+      role text not null,
+      author_name text not null default '',
+      content text not null,
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create index if not exists business_customer_messages_conversation_created_idx
+      on business_customer_messages(conversation_id, created_at asc)
+  `);
+
+  await database.query(`
+    create table if not exists business_team_messages (
+      id uuid primary key default uuid_generate_v4(),
+      workspace_id uuid not null references business_workspaces(id) on delete cascade,
+      member_id uuid references business_members(id) on delete set null,
+      author_name text not null,
+      role_title text not null default '',
+      text text not null,
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create index if not exists business_team_messages_workspace_created_idx
+      on business_team_messages(workspace_id, created_at asc)
   `);
 
   await database.query(`
@@ -798,8 +901,51 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    create table if not exists telegram_bot_orders (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id) on delete cascade,
+      workspace_id uuid references business_workspaces(id) on delete set null,
+      country text not null,
+      currency text not null,
+      amount_minor bigint not null,
+      status text not null default 'ready_for_payment',
+      company_name text not null,
+      owner_name text not null default '',
+      contact text not null,
+      business_description text not null,
+      services text not null,
+      audience text not null default '',
+      bot_purpose text not null,
+      tone text not null default 'friendly',
+      response_rules text not null,
+      escalation_contact text not null,
+      faq text not null default '',
+      source_links text not null default '',
+      bot_username text,
+      bot_token_provided boolean not null default false,
+      bot_token_hint text,
+      setup_summary text not null default '',
+      system_prompt text not null default '',
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
     create index if not exists custom_ai_bots_workspace_status_idx
       on custom_ai_bots(workspace_id, status)
+  `);
+
+  await database.query(`
+    create index if not exists telegram_bot_orders_user_created_idx
+      on telegram_bot_orders(user_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists telegram_bot_orders_workspace_status_idx
+      on telegram_bot_orders(workspace_id, status, created_at desc)
+      where workspace_id is not null
   `);
 
   await database.query(`

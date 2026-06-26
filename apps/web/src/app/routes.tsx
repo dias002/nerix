@@ -12,7 +12,13 @@ import Agents from "./pages/Agents";
 import Memory from "./pages/Memory";
 import Mailings from "./pages/Mailings";
 import BusinessCabinet from "./pages/BusinessCabinet";
+import BusinessDialogs from "./pages/BusinessDialogs";
+import BusinessEmployeeAnalytics from "./pages/BusinessEmployeeAnalytics";
 import BusinessIdeas from "./pages/BusinessIdeas";
+import BusinessTelegramBot from "./pages/BusinessTelegramBot";
+import BusinessWebsiteBuilder from "./pages/BusinessWebsiteBuilder";
+import PublicBusinessWebsite from "./pages/PublicBusinessWebsite";
+import TelegramBotMiniApp from "./pages/TelegramBotMiniApp";
 import Admin from "./pages/Admin";
 import Balance from "./pages/Balance";
 import Settings from "./pages/Settings";
@@ -37,6 +43,14 @@ export const router = createBrowserRouter(
       Component: Business,
     },
     {
+      path: "/telegram/miniapp/bot-builder",
+      Component: TelegramBotMiniApp,
+    },
+    {
+      path: "/site/:slug",
+      Component: PublicBusinessWebsite,
+    },
+    {
       path: "/auth",
       Component: AuthPage,
     },
@@ -55,7 +69,11 @@ export const router = createBrowserRouter(
         { path: "memory", Component: Memory },
         { path: "mailings", Component: Mailings },
         { path: "business", Component: BusinessCabinet },
+        { path: "business/dialogs", Component: BusinessDialogs },
         { path: "business/ideas", Component: BusinessIdeas },
+        { path: "business/analytics", Component: BusinessEmployeeAnalytics },
+        { path: "business/telegram-bot", Component: BusinessTelegramBot },
+        { path: "business/website", Component: BusinessWebsiteBuilder },
         { path: "admin", Component: Admin },
         { path: "balance", Component: Balance },
         { path: "settings", Component: Settings },

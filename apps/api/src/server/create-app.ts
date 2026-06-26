@@ -8,10 +8,14 @@ import { registerAgentRoutes } from "../modules/agents/routes.js";
 import { registerAiGatewayRoutes } from "../modules/ai-gateway/routes.js";
 import { registerAuthRoutes } from "../modules/auth/routes.js";
 import { registerBillingRoutes } from "../modules/billing/routes.js";
+import { registerBusinessOpsRoutes } from "../modules/business-ops/routes.js";
 import { registerBusinessRoutes } from "../modules/business/routes.js";
+import { registerBusinessWebsiteRoutes } from "../modules/business-websites/routes.js";
 import { registerChatRoutes } from "../modules/chat/routes.js";
+import { registerGenerationRoutes } from "../modules/generation/routes.js";
 import { registerMailingRoutes } from "../modules/mailings/routes.js";
 import { registerSubscriptionRoutes } from "../modules/subscriptions/routes.js";
+import { registerTelegramBotRoutes } from "../modules/telegram-bots/routes.js";
 import { registerUserRoutes } from "../modules/users/routes.js";
 
 export type CreateAppOptions = {
@@ -45,9 +49,13 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
   await registerBillingRoutes(app, dependencies.billing, dependencies.auth);
   await registerSubscriptionRoutes(app, dependencies.subscriptions, dependencies.auth);
   await registerBusinessRoutes(app, dependencies.business, dependencies.auth);
+  await registerBusinessOpsRoutes(app, dependencies.businessOps, dependencies.auth);
+  await registerBusinessWebsiteRoutes(app, dependencies.businessWebsites, dependencies.auth);
+  await registerTelegramBotRoutes(app, dependencies.telegramBots, dependencies.auth);
   await registerAgentRoutes(app, dependencies.agents);
   await registerAiGatewayRoutes(app, dependencies.aiGateway);
   await registerChatRoutes(app, dependencies.chat, dependencies.auth);
+  await registerGenerationRoutes(app, dependencies.generation, dependencies.auth);
   await registerMailingRoutes(app, dependencies.mailings, dependencies.auth);
 
   return app;
