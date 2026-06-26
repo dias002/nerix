@@ -35,6 +35,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default(defaultNodeEnv),
   API_HOST: z.string().default(defaultApiHost),
   API_PORT: z.coerce.number().default(defaultApiPort),
+  API_BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(5_000_000),
   DATABASE_URL: z.string().default("postgresql://nomduchat:nomduchat@127.0.0.1:55432/nomduchat"),
   DATABASE_MAX_CONNECTIONS: z.coerce.number().int().positive().default(10),
   DATABASE_SSL: z
@@ -97,6 +98,23 @@ const envSchema = z.object({
   VK_API_VERSION: z.string().default("5.199"),
   SMTP_BZ_API_KEY: z.string().optional(),
   SMTP_BZ_BASE_URL: z.string().default("https://api.smtp.bz/v1"),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USERNAME: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_CLIENT_DOMAIN: z.string().default("nomduchat.com"),
+  SMTP_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform(parseBooleanFlag),
+  SMTP_STARTTLS: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform(parseBooleanFlag),
+  SMTP_TLS_REJECT_UNAUTHORIZED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform(parseBooleanFlag),
   MAILINGS_API_TOKEN: z.string().optional(),
   MAILINGS_API_USER_ID: z.string().default("local-user"),
   TELEGRAM_MANAGER_BOT_USERNAME: z.string().optional(),
@@ -104,6 +122,13 @@ const envSchema = z.object({
 });
 
 const rawConfig = envSchema.parse(process.env);
+
+if (
+  rawConfig.NODE_ENV === "production" &&
+  (rawConfig.JWT_SECRET === "change-me-locally" || rawConfig.JWT_SECRET.length < 32)
+) {
+  throw new Error("JWT_SECRET must be a non-default value with at least 32 characters in production.");
+}
 
 export const config = {
   ...rawConfig,

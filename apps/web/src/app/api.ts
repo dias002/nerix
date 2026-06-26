@@ -108,6 +108,7 @@ export type ChatApiResponse = {
   userMessage: ChatApiMessage | null;
   assistantMessage: ChatApiMessage | null;
   answerVariant?: ChatAnswerVariantApiRecord | null;
+  generationJob?: MediaGenerationJobApiRecord;
   route: {
     agentId: string;
     provider: string;
@@ -124,6 +125,26 @@ export type ChatApiResponse = {
     reserveCredits: number;
     finalCredits: number | null;
   };
+};
+
+export type MediaGenerationJobApiRecord = {
+  id: string;
+  userId: string;
+  agentId?: string;
+  modality: AiModality;
+  status: "queued" | "running" | "succeeded" | "failed" | "refunded";
+  prompt: string;
+  provider?: string;
+  model?: string;
+  reservationId?: string;
+  resultUrl?: string;
+  resultMimeType?: string;
+  reservedCredits: number;
+  finalCredits?: number;
+  errorMessage?: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type ChatConversationSummaryApiRecord = {
@@ -192,6 +213,22 @@ export type CurrentSubscriptionApiResponse = {
     createdAt: string;
     updatedAt: string;
   } | null;
+};
+
+export type UsageLimitsApiResponse = {
+  planId: string | null;
+  hasActiveSubscription: boolean;
+  text: {
+    dailyLimit: number | null;
+    usedToday: number | null;
+    remainingToday: number | null;
+  };
+  media: {
+    image: boolean;
+    video: boolean;
+    music: boolean;
+    voice: boolean;
+  };
 };
 
 export type SubscriptionCheckoutApiResponse = {
@@ -989,6 +1026,10 @@ export async function getWallet() {
   return request<WalletBalance>("/billing/wallet");
 }
 
+export async function getUsageLimits() {
+  return request<UsageLimitsApiResponse>("/usage/limits");
+}
+
 export async function getLedger() {
   return request<{ entries: LedgerApiEntry[] }>("/billing/ledger");
 }
@@ -1386,6 +1427,39 @@ export async function submitChatMessageFeedback(input: {
       comment: input.comment,
     }),
   });
+}
+
+export async function refreshGenerationJob(jobId: string) {
+  return request<{ job: MediaGenerationJobApiRecord }>(`/generation/jobs/${encodeURIComponent(jobId)}/refresh`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function fetchGenerationArtifact(jobId: string) {
+  const headers = new Headers();
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+  if (localRoleOverride) {
+    headers.set("X-nomduchat-Local-Role", localRoleOverride);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}/generation/jobs/${encodeURIComponent(jobId)}/artifact`, {
+      headers,
+    });
+  } catch (error) {
+    throw new Error(isNetworkFetchError(error) ? "nomduchat_api_unavailable" : "nomduchat_api_request_failed");
+  }
+
+  if (!response.ok) {
+    const body = await safeJson<ApiErrorResponse>(response);
+    throw new Error(body?.error?.message ?? `nomduchat API request failed with ${response.status}.`);
+  }
+
+  return response.blob();
 }
 
 async function request<T>(path: string, init: RequestInit = {}) {

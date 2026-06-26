@@ -47,7 +47,7 @@ function ChartContainer({
   >["children"];
 }) {
   const uniqueId = React.useId();
-  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
+  const chartId = `chart-${sanitizeCssIdentifier(id || uniqueId.replace(/:/g, ""))}`;
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -90,7 +90,8 @@ ${colorConfig
     const color =
       itemConfig.theme?.[theme as keyof typeof itemConfig.theme] ||
       itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
+    const safeColor = color ? sanitizeCssValue(color) : null;
+    return safeColor ? `  --color-${sanitizeCssIdentifier(key)}: ${safeColor};` : null;
   })
   .join("\n")}
 }
@@ -101,6 +102,17 @@ ${colorConfig
     />
   );
 };
+
+function sanitizeCssIdentifier(value: string) {
+  return value.replace(/[^A-Za-z0-9_-]/g, "-");
+}
+
+function sanitizeCssValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || /[\x00-\x1f\x7f;{}<>]|\/\*/.test(trimmed)) return null;
+
+  return trimmed;
+}
 
 const ChartTooltip = RechartsPrimitive.Tooltip;
 

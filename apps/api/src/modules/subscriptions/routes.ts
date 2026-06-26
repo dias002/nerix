@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { config } from "../../config.js";
@@ -223,7 +224,11 @@ export async function registerSubscriptionRoutes(
 function verifyWebhookSecret(header: string | string[] | undefined) {
   if (!config.PAYMENT_WEBHOOK_SECRET) return true;
   const value = Array.isArray(header) ? header[0] : header;
-  return value === config.PAYMENT_WEBHOOK_SECRET;
+  if (!value) return false;
+
+  const actual = Buffer.from(value);
+  const expected = Buffer.from(config.PAYMENT_WEBHOOK_SECRET);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
 function yooKassaPaymentStatus(event: string, status?: string) {

@@ -14,6 +14,10 @@ import type {
 import type { MailingRepository } from "./mailing.repository.js";
 import type { MailingTransport } from "./smtp-bz.client.js";
 
+const maxRawContactsLength = 2_000_000;
+const maxContactsPerImport = 20_000;
+const maxCampaignHtmlLength = 400_000;
+
 export class MailingService {
   constructor(
     private readonly repository: MailingRepository,
@@ -55,6 +59,13 @@ export class MailingService {
     rawContacts?: string;
     contacts?: MailingContactInput[];
   }): Promise<Result<{ summary: MailingImportSummary }>> {
+    if ((input.rawContacts?.length ?? 0) > maxRawContactsLength) {
+      return fail(new DomainError("validation_failed", "Contacts payload is too large."));
+    }
+    if ((input.contacts?.length ?? 0) > maxContactsPerImport) {
+      return fail(new DomainError("validation_failed", "Too many contacts in one import."));
+    }
+
     const normalizedContacts = [
       ...parseContacts(input.rawContacts ?? ""),
       ...(input.contacts ?? []).map((contact) => ({
@@ -67,6 +78,9 @@ export class MailingService {
     const dedupedContacts = dedupeContacts(normalizedContacts);
     if (dedupedContacts.length === 0) {
       return fail(new DomainError("validation_failed", "At least one valid email is required."));
+    }
+    if (dedupedContacts.length > maxContactsPerImport) {
+      return fail(new DomainError("validation_failed", "Too many valid contacts in one import."));
     }
 
     const summary = await this.repository.importContacts(input.userId, input.audienceId, dedupedContacts);
@@ -192,12 +206,23 @@ export class MailingService {
 
 function validateCampaign(input: CreateMailingCampaignInput) {
   if (!input.name.trim()) return new DomainError("validation_failed", "Campaign name is required.");
+  if (hasHeaderControlChars(input.name)) return new DomainError("validation_failed", "Campaign name is invalid.");
   if (!isEmail(input.fromEmail)) return new DomainError("validation_failed", "Valid sender email is required.");
   if (input.replyTo && !isEmail(input.replyTo)) {
     return new DomainError("validation_failed", "Valid reply-to email is required.");
   }
+  if (hasHeaderControlChars(input.fromEmail) || hasHeaderControlChars(input.replyTo ?? "")) {
+    return new DomainError("validation_failed", "Sender email fields are invalid.");
+  }
+  if (hasHeaderControlChars(input.fromName ?? "")) {
+    return new DomainError("validation_failed", "Sender name is invalid.");
+  }
   if (!input.subject.trim()) return new DomainError("validation_failed", "Subject is required.");
+  if (hasHeaderControlChars(input.subject)) return new DomainError("validation_failed", "Subject is invalid.");
   if (!input.html.trim()) return new DomainError("validation_failed", "HTML body is required.");
+  if (input.html.length > maxCampaignHtmlLength || (input.text?.length ?? 0) > maxCampaignHtmlLength) {
+    return new DomainError("validation_failed", "Campaign body is too large.");
+  }
   return null;
 }
 
@@ -241,6 +266,10 @@ function dedupeContacts(contacts: MailingContactInput[]) {
 
 function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim().toLowerCase());
+}
+
+function hasHeaderControlChars(value: string) {
+  return /[\r\n\0]/.test(value);
 }
 
 function ensureUnsubscribeBlock(html: string) {

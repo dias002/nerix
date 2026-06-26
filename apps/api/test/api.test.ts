@@ -14,6 +14,9 @@ test("GET /health returns service status", async () => {
   });
 
   assert.equal(response.statusCode, 200);
+  assert.equal(response.headers["x-content-type-options"], "nosniff");
+  assert.equal(response.headers["referrer-policy"], "no-referrer");
+  assert.equal(response.headers["x-frame-options"], "DENY");
   assert.deepEqual(response.json(), {
     ok: true,
     service: "nomduchat-api",
@@ -832,6 +835,104 @@ test("POST /chat/messages returns a persisted local conversation response", asyn
   assert.ok(body.usage.estimatedCredits >= 30);
   assert.equal(body.answerVariant.status, "candidate");
   assert.equal(body.answerVariant.assistantMessageId, body.assistantMessage.id);
+
+  await app.close();
+});
+
+test("free chat accounts have seven daily text requests and paid media gate", async () => {
+  const app = await createApp();
+
+  const initialLimitsResponse = await app.inject({
+    method: "GET",
+    url: "/usage/limits",
+  });
+
+  assert.equal(initialLimitsResponse.statusCode, 200);
+  assert.equal(initialLimitsResponse.json().text.dailyLimit, 7);
+  assert.equal(initialLimitsResponse.json().text.remainingToday, 7);
+  assert.equal(initialLimitsResponse.json().media.video, false);
+  assert.equal(initialLimitsResponse.json().media.music, false);
+
+  const mediaResponse = await app.inject({
+    method: "POST",
+    url: "/chat/messages",
+    payload: {
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      message: "Сгенерируй картинку логотипа для кофейни",
+    },
+  });
+
+  assert.equal(mediaResponse.statusCode, 402);
+  assert.equal(mediaResponse.json().error.code, "subscription_required");
+
+  const songResponse = await app.inject({
+    method: "POST",
+    url: "/chat/messages",
+    payload: {
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      message: "Сочини песню про Казахстан",
+    },
+  });
+
+  assert.equal(songResponse.statusCode, 402);
+  assert.equal(songResponse.json().error.code, "subscription_required");
+
+  let lastConversationId = "";
+  for (let index = 0; index < 6; index += 1) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/chat/messages",
+      payload: {
+        userId: "local-user",
+        country: "KZ",
+        language: "ru",
+        message: `Текстовый вопрос ${index + 1}`,
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    lastConversationId = response.json().conversationId;
+  }
+
+  const regenerateResponse = await app.inject({
+    method: "POST",
+    url: "/chat/messages/regenerate",
+    payload: {
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      conversationId: lastConversationId,
+    },
+  });
+
+  assert.equal(regenerateResponse.statusCode, 200);
+
+  const usedLimitsResponse = await app.inject({
+    method: "GET",
+    url: "/usage/limits",
+  });
+
+  assert.equal(usedLimitsResponse.statusCode, 200);
+  assert.equal(usedLimitsResponse.json().text.usedToday, 7);
+  assert.equal(usedLimitsResponse.json().text.remainingToday, 0);
+
+  const overLimitResponse = await app.inject({
+    method: "POST",
+    url: "/chat/messages",
+    payload: {
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      message: "Еще один текстовый вопрос",
+    },
+  });
+
+  assert.equal(overLimitResponse.statusCode, 402);
+  assert.equal(overLimitResponse.json().error.code, "daily_text_limit_exceeded");
 
   await app.close();
 });

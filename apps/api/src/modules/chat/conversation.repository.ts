@@ -63,6 +63,7 @@ export interface ConversationRepository {
   findById(conversationId: string): Promise<ConversationRecord | null>;
   listByUser(userId: string, limit?: number): Promise<ConversationSummaryRecord[]>;
   listMemoryItems(userId: string, limit?: number): Promise<MemoryItemRecord[]>;
+  countFreeTextRequestsSince(userId: string, sinceIso: string): Promise<number>;
   appendMessage(conversationId: string, message: Omit<ConversationMessage, "id" | "createdAt">): Promise<ConversationMessage | null>;
   recordAnswerVariant(input: RecordAnswerVariantInput): Promise<AnswerVariantRecord | null>;
   selectAnswerVariant(input: SelectAnswerVariantInput): Promise<AnswerVariantRecord | null>;
@@ -118,6 +119,24 @@ export class InMemoryConversationRepository implements ConversationRepository {
 
   async listMemoryItems() {
     return [];
+  }
+
+  async countFreeTextRequestsSince(userId: string, sinceIso: string) {
+    const since = Date.parse(sinceIso);
+    if (!Number.isFinite(since)) return 0;
+
+    return [...this.conversations.values()]
+      .filter((conversation) => conversation.userId === userId)
+      .reduce((count, conversation) => {
+        return (
+          count +
+          conversation.messages.filter(
+            (message) =>
+              Date.parse(message.createdAt) >= since &&
+              (message.role === "user" || typeof message.metadata?.regeneratedFromMessageId === "string")
+          ).length
+        );
+      }, 0);
   }
 
   async appendMessage(conversationId: string, message: Omit<ConversationMessage, "id" | "createdAt">) {
@@ -472,6 +491,33 @@ export class PostgresConversationRepository implements ConversationRepository {
     );
 
     return result.rows.map(mapMemoryItemRow);
+  }
+
+  async countFreeTextRequestsSince(userId: string, sinceIso: string) {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return 0;
+
+    if (userId === LOCAL_USER_PUBLIC_ID) {
+      await ensureLocalUser(this.database);
+    }
+
+    const result = await this.database.query<{ count: string | number }>(
+      `
+        select count(*)::text as count
+        from messages m
+        join conversations c on c.id = m.conversation_id
+        where c.user_id = $1
+          and (
+            m.role = 'user'
+            or jsonb_typeof(m.metadata -> 'regeneratedFromMessageId') = 'string'
+          )
+          and m.created_at >= $2::timestamptz
+      `,
+      [databaseUserId, sinceIso]
+    );
+
+    const value = result.rows[0]?.count ?? 0;
+    return typeof value === "number" ? value : Number(value);
   }
 
   async appendMessage(conversationId: string, message: Omit<ConversationMessage, "id" | "createdAt">) {

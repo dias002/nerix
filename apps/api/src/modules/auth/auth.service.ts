@@ -20,6 +20,10 @@ export class AuthService {
     country?: CountryCode;
     language?: Language;
   }) {
+    if (!isRegistrationPasswordSafe(input.password)) {
+      return fail(new DomainError("validation_failed", "Password length is invalid."));
+    }
+
     const user = await this.repository.createUser({
       email: input.email,
       passwordHash: hashPassword(input.password),
@@ -42,6 +46,10 @@ export class AuthService {
   }
 
   async login(input: { email: string; password: string }) {
+    if (!isPasswordLengthSafe(input.password)) {
+      return fail(new DomainError("unauthorized", "Invalid email or password.", 401));
+    }
+
     const user = await this.repository.findByEmail(input.email);
     if (!user || !verifyPassword(input.password, user.passwordHash) || !user.email) {
       return fail(new DomainError("unauthorized", "Invalid email or password.", 401));
@@ -135,4 +143,12 @@ export class AuthService {
       throw error;
     }
   }
+}
+
+function isPasswordLengthSafe(password: string) {
+  return password.length >= 1 && password.length <= 256;
+}
+
+function isRegistrationPasswordSafe(password: string) {
+  return password.length >= 8 && password.length <= 256;
 }

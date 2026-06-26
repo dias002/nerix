@@ -1,6 +1,7 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Home, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { getUsageLimits, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 
@@ -10,6 +11,7 @@ export default function WorkspaceLayout() {
   const { t } = useLanguage();
   const { canUseRoleSwitcher, isAuthenticated, logout, roleOverride, setRoleOverride, user } = useAuth();
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [usageLimits, setUsageLimits] = useState<UsageLimitsApiResponse | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("nomduchat-sidebar-collapsed") === "true";
@@ -86,6 +88,17 @@ export default function WorkspaceLayout() {
         { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: true },
       ];
 
+  const refreshUsageLimits = useCallback(() => {
+    if (isAdminNavigation) {
+      setUsageLimits(null);
+      return;
+    }
+
+    getUsageLimits()
+      .then(setUsageLimits)
+      .catch(() => setUsageLimits(null));
+  }, [isAdminNavigation, user?.id, user?.activePlanId, roleOverride]);
+
   useEffect(() => {
     if (!isAdminNavigation) return;
 
@@ -98,6 +111,20 @@ export default function WorkspaceLayout() {
   useEffect(() => {
     setBusinessMenuOpen(isBusinessSection && !sidebarCollapsed);
   }, [isBusinessSection, sidebarCollapsed]);
+
+  useEffect(() => {
+    refreshUsageLimits();
+  }, [refreshUsageLimits]);
+
+  useEffect(() => {
+    window.addEventListener("nomduchat-usage-updated", refreshUsageLimits);
+    window.addEventListener("focus", refreshUsageLimits);
+
+    return () => {
+      window.removeEventListener("nomduchat-usage-updated", refreshUsageLimits);
+      window.removeEventListener("focus", refreshUsageLimits);
+    };
+  }, [refreshUsageLimits]);
 
   const isActive = (item: (typeof navItems)[number]) => {
     if (item.active) return item.active();
@@ -245,6 +272,12 @@ export default function WorkspaceLayout() {
           </ul>
         </nav>
 
+        {!sidebarCollapsed && !isAdminNavigation ? (
+          <div className="hidden px-3 pb-3 md:block">
+            <UsageLimitPanel usage={usageLimits} />
+          </div>
+        ) : null}
+
         {canUseRoleSwitcher ? (
           <div className="px-3 pb-3">
             <div
@@ -384,6 +417,68 @@ export default function WorkspaceLayout() {
       >
         <Outlet />
       </main>
+    </div>
+  );
+}
+
+function UsageLimitPanel({ usage }: { usage: UsageLimitsApiResponse | null }) {
+  if (!usage) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-[#070707] p-3 text-xs text-gray-500">
+        Лимиты загрузятся после подключения API.
+      </div>
+    );
+  }
+
+  if (usage.hasActiveSubscription) {
+    return (
+      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium uppercase tracking-[0.12em] text-emerald-200/80">Подписка</span>
+          <span className="rounded-full bg-emerald-300 px-2 py-0.5 text-[11px] font-semibold text-black">
+            Активна
+          </span>
+        </div>
+        <p className="mt-2 text-sm font-medium text-white">Текст, видео и песни доступны.</p>
+        <p className="mt-1 text-xs leading-relaxed text-emerald-100/60">
+          Лимит зависит от баланса nomduchat-кредитов.
+        </p>
+      </div>
+    );
+  }
+
+  const limit = usage.text.dailyLimit ?? 7;
+  const remaining = usage.text.remainingToday ?? 0;
+  const used = usage.text.usedToday ?? Math.max(0, limit - remaining);
+  const progress = limit > 0 ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#070707] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-medium uppercase tracking-[0.12em] text-gray-600">Сегодня</span>
+        <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-gray-300">
+          Free
+        </span>
+      </div>
+      <div className="mt-2 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-lg font-semibold text-white">{remaining}</p>
+          <p className="text-xs text-gray-500">текстовых осталось</p>
+        </div>
+        <p className="pb-0.5 text-xs text-gray-500">{used}/{limit}</p>
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${progress}%` }} />
+      </div>
+      <p className="mt-3 text-xs leading-relaxed text-gray-500">
+        Видео и песни откроются после подписки.
+      </p>
+      <Link
+        to="/workspace/balance"
+        className="mt-3 inline-flex h-8 w-full items-center justify-center rounded-lg border border-white/10 text-xs font-medium text-gray-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+      >
+        Открыть подписку
+      </Link>
     </div>
   );
 }

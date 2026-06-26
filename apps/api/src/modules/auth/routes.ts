@@ -8,15 +8,15 @@ import type { AuthService } from "./auth.service.js";
 
 const registerSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(1).optional(),
+  password: z.string().min(8).max(256),
+  name: z.string().trim().min(1).max(120).optional(),
   country: countrySchema.default("KZ"),
   language: languageSchema.default("ru"),
 });
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
+  password: z.string().min(1).max(256),
 });
 
 const oauthStartSchema = z.object({

@@ -49,12 +49,30 @@ export class AgentService {
       if (agent) return agent;
     }
 
-    if (containsAny(normalized, ["песн", "трек", "music", "song", "melody", "бит", "джингл", "лирик", "lyrics"])) {
+    if (
+      wantsGeneratedAudio(normalized) ||
+      containsAny(normalized, [
+        "песн",
+        "трек",
+        "music",
+        "song",
+        "melody",
+        "бит",
+        "джингл",
+        "лирик",
+        "lyrics",
+        "сделай аудио",
+        "создай аудио",
+        "сгенерируй аудио",
+        "make audio",
+        "generate audio",
+      ])
+    ) {
       const agent = selectEnabledAgent("music");
       if (agent) return agent;
     }
 
-    if (containsAny(normalized, ["голос", "озвуч", "voice", "speech", "audio", "диктор", "дубляж"])) {
+    if (containsAny(normalized, ["голос", "озвуч", "voice", "speech", "диктор", "дубляж"])) {
       const agent = selectEnabledAgent("voice");
       if (agent) return agent;
     }
@@ -119,4 +137,8 @@ export class AgentService {
 
 function containsAny(value: string, needles: string[]) {
   return needles.some((needle) => value.includes(needle));
+}
+
+function wantsGeneratedAudio(value: string) {
+  return containsAny(value, ["аудио", "audio"]) && containsAny(value, ["сделай", "создай", "сгенер", "запиши", "make", "generate", "create"]);
 }

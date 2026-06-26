@@ -5,6 +5,10 @@ import type { GenerationService } from "../generation/generation.service.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 import type { ConversationMessage, MessageFeedbackRating } from "./conversation.types.js";
 
+const freeDailyTextLimit = 7;
+const paidOnlyAgentIds = new Set(["image", "video", "music", "voice"]);
+const paidOnlyModalities = new Set(["image", "video", "music", "voice"]);
+
 type ChatAttachment = {
   name: string;
   type?: string;
@@ -13,11 +17,31 @@ type ChatAttachment = {
   truncated?: boolean;
 };
 
+type SubscriptionAccessService = {
+  currentSubscription(userId: string): Promise<{
+    ok: true;
+    value: {
+      subscription: {
+        planId: string;
+        status: string;
+      } | null;
+    };
+  } | {
+    ok: false;
+    error: {
+      code: string;
+      message: string;
+      statusCode?: number;
+    };
+  }>;
+};
+
 export class ChatService {
   constructor(
     private readonly conversations: ConversationRepository,
     private readonly aiGateway: AiGatewayService,
-    private readonly generation?: GenerationService
+    private readonly generation?: GenerationService,
+    private readonly subscriptions?: SubscriptionAccessService
   ) {}
 
   async listConversations(userId: string) {
@@ -43,6 +67,28 @@ export class ChatService {
     });
   }
 
+  async getUsageLimits(userId: string) {
+    const access = await this.getSubscriptionAccess(userId);
+    const dailyTextUsed = await this.conversations.countFreeTextRequestsSince(userId, startOfUtcDayIso());
+    const dailyTextRemaining = Math.max(0, freeDailyTextLimit - dailyTextUsed);
+
+    return ok({
+      planId: access.planId,
+      hasActiveSubscription: access.hasActiveSubscription,
+      text: {
+        dailyLimit: access.hasActiveSubscription ? null : freeDailyTextLimit,
+        usedToday: access.hasActiveSubscription ? null : dailyTextUsed,
+        remainingToday: access.hasActiveSubscription ? null : dailyTextRemaining,
+      },
+      media: {
+        image: access.hasActiveSubscription,
+        video: access.hasActiveSubscription,
+        music: access.hasActiveSubscription,
+        voice: access.hasActiveSubscription,
+      },
+    });
+  }
+
   async sendMessage(input: {
     userId: string;
     country?: CountryCode;
@@ -63,6 +109,7 @@ export class ChatService {
     const existingConversation = input.conversationId
       ? await this.conversations.findById(input.conversationId)
       : null;
+    const routingPrompt = buildRoutingPrompt(existingConversation?.messages ?? [], prompt);
 
     if (input.conversationId && !existingConversation) {
       return fail(new DomainError("not_found", "Conversation was not found.", 404));
@@ -79,7 +126,7 @@ export class ChatService {
       country: input.country ?? "KZ",
       language: input.language ?? "ru",
       agentId: routeAgentId,
-      prompt,
+      prompt: routingPrompt,
     });
     if (!routeResult.ok) {
       await this.conversations.recordAiError({
@@ -99,6 +146,12 @@ export class ChatService {
       });
       return routeResult;
     }
+
+    const limitResult = await this.assertRequestAllowed({
+      userId: input.userId,
+      route: routeResult.value,
+    });
+    if (!limitResult.ok) return limitResult;
 
     const conversation =
       existingConversation ??
@@ -132,7 +185,7 @@ export class ChatService {
         language: input.language ?? "ru",
         conversationId: conversation.id,
         userMessageId: userMessage.id,
-        prompt,
+        prompt: buildMediaGenerationPrompt(previousMessages, prompt),
         route: routeResult.value,
       });
       if (!mediaResult.ok) return mediaResult;
@@ -235,6 +288,12 @@ export class ChatService {
       });
       return routeResult;
     }
+
+    const limitResult = await this.assertRequestAllowed({
+      userId: input.userId,
+      route: routeResult.value,
+    });
+    if (!limitResult.ok) return limitResult;
 
     if (routeResult.value.asyncJob) {
       return fail(new DomainError("validation_failed", "Media generation regeneration is not supported yet.", 400));
@@ -466,7 +525,7 @@ export class ChatService {
       job.status === "succeeded"
         ? `Готово. Я создал ${mediaLabel(job.modality)}: ${job.resultUrl ?? "результат сохранен в медиатеке."}`
         : job.status === "running"
-          ? `Запустил генерацию ${mediaLabel(job.modality)}. Статус задачи: ${job.id}.`
+          ? `Генерирую ${mediaLabel(job.modality)}. Как только файл будет готов, он появится прямо здесь.`
           : `Генерация ${mediaLabel(job.modality)} не завершилась: ${job.errorMessage ?? "ошибка провайдера"}. Кредиты возвращены.`;
 
     const assistantMessage = await this.conversations.appendMessage(input.conversationId, {
@@ -512,6 +571,52 @@ export class ChatService {
       },
     });
   }
+
+  private async assertRequestAllowed(input: { userId: string; route: { agentId: string; modality: string } }) {
+    const access = await this.getSubscriptionAccess(input.userId);
+    if (access.hasActiveSubscription) return ok({ allowed: true });
+
+    if (paidOnlyModalities.has(input.route.modality) || paidOnlyAgentIds.has(input.route.agentId)) {
+      return fail(
+        new DomainError(
+          "subscription_required",
+          "Картинки, видео, песни и голос доступны после подписки. В бесплатном режиме доступно 7 обычных текстовых запросов в день.",
+          402
+        )
+      );
+    }
+
+    const dailyTextUsed = await this.conversations.countFreeTextRequestsSince(input.userId, startOfUtcDayIso());
+    if (dailyTextUsed >= freeDailyTextLimit) {
+      return fail(
+        new DomainError(
+          "daily_text_limit_exceeded",
+          "Бесплатные 7 текстовых запросов на сегодня закончились. Подключите подписку, чтобы продолжить.",
+          402
+        )
+      );
+    }
+
+    return ok({ allowed: true });
+  }
+
+  private async getSubscriptionAccess(userId: string) {
+    if (!this.subscriptions) {
+      return {
+        hasActiveSubscription: false,
+        planId: null as string | null,
+      };
+    }
+
+    const current = await this.subscriptions.currentSubscription(userId);
+    const subscription = current.ok ? current.value.subscription : null;
+    const hasActiveSubscription = subscription?.status === "active";
+
+    return {
+      hasActiveSubscription,
+      planId: hasActiveSubscription ? subscription.planId : null,
+    };
+  }
 }
 
 function createConversationTitle(message: string) {
@@ -549,6 +654,53 @@ function buildConversationPrompt(previousMessages: ConversationMessage[], curren
   ].join("\n");
 }
 
+function buildRoutingPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
+  if (!isContextualMediaFollowUp(currentPrompt)) return currentPrompt;
+
+  const contextMessages = previousMessages
+    .filter((message) => message.content.trim() && ["system", "user", "assistant"].includes(message.role))
+    .slice(-6);
+
+  if (contextMessages.length === 0) return currentPrompt;
+
+  const context = contextMessages
+    .map((message) => `${conversationRoleLabel(message.role)}: ${trimContextContent(message.content)}`)
+    .join("\n");
+
+  return [
+    "Контекст нужен только для выбора типа запроса и агента.",
+    "",
+    "Контекст диалога:",
+    context,
+    "",
+    "Последняя просьба пользователя:",
+    currentPrompt,
+  ].join("\n");
+}
+
+function buildMediaGenerationPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
+  const contextMessages = previousMessages
+    .filter((message) => message.content.trim() && ["system", "user", "assistant"].includes(message.role))
+    .slice(-8);
+
+  if (contextMessages.length === 0) return currentPrompt;
+
+  const context = contextMessages
+    .map((message) => `${conversationRoleLabel(message.role)}: ${trimContextContent(message.content)}`)
+    .join("\n");
+
+  return [
+    "Создай медиа по последней просьбе пользователя.",
+    "Если пользователь ссылается на прошлый текст, песню, идею или описание словами вроде \"это\", \"этот текст\", \"который ты скинул\", используй контекст ниже.",
+    "",
+    "Контекст диалога:",
+    context,
+    "",
+    "Последняя просьба пользователя:",
+    currentPrompt,
+  ].join("\n");
+}
+
 function conversationRoleLabel(role: ConversationMessage["role"]) {
   if (role === "assistant") return "Ассистент";
   if (role === "system") return "Система";
@@ -558,6 +710,37 @@ function conversationRoleLabel(role: ConversationMessage["role"]) {
 function trimContextContent(content: string) {
   const normalized = content.replace(/\s+/g, " ").trim();
   return normalized.length > 1_200 ? `${normalized.slice(0, 1_197)}...` : normalized;
+}
+
+function isContextualMediaFollowUp(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  return containsAny(normalized, [
+    "аудио",
+    "audio",
+    "голос",
+    "озвуч",
+    "спой",
+    "вокал",
+    "картин",
+    "изображ",
+    "фото",
+    "image",
+    "video",
+    "видео",
+    "ролик",
+    "по этому",
+    "по этому тексту",
+    "который ты",
+  ]);
+}
+
+function containsAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(needle));
+}
+
+function startOfUtcDayIso() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
 }
 
 function findLastUserMessageIndex(messages: ConversationMessage[]) {

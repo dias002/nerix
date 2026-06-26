@@ -102,9 +102,15 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
   const agents = new AgentService(agentRepository);
   const billing = new BillingService(walletRepository, agents);
   const aiGateway = new AiGatewayService(agents, billing, createCompletionProvider());
-  const generation = new GenerationService(generationRepository, aiGateway, billing, createMediaGenerationProvider());
-  const chat = new ChatService(conversationRepository, aiGateway, generation);
   const subscriptions = new SubscriptionService(subscriptionRepository, billing);
+  const generation = new GenerationService(
+    generationRepository,
+    aiGateway,
+    billing,
+    createMediaGenerationProvider(),
+    subscriptions
+  );
+  const chat = new ChatService(conversationRepository, aiGateway, generation, subscriptions);
   const mailings = new MailingService(mailingRepository, options.mailingTransport ?? new SmtpBzClient());
   const business = new BusinessService(businessRepository, subscriptions);
   const businessOps = new BusinessOpsService(businessOpsRepository, business);

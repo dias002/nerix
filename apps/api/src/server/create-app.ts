@@ -26,6 +26,7 @@ export type CreateAppOptions = {
 export async function createApp(options: CreateAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? false,
+    bodyLimit: config.API_BODY_LIMIT_BYTES,
   });
   const dependencies = options.dependencies ?? createDependencies();
   const allowedOrigins = new Set(config.CORS_ORIGINS);
@@ -40,6 +41,14 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
 
       callback(null, false);
     },
+  });
+
+  app.addHook("onRequest", async (_request, reply) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "no-referrer");
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Cross-Origin-Opener-Policy", "same-origin");
+    reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   });
 
   await registerHealthRoutes(app, dependencies.database);

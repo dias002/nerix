@@ -24,6 +24,7 @@ import { BillingService } from "../src/modules/billing/billing.service.js";
 import { InMemoryWalletRepository } from "../src/modules/billing/wallet.repository.js";
 import { ChatService } from "../src/modules/chat/chat.service.js";
 import { InMemoryConversationRepository } from "../src/modules/chat/conversation.repository.js";
+import { GeminiMediaGenerationProvider } from "../src/modules/generation/media-provider.js";
 import { InMemoryMailingRepository } from "../src/modules/mailings/mailing.repository.js";
 import { MailingService, parseContacts } from "../src/modules/mailings/mailing.service.js";
 import type { SmtpBzMessage } from "../src/modules/mailings/mailing.types.js";
@@ -45,6 +46,10 @@ test("modality classifier detects media and code tasks", () => {
   assert.equal(inferModality("сочини песню про войну"), "text");
   assert.equal(inferModality("напиши текст песни для рекламы"), "text");
   assert.equal(inferModality("сгенерируй трек для рекламы"), "music");
+  assert.equal(inferModality("теперь сделай мне именно голосовым песню"), "music");
+  assert.equal(inferModality("сгенерируй мне картинку по этому тексту"), "image");
+  assert.equal(inferModality("озвучь этот текст голосом"), "voice");
+  assert.equal(inferModality("сделай мне прям аудио"), "music");
   assert.equal(inferModality("найди bug в коде"), "code");
   assert.equal(inferModality("создай видео ролик"), "video");
   assert.equal(inferModality("обычный вопрос"), "text");
@@ -271,6 +276,31 @@ test("generation service creates media jobs, stores artifacts, and can be starte
   await withConfig({ AI_MOCK_PROVIDER_ENABLED: true, API_PUBLIC_URL: "http://127.0.0.1:4000" }, async () => {
     const dependencies = createDependencies();
 
+    const blockedGenerationResponse = await dependencies.generation.createJob({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      modality: "music",
+      prompt: "сделай песню для рекламы nomduchat",
+    });
+
+    assert.equal(blockedGenerationResponse.ok, false);
+    if (blockedGenerationResponse.ok) return;
+    assert.equal(blockedGenerationResponse.error.code, "subscription_required");
+
+    const checkoutResponse = await dependencies.subscriptions.createCheckout({
+      userId: "local-user",
+      planId: "base",
+      country: "KZ",
+    });
+    assert.equal(checkoutResponse.ok, true);
+    if (!checkoutResponse.ok) return;
+
+    const subscriptionResponse = await dependencies.subscriptions.completeMockCheckout({
+      checkoutId: checkoutResponse.value.checkout.id,
+    });
+    assert.equal(subscriptionResponse.ok, true);
+
     const generationResponse = await dependencies.generation.createJob({
       userId: "local-user",
       country: "KZ",
@@ -313,6 +343,78 @@ test("generation service creates media jobs, stores artifacts, and can be starte
     if (!chatResponse.ok) return;
     assert.equal(chatResponse.value.generationJob.modality, "video");
     assert.equal(chatResponse.value.generationJob.status, "succeeded");
+
+    const seedTextResponse = await dependencies.chat.sendMessage({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      message: "Вот текст песни: Казахстан просыпается под широким небом и держит путь вперед.",
+    });
+    assert.equal(seedTextResponse.ok, true);
+    if (!seedTextResponse.ok) return;
+
+    const contextualAudioResponse = await dependencies.chat.sendMessage({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      conversationId: seedTextResponse.value.conversationId,
+      message: "сделай мне прям аудио",
+    });
+    assert.equal(contextualAudioResponse.ok, true);
+    if (!contextualAudioResponse.ok) return;
+    assert.equal(contextualAudioResponse.value.route.provider, "mock-provider");
+    assert.equal(contextualAudioResponse.value.generationJob.modality, "music");
+    assert.match(contextualAudioResponse.value.generationJob.prompt, /Казахстан просыпается под широким небом/);
+    assert.match(contextualAudioResponse.value.generationJob.prompt, /Последняя просьба пользователя/);
+
+    const generalStartResponse = await dependencies.chat.sendMessage({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      message: "привет, что ты умеешь?",
+    });
+    assert.equal(generalStartResponse.ok, true);
+    if (!generalStartResponse.ok) return;
+    assert.equal(generalStartResponse.value.route.agentId, "general");
+
+    const songInsideGeneralConversation = await dependencies.chat.sendMessage({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      conversationId: generalStartResponse.value.conversationId,
+      message: "сочини песню про дом у моря",
+    });
+    assert.equal(songInsideGeneralConversation.ok, true);
+    if (!songInsideGeneralConversation.ok) return;
+    assert.equal(songInsideGeneralConversation.value.route.agentId, "general");
+    assert.equal(songInsideGeneralConversation.value.route.modality, "text");
+
+    const audioInsideGeneralConversation = await dependencies.chat.sendMessage({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      conversationId: generalStartResponse.value.conversationId,
+      message: "сделай мне прям аудио",
+    });
+    assert.equal(audioInsideGeneralConversation.ok, true);
+    if (!audioInsideGeneralConversation.ok) return;
+    assert.equal(audioInsideGeneralConversation.value.route.agentId, "general");
+    assert.equal(audioInsideGeneralConversation.value.generationJob.modality, "music");
+    assert.match(audioInsideGeneralConversation.value.generationJob.prompt, /сочини песню про дом у моря/);
+
+    const contextualImageResponse = await dependencies.chat.sendMessage({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      conversationId: seedTextResponse.value.conversationId,
+      message: "сгенерируй картинку по этому тексту",
+    });
+    assert.equal(contextualImageResponse.ok, true);
+    if (!contextualImageResponse.ok) return;
+    assert.equal(contextualImageResponse.value.generationJob.modality, "image");
+    assert.match(contextualImageResponse.value.generationJob.prompt, /Контекст диалога/);
+    assert.match(contextualImageResponse.value.generationJob.prompt, /Казахстан просыпается под широким небом/);
+    assert.match(contextualImageResponse.value.generationJob.prompt, /Последняя просьба пользователя/);
   });
 });
 
@@ -552,6 +654,153 @@ test("AI completion providers use backend company keys for OpenAI, Anthropic, an
   });
 });
 
+test("Gemini media provider sends interaction payloads without unsupported config", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      const body = JSON.parse(String(init?.body));
+      const mimeType = typeof body.input === "string" ? "audio/wav" : "image/png";
+
+      return jsonResponse({
+        output: [
+          {
+            mime_type: mimeType,
+            data: Buffer.from(`mock ${mimeType}`, "utf8").toString("base64"),
+          },
+        ],
+      });
+    }, async () => {
+      const imageResult = await new GeminiMediaGenerationProvider().generate({
+        jobId: "job-image",
+        provider: "gemini",
+        model: "models/gemini-image-test",
+        modality: "image",
+        prompt: "сгенерируй картинку по тексту",
+      });
+
+      assert.equal(imageResult.status, "succeeded");
+      assert.equal(imageResult.mimeType, "image/png");
+
+      const musicResult = await new GeminiMediaGenerationProvider().generate({
+        jobId: "job-music",
+        provider: "gemini",
+        model: "lyria-test",
+        modality: "music",
+        prompt: "сделай голосовую песню",
+      });
+
+      assert.equal(musicResult.status, "succeeded");
+      assert.equal(musicResult.mimeType, "audio/wav");
+    });
+
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      const url = new URL(call.url);
+      assert.equal(url.origin, "https://generativelanguage.googleapis.com");
+      assert.equal(url.pathname, "/v1beta/interactions");
+      assert.equal(url.searchParams.get("key"), "gemini-key");
+      assert.equal(call.init?.method, "POST");
+      const body = JSON.parse(String(call.init?.body));
+      assert.equal(body.config, undefined);
+    }
+
+    assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+      model: "gemini-image-test",
+      input: [{ type: "text", text: "сгенерируй картинку по тексту" }],
+    });
+    assert.deepEqual(JSON.parse(String(calls[1].init?.body)), {
+      model: "lyria-test",
+      input: "сделай голосовую песню",
+    });
+  });
+});
+
+test("Gemini media provider starts video without unsupported numberOfVideos parameter", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({
+        name: "operations/video-test",
+      });
+    }, async () => {
+      const videoResult = await new GeminiMediaGenerationProvider().generate({
+        jobId: "job-video",
+        provider: "gemini",
+        model: "veo-test",
+        modality: "video",
+        prompt: "создай короткое видео",
+      });
+
+      assert.equal(videoResult.status, "running");
+      assert.equal(videoResult.operationName, "operations/video-test");
+    });
+
+    assert.equal(calls.length, 1);
+    const url = new URL(calls[0].url);
+    assert.equal(url.origin, "https://generativelanguage.googleapis.com");
+    assert.equal(url.pathname, "/v1beta/models/veo-test:predictLongRunning");
+    assert.equal(url.searchParams.get("key"), "gemini-key");
+    assert.equal(calls[0].init?.method, "POST");
+
+    const body = JSON.parse(String(calls[0].init?.body));
+    assert.equal(body.parameters.numberOfVideos, undefined);
+    assert.deepEqual(body, {
+      instances: [
+        {
+          prompt: "создай короткое видео",
+        },
+      ],
+      parameters: {
+        resolution: "720p",
+      },
+    });
+  });
+});
+
+test("Gemini media provider extracts video URI from completed Veo operation", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({
+        name: "models/veo-test/operations/video-test",
+        done: true,
+        response: {
+          "@type": "type.googleapis.com/google.ai.generativelanguage.v1beta.PredictLongRunningResponse",
+          generateVideoResponse: {
+            generatedSamples: [
+              {
+                video: {
+                  uri: "https://generativelanguage.googleapis.com/v1beta/files/mock-video:download?alt=media",
+                },
+              },
+            ],
+          },
+        },
+      });
+    }, async () => {
+      const result = await new GeminiMediaGenerationProvider().refresh("models/veo-test/operations/video-test");
+
+      assert.equal(result.status, "succeeded");
+      assert.equal(result.mimeType, "video/mp4");
+      assert.equal(
+        result.providerUri,
+        "https://generativelanguage.googleapis.com/v1beta/files/mock-video:download?alt=media"
+      );
+    });
+
+    assert.equal(calls.length, 1);
+    const url = new URL(calls[0].url);
+    assert.equal(url.pathname, "/v1beta/models/veo-test/operations/video-test");
+    assert.equal(url.searchParams.get("key"), "gemini-key");
+  });
+});
+
 test("chat completions include previous messages for follow-up context", async () => {
   await withConfig(
     {
@@ -606,7 +855,20 @@ test("chat follow-ups inherit the conversation agent and keep creative context",
       const billing = new BillingService(new InMemoryWalletRepository(), agents);
       const completionProvider = new CapturingCompletionProvider();
       const aiGateway = new AiGatewayService(agents, billing, completionProvider);
-      const chat = new ChatService(new InMemoryConversationRepository(), aiGateway);
+      const activeSubscriptions = {
+        async currentSubscription() {
+          return {
+            ok: true as const,
+            value: {
+              subscription: {
+                planId: "base",
+                status: "active",
+              },
+            },
+          };
+        },
+      };
+      const chat = new ChatService(new InMemoryConversationRepository(), aiGateway, undefined, activeSubscriptions);
 
       const firstResponse = await chat.sendMessage({
         userId: "local-user",
@@ -863,6 +1125,30 @@ test("mailing contact parser extracts email and optional names from pasted rows"
       name: undefined,
     },
   ]);
+});
+
+test("mailing service rejects SMTP header injection fields", async () => {
+  const mailings = new MailingService(new InMemoryMailingRepository(), new FakeMailingTransport());
+  const audienceResponse = await mailings.createAudience({
+    userId: "local-user",
+    name: "Security test",
+  });
+  assert.equal(audienceResponse.ok, true);
+  if (!audienceResponse.ok) return;
+
+  const response = await mailings.createCampaign({
+    userId: "local-user",
+    audienceId: audienceResponse.value.audience.id,
+    name: "Injected",
+    fromEmail: "info@example.com",
+    fromName: "Nomduchat",
+    subject: "Hello\r\nBcc: attacker@example.com",
+    html: "<p>Hello</p>",
+  });
+
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal(response.error.code, "validation_failed");
 });
 
 class CapturingCompletionProvider implements AiCompletionProvider {

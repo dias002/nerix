@@ -10,12 +10,31 @@ import type { MediaGenerationJob } from "./generation.types.js";
 
 const mediaModalities = new Set<AiModality>(["image", "video", "music", "voice"]);
 
+type SubscriptionAccessService = {
+  currentSubscription(userId: string): Promise<{
+    ok: true;
+    value: {
+      subscription: {
+        status: string;
+      } | null;
+    };
+  } | {
+    ok: false;
+    error: {
+      code: string;
+      message: string;
+      statusCode?: number;
+    };
+  }>;
+};
+
 export class GenerationService {
   constructor(
     private readonly generationRepository: GenerationRepository,
     private readonly aiGateway: AiGatewayService,
     private readonly billing: BillingService,
-    private readonly mediaProvider: MediaGenerationProvider
+    private readonly mediaProvider: MediaGenerationProvider,
+    private readonly subscriptions?: SubscriptionAccessService
   ) {}
 
   async listJobs(userId: string) {
@@ -66,6 +85,17 @@ export class GenerationService {
 
     if (!mediaModalities.has(routeResult.value.modality)) {
       return fail(new DomainError("validation_failed", "Use generation jobs only for image, video, music, or voice.", 400));
+    }
+
+    const access = await this.getSubscriptionAccess(input.userId);
+    if (!access.hasActiveSubscription) {
+      return fail(
+        new DomainError(
+          "subscription_required",
+          "Картинки, видео, песни и голос доступны после подписки. В бесплатном режиме доступно 7 обычных текстовых запросов в день.",
+          402
+        )
+      );
     }
 
     const jobId = randomUUID();
@@ -145,7 +175,7 @@ export class GenerationService {
       const failed = await this.refundFailedJob({
         userId: input.userId,
         job,
-        errorMessage: error instanceof Error ? error.message : "Media generation failed.",
+        errorMessage: publicMediaErrorMessage(error),
       });
 
       return ok({
@@ -196,6 +226,9 @@ export class GenerationService {
           userId: input.userId,
           job,
           errorMessage: refreshResult.errorMessage ?? "Media generation failed.",
+          metadata: {
+            providerRaw: refreshResult.raw,
+          },
         });
 
         return ok({
@@ -222,7 +255,7 @@ export class GenerationService {
       const failed = await this.refundFailedJob({
         userId: input.userId,
         job,
-        errorMessage: error instanceof Error ? error.message : "Media generation refresh failed.",
+        errorMessage: publicMediaErrorMessage(error),
       });
 
       return ok({
@@ -256,6 +289,19 @@ export class GenerationService {
     }
 
     return fail(new DomainError("not_found", "Generation artifact was not found.", 404));
+  }
+
+  private async getSubscriptionAccess(userId: string) {
+    if (!this.subscriptions) {
+      return { hasActiveSubscription: false };
+    }
+
+    const current = await this.subscriptions.currentSubscription(userId);
+    const subscription = current.ok ? current.value.subscription : null;
+
+    return {
+      hasActiveSubscription: subscription?.status === "active",
+    };
   }
 
   private async finalizeSucceededJob(input: {
@@ -322,7 +368,12 @@ export class GenerationService {
     return finalized;
   }
 
-  private async refundFailedJob(input: { userId: string; job: MediaGenerationJob; errorMessage: string }) {
+  private async refundFailedJob(input: {
+    userId: string;
+    job: MediaGenerationJob;
+    errorMessage: string;
+    metadata?: Record<string, unknown>;
+  }) {
     if (input.job.reservationId && input.job.reservedCredits > 0) {
       await this.billing.refund({
         userId: input.userId,
@@ -336,6 +387,7 @@ export class GenerationService {
         status: "refunded",
         finalCredits: 0,
         errorMessage: input.errorMessage,
+        metadata: input.metadata,
       })) ?? input.job
     );
   }
@@ -346,6 +398,31 @@ function buildUsage(reserveCredits: number, finalCredits: number | null) {
     reserveCredits,
     finalCredits,
   };
+}
+
+function publicMediaErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : "Media generation failed.";
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("429") ||
+    normalized.includes("too_many_requests") ||
+    normalized.includes("resource_exhausted") ||
+    normalized.includes("not enough quota") ||
+    normalized.includes("quota")
+  ) {
+    return "У текущего Google Gemini ключа нет доступной квоты для этой медиа-генерации. Кредиты nomduchat возвращены.";
+  }
+
+  if (normalized.includes("google_ai_api_key")) {
+    return "Gemini ключ для медиа-генерации не настроен. Кредиты nomduchat возвращены.";
+  }
+
+  if (normalized.includes("media provider") && normalized.includes("not supported")) {
+    return "Этот тип медиа пока не подключен к рабочему провайдеру. Кредиты nomduchat возвращены.";
+  }
+
+  return message;
 }
 
 function artifactUrl(jobId: string) {

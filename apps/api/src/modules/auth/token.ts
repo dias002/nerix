@@ -28,8 +28,15 @@ export function signAccessToken(input: { userId: string; email: string }) {
 }
 
 export function verifyAccessToken(token: string) {
-  const [encodedHeader, encodedPayload, signature] = token.split(".");
+  if (token.length > 4096) return null;
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [encodedHeader, encodedPayload, signature] = parts;
   if (!encodedHeader || !encodedPayload || !signature) return null;
+
+  const header = decodeJson<{ alg?: string; typ?: string }>(encodedHeader);
+  if (!header || header.alg !== "HS256" || header.typ !== "JWT") return null;
 
   const expectedSignature = sign(`${encodedHeader}.${encodedPayload}`);
   if (!safeEqual(signature, expectedSignature)) return null;

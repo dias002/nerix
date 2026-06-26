@@ -122,7 +122,7 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
       };
     }
 
-    const artifact = extractMediaArtifact(body);
+    const artifact = extractMediaArtifact(body, "video/mp4");
     if (!artifact) {
       return {
         status: "failed" as const,
@@ -171,11 +171,8 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: `models/${input.model}`,
-        input: input.prompt,
-        config: {
-          outputModalities: [input.modality === "image" ? "IMAGE" : "AUDIO"],
-        },
+        model: input.model.replace(/^models\//, ""),
+        input: input.modality === "music" ? input.prompt : [{ type: "text", text: input.prompt }],
       }),
     });
 
@@ -185,7 +182,7 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
     }
 
     const body = (await response.json()) as Record<string, unknown>;
-    const artifact = extractMediaArtifact(body);
+    const artifact = extractMediaArtifact(body, defaultMimeTypeForModality(input.modality));
     if (!artifact?.base64Data) {
       throw new Error(`Gemini ${input.modality} generation completed without inline media data.`);
     }
@@ -217,7 +214,6 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
           },
         ],
         parameters: {
-          numberOfVideos: 1,
           resolution: "720p",
         },
       }),
@@ -267,12 +263,35 @@ export function createMediaGenerationProvider(): MediaGenerationProvider {
   return new BackendMediaGenerationProvider();
 }
 
-function extractMediaArtifact(input: unknown): { mimeType: string; base64Data?: string; uri?: string } | null {
+function extractMediaArtifact(
+  input: unknown,
+  fallbackMimeType?: string
+): { mimeType: string; base64Data?: string; uri?: string } | null {
   if (!input || typeof input !== "object") return null;
   const record = input as Record<string, unknown>;
-  const mimeType = firstString(record, ["mimeType", "mime_type", "contentType", "content_type"]) ?? inferMimeType(record);
+  const uri = firstString(record, [
+    "uri",
+    "gcsUri",
+    "gcs_uri",
+    "videoUri",
+    "video_uri",
+    "downloadUri",
+    "download_uri",
+    "fileUri",
+    "file_uri",
+    "mediaUri",
+    "media_uri",
+    "outputUri",
+    "output_uri",
+    "downloadUrl",
+    "download_url",
+  ]);
+  const mimeType =
+    firstString(record, ["mimeType", "mime_type", "contentType", "content_type"]) ??
+    inferMimeType(record) ??
+    inferMimeTypeFromUri(uri) ??
+    fallbackMimeType;
   const base64Data = firstString(record, ["data", "bytesBase64Encoded", "base64Data", "base64_data"]);
-  const uri = firstString(record, ["uri", "gcsUri", "videoUri", "downloadUri"]);
 
   if ((base64Data || uri) && mimeType) {
     return {
@@ -285,13 +304,13 @@ function extractMediaArtifact(input: unknown): { mimeType: string; base64Data?: 
   for (const value of Object.values(record)) {
     if (Array.isArray(value)) {
       for (const item of value) {
-        const artifact = extractMediaArtifact(item);
+        const artifact = extractMediaArtifact(item, fallbackMimeType);
         if (artifact) return artifact;
       }
       continue;
     }
 
-    const artifact = extractMediaArtifact(value);
+    const artifact = extractMediaArtifact(value, fallbackMimeType);
     if (artifact) return artifact;
   }
 
@@ -336,6 +355,27 @@ function inferMimeType(record: Record<string, unknown>) {
   if (normalized.includes("image")) return "image/png";
   if (normalized.includes("audio") || normalized.includes("music")) return "audio/wav";
   if (normalized.includes("video")) return "video/mp4";
+  return undefined;
+}
+
+function inferMimeTypeFromUri(uri?: string) {
+  if (!uri) return undefined;
+  const normalized = uri.split("?")[0]?.toLowerCase() ?? "";
+  if (normalized.endsWith(".png")) return "image/png";
+  if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) return "image/jpeg";
+  if (normalized.endsWith(".webp")) return "image/webp";
+  if (normalized.endsWith(".mp3")) return "audio/mpeg";
+  if (normalized.endsWith(".wav")) return "audio/wav";
+  if (normalized.endsWith(".m4a")) return "audio/mp4";
+  if (normalized.endsWith(".mp4")) return "video/mp4";
+  if (normalized.endsWith(".webm")) return "video/webm";
+  return undefined;
+}
+
+function defaultMimeTypeForModality(modality: AiModality) {
+  if (modality === "image") return "image/png";
+  if (modality === "music" || modality === "voice") return "audio/wav";
+  if (modality === "video") return "video/mp4";
   return undefined;
 }
 

@@ -13,6 +13,8 @@ export type DomainErrorCode =
   | "validation_failed"
   | "unauthorized"
   | "insufficient_credits"
+  | "subscription_required"
+  | "daily_text_limit_exceeded"
   | "provider_unavailable"
   | "internal_error";
 

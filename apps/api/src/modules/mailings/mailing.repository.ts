@@ -475,7 +475,7 @@ export class PostgresMailingRepository implements MailingRepository {
     const databaseUserId = await this.resolveDatabaseUserId(userId);
     if (!databaseUserId) return [];
 
-    const result = await this.database.query<AudienceRow>(audiencesSql("where a.user_id = $1 order by a.created_at desc"), [
+    const result = await this.database.query<AudienceRow>(audiencesSql("where a.user_id = $1", "order by a.created_at desc"), [
       databaseUserId,
     ]);
     return result.rows.map(mapAudienceRow);
@@ -954,7 +954,7 @@ export class PostgresMailingRepository implements MailingRepository {
   }
 }
 
-function audiencesSql(whereSql: string) {
+function audiencesSql(whereSql: string, orderSql = "") {
   return `
     select
       a.id,
@@ -969,6 +969,7 @@ function audiencesSql(whereSql: string) {
     left join mailing_contacts c on c.audience_id = a.id
     ${whereSql}
     group by a.id
+    ${orderSql}
   `;
 }
 

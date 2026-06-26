@@ -55,6 +55,13 @@ const conversationParamsSchema = z.object({
 });
 
 export async function registerChatRoutes(app: FastifyInstance, chat: ChatService, auth: AuthService) {
+  app.get("/usage/limits", async (request, reply) => {
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await chat.getUsageLimits(user.value.userId));
+  });
+
   app.get("/chat/conversations", async (request, reply) => {
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
