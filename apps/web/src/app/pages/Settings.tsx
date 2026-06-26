@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { Link } from "react-router";
 import {
   Bell,
+  Brain,
   Check,
   ChevronDown,
   ChevronRight,
@@ -81,6 +82,13 @@ export default function Settings() {
           icon: Bell,
           value: t.settings.off,
           path: "/workspace/settings/notifications",
+        },
+        {
+          id: "memory",
+          label: t.memory.title,
+          icon: Brain,
+          value: t.memory.subtitle,
+          path: "/workspace/memory",
         },
       ],
     },

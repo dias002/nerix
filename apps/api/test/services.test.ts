@@ -662,7 +662,7 @@ test("Gemini media provider sends interaction payloads without unsupported confi
     await withFetchStub(async (input, init) => {
       calls.push({ url: String(input), init });
       const body = JSON.parse(String(init?.body));
-      const mimeType = typeof body.input === "string" ? "audio/wav" : "image/png";
+      const mimeType = typeof body.input === "string" ? "audio/mpeg" : "image/png";
 
       return jsonResponse({
         output: [
@@ -693,7 +693,7 @@ test("Gemini media provider sends interaction payloads without unsupported confi
       });
 
       assert.equal(musicResult.status, "succeeded");
-      assert.equal(musicResult.mimeType, "audio/wav");
+      assert.equal(musicResult.mimeType, "audio/mpeg");
     });
 
     assert.equal(calls.length, 2);

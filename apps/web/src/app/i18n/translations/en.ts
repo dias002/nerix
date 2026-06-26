@@ -162,6 +162,12 @@ export const en = {
         { title: "Code", description: "Help with code, bugs, and architecture.", strengths: ["Bug search", "Architecture", "Refactoring"], examples: ["Find the bug in this code", "Suggest an API structure"] },
         { title: "Study", description: "Explanations, notes, and lesson preparation.", strengths: ["Explanations", "Notes", "Knowledge checks"], examples: ["Explain the topic step by step", "Create a quiz on this topic"] },
         { title: "Documents", description: "Analyze, summarize, and edit long texts.", strengths: ["Short summaries", "Editing", "Risk spotting"], examples: ["Summarize the document", "Find questionable parts"] },
+        { title: "Images", description: "Creates visual ideas, covers, avatars, and prompts for image generation.", strengths: ["Image prompts", "Covers and avatars", "Visual concepts"], examples: ["Create a cover idea", "Make a branded avatar prompt"] },
+        { title: "Video", description: "Helps with short videos, scripts, storyboards, and scenes.", strengths: ["Video scripts", "Storyboards", "Reels ideas"], examples: ["Write a short video script", "Describe a video scene"] },
+        { title: "Music", description: "Writes songs, jingles, lyrics, and audio ideas.", strengths: ["Songs and hooks", "Jingles", "Audio ideas"], examples: ["Write an ad song", "Create a brand jingle"] },
+        { title: "Voice", description: "Prepares voiceover text, speech, dubbing, and voice scripts.", strengths: ["Voiceover copy", "Dubbing", "Voice prompts"], examples: ["Write voiceover text", "Create a voice script"] },
+        { title: "Marketing", description: "Helps with ads, posts, offers, and campaigns.", strengths: ["Ad copy", "Offers", "Content plans"], examples: ["Create a launch post", "Come up with an offer"] },
+        { title: "Support", description: "Helps answer customers, build FAQ, and prepare service scripts.", strengths: ["Customer replies", "FAQ", "Support scripts"], examples: ["Answer an unhappy customer", "Build an FAQ"] },
       ],
     },
     balance: {

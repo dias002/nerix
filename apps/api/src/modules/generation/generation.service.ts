@@ -444,7 +444,8 @@ function createAssetTitle(prompt: string) {
 
 function defaultMimeType(modality: AiModality) {
   if (modality === "image") return "image/png";
-  if (modality === "music" || modality === "voice") return "audio/wav";
+  if (modality === "music") return "audio/mpeg";
+  if (modality === "voice") return "audio/wav";
   if (modality === "video") return "video/mp4";
   return "application/octet-stream";
 }

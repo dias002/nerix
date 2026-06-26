@@ -353,7 +353,7 @@ function inferMimeType(record: Record<string, unknown>) {
   if (!type) return undefined;
   const normalized = type.toLowerCase();
   if (normalized.includes("image")) return "image/png";
-  if (normalized.includes("audio") || normalized.includes("music")) return "audio/wav";
+  if (normalized.includes("audio") || normalized.includes("music")) return "audio/mpeg";
   if (normalized.includes("video")) return "video/mp4";
   return undefined;
 }
@@ -374,7 +374,8 @@ function inferMimeTypeFromUri(uri?: string) {
 
 function defaultMimeTypeForModality(modality: AiModality) {
   if (modality === "image") return "image/png";
-  if (modality === "music" || modality === "voice") return "audio/wav";
+  if (modality === "music") return "audio/mpeg";
+  if (modality === "voice") return "audio/wav";
   if (modality === "video") return "video/mp4";
   return undefined;
 }

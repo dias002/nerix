@@ -1,38 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { Bot, Briefcase, Code, GraduationCap, FileText, ArrowRight } from "lucide-react";
+import { ArrowRight, Bot, Briefcase, Code, FileText, GraduationCap, Headphones, ImageIcon, Megaphone, Mic, Music2, Video } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { getAgents } from "../api";
+
+const fallbackAgentIds = ["general", "business", "code", "study", "documents", "image", "video", "music", "voice", "marketing", "support"];
+const fallbackAgentIcons = [Bot, Briefcase, Code, GraduationCap, FileText, ImageIcon, Video, Music2, Mic, Megaphone, Headphones];
 
 export default function Agents() {
   const { t } = useLanguage();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [apiAgents, setApiAgents] = useState<Array<{ id: string; name: string; description: string }> | null>(null);
-  const icons = [Bot, Briefcase, Code, GraduationCap, FileText];
-  const ids = ["general", "business", "code", "study", "docs"];
   const agents = useMemo(() => {
     if (!apiAgents) {
       return t.agents.items.map((agent, index) => ({
         ...agent,
-        id: ids[index],
-        icon: icons[index],
+        id: fallbackAgentIds[index] ?? `agent-${index}`,
+        icon: fallbackAgentIcons[index] ?? Bot,
       }));
     }
 
     return apiAgents.map((agent, index) => {
-      const translationIndex = ids.indexOf(agent.id);
-      const fallback = t.agents.items[translationIndex >= 0 ? translationIndex : 0];
+      const translationIndex = fallbackAgentIds.indexOf(agent.id);
+      const fallback = translationIndex >= 0 ? t.agents.items[translationIndex] : undefined;
       return {
         title: fallback?.title ?? agent.name,
         description: fallback?.description || agent.description || agent.name,
         strengths: fallback?.strengths ?? [],
         examples: fallback?.examples ?? [],
         id: agent.id,
-        icon: icons[translationIndex >= 0 ? translationIndex : index % icons.length],
+        icon: fallbackAgentIcons[translationIndex >= 0 ? translationIndex : index % fallbackAgentIcons.length] ?? Bot,
       };
     });
-  }, [apiAgents, icons, ids, t.agents.items]);
+  }, [apiAgents, t.agents.items]);
   const selectedAgent = agents[selectedIndex];
   const SelectedIcon = selectedAgent.icon;
 

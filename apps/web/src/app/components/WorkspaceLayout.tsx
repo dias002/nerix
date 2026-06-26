@@ -82,10 +82,15 @@ export default function WorkspaceLayout() {
         { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: true },
         { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: true },
         { path: "/workspace/agents", icon: Users, label: t.nav.agents, visible: true },
-        { path: "/workspace/memory", icon: Brain, label: t.nav.memory, visible: true },
         { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: true },
         { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: true },
-        { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: true },
+        {
+          path: "/workspace/settings",
+          icon: Settings,
+          label: t.nav.settings,
+          visible: true,
+          active: () => location.pathname.startsWith("/workspace/settings") || location.pathname === "/workspace/memory",
+        },
       ];
 
   const refreshUsageLimits = useCallback(() => {

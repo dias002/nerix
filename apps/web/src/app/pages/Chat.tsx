@@ -57,7 +57,7 @@ type AgentOption = {
   description: string;
 };
 
-const fallbackAgentIds = ["general", "business", "code", "study"] as const;
+const fallbackAgentIds = ["general", "business", "code", "study", "documents", "image", "video", "music", "voice", "marketing", "support"] as const;
 const maxAttachedFiles = 5;
 const maxFileContentChars = 12_000;
 const guestRequestStorageKey = "nomduchat-guest-chat-requests";
@@ -93,7 +93,7 @@ export default function Chat() {
     if (apiAgents?.length) {
       return apiAgents.map((agent) => {
         const translationIndex = fallbackAgentIds.findIndex((id) => id === agent.id);
-        const fallback = t.agents.items[translationIndex >= 0 ? translationIndex : 0];
+        const fallback = translationIndex >= 0 ? t.agents.items[translationIndex] : undefined;
         return {
           id: agent.id,
           title: fallback?.title ?? agent.name,
