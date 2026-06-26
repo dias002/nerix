@@ -102,7 +102,10 @@ export async function registerSubscriptionRoutes(
       });
     }
 
-    return sendResult(reply, await subscriptions.completeMockCheckout(input.data));
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await subscriptions.completeMockCheckout({ ...input.data, userId: user.value.userId }));
   });
 
   app.get("/subscriptions/current", async (request, reply) => {

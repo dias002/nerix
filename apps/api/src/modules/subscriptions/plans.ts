@@ -4,8 +4,8 @@ export const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "base",
     name: "Easy Start",
-    monthlyCredits: 20_000_000,
-    contextTokens: 28_000,
+    monthlyCredits: 2_000,
+    contextTokens: 8_000,
     description: "For steady everyday work.",
     enabled: true,
     prices: [
@@ -16,8 +16,8 @@ export const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "ultra",
     name: "Active Work",
-    monthlyCredits: 50_000_000,
-    contextTokens: 100_000,
+    monthlyCredits: 5_000,
+    contextTokens: 32_000,
     description: "For more active work across chat, documents, and code.",
     enabled: true,
     prices: [
@@ -28,8 +28,8 @@ export const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "pro",
     name: "Team Mode",
-    monthlyCredits: 700_000_000,
-    contextTokens: 200_000,
+    monthlyCredits: 20_000,
+    contextTokens: 64_000,
     description: "For teams and larger business tasks.",
     enabled: true,
     prices: [
@@ -40,8 +40,8 @@ export const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "business",
     name: "Business Cabinet",
-    monthlyCredits: 1_500_000_000,
-    contextTokens: 400_000,
+    monthlyCredits: 50_000,
+    contextTokens: 128_000,
     description: "Business workspace with up to 5 employees, roles, CRM analytics, and a company assistant.",
     enabled: true,
     prices: [

@@ -298,6 +298,7 @@ test("generation service creates media jobs, stores artifacts, and can be starte
 
     const subscriptionResponse = await dependencies.subscriptions.completeMockCheckout({
       checkoutId: checkoutResponse.value.checkout.id,
+      userId: "local-user",
     });
     assert.equal(subscriptionResponse.ok, true);
 

@@ -1,5 +1,5 @@
 import type { FastifyRequest } from "fastify";
-import { ok, type Result } from "../domain/result.js";
+import { DomainError, fail, ok, type Result } from "../domain/result.js";
 import type { AuthService } from "../modules/auth/auth.service.js";
 
 export type LocalRoleOverride = "user" | "business_owner" | "business_employee" | "admin";
@@ -11,6 +11,10 @@ export async function resolveRequestUserId(
 ): Promise<Result<{ userId: string }>> {
   const accessToken = readBearerToken(request.headers.authorization);
   if (!accessToken) {
+    if (process.env.NODE_ENV === "production") {
+      return fail(new DomainError("unauthorized", "Authentication is required.", 401));
+    }
+
     return ok({ userId: fallbackUserId });
   }
 

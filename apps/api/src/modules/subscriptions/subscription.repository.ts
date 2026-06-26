@@ -27,7 +27,11 @@ export interface SubscriptionRepository {
     providerCheckoutId: string;
     checkoutUrl: string;
   }): Promise<SubscriptionCheckoutRecord | null>;
-  completeCheckoutPayment(checkoutId: string, event?: CheckoutPaymentEvent): Promise<SubscriptionCompletion | null>;
+  completeCheckoutPayment(
+    checkoutId: string,
+    event?: CheckoutPaymentEvent,
+    expectedUserId?: string
+  ): Promise<SubscriptionCompletion | null>;
   completeCheckoutPaymentByProvider(input: ProviderCheckoutEventInput): Promise<SubscriptionCompletion | null>;
   failCheckoutPaymentByProvider(input: ProviderCheckoutEventInput): Promise<SubscriptionCheckoutRecord | null>;
   markCheckoutCreditsGranted(checkoutId: string): Promise<SubscriptionCheckoutRecord | null>;
@@ -75,9 +79,10 @@ export class InMemorySubscriptionRepository implements SubscriptionRepository {
     return checkout;
   }
 
-  async completeCheckoutPayment(checkoutId: string, event?: CheckoutPaymentEvent) {
+  async completeCheckoutPayment(checkoutId: string, event?: CheckoutPaymentEvent, expectedUserId?: string) {
     const checkout = this.checkouts.get(checkoutId);
     if (!checkout) return null;
+    if (expectedUserId && checkout.userId !== expectedUserId) return null;
 
     const existingSubscription = this.findCurrentSubscriptionRecord(checkout.userId);
     if (checkout.status === "completed" && existingSubscription) {
@@ -348,12 +353,15 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
     return row ? mapCheckoutRow(row) : null;
   }
 
-  async completeCheckoutPayment(checkoutId: string, event?: CheckoutPaymentEvent) {
+  async completeCheckoutPayment(checkoutId: string, event?: CheckoutPaymentEvent, expectedUserId?: string) {
     if (!uuidPattern.test(checkoutId)) return null;
+    const expectedDatabaseUserId = expectedUserId ? toDatabaseUserId(expectedUserId) : null;
+    if (expectedUserId && !expectedDatabaseUserId) return null;
 
     return this.transaction(async (client) => {
       const checkout = await this.findCheckout(client, checkoutId, true);
       if (!checkout) return null;
+      if (expectedDatabaseUserId && checkout.user_id !== expectedDatabaseUserId) return null;
 
       const existingSubscription = await this.findCurrentSubscription(client, checkout.user_id, true);
       if (checkout.status === "completed" && existingSubscription) {

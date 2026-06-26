@@ -412,6 +412,38 @@ test("local admin role header cannot open mailings in production mode", async ()
   }
 });
 
+test("production workspace routes require bearer auth instead of local fallback", async () => {
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  const app = await createApp();
+
+  try {
+    const walletResponse = await app.inject({
+      method: "GET",
+      url: "/billing/wallet",
+    });
+    assert.equal(walletResponse.statusCode, 401);
+
+    const checkoutResponse = await app.inject({
+      method: "POST",
+      url: "/subscriptions/checkout",
+      payload: {
+        userId: "local-user",
+        planId: "base",
+        country: "KZ",
+      },
+    });
+    assert.equal(checkoutResponse.statusCode, 401);
+  } finally {
+    await app.close();
+    if (previousNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  }
+});
+
 test("mailings service token opens mailing API in production mode", async () => {
   const previousNodeEnv = process.env.NODE_ENV;
   process.env.NODE_ENV = "production";
@@ -519,9 +551,35 @@ test("authenticated workspace routes use bearer user instead of request userId",
   assert.equal(checkoutResponse.statusCode, 200);
   assert.equal(checkoutResponse.json().checkout.userId, registeredUser.id);
 
+  const attackerRegisterResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: {
+      email: "workspace-attacker@example.com",
+      password: "secure-password",
+      name: "Workspace Attacker",
+    },
+  });
+  assert.equal(attackerRegisterResponse.statusCode, 200);
+
+  const attackerCompleteResponse = await app.inject({
+    method: "POST",
+    url: "/subscriptions/mock/complete",
+    headers: {
+      authorization: `Bearer ${attackerRegisterResponse.json().accessToken}`,
+    },
+    payload: {
+      checkoutId: checkoutResponse.json().checkout.id,
+    },
+  });
+  assert.equal(attackerCompleteResponse.statusCode, 404);
+
   const completeResponse = await app.inject({
     method: "POST",
     url: "/subscriptions/mock/complete",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
     payload: {
       checkoutId: checkoutResponse.json().checkout.id,
     },
@@ -529,7 +587,7 @@ test("authenticated workspace routes use bearer user instead of request userId",
 
   assert.equal(completeResponse.statusCode, 200);
   assert.equal(completeResponse.json().wallet.userId, registeredUser.id);
-  assert.equal(completeResponse.json().wallet.availableCredits, 20_000_000);
+  assert.equal(completeResponse.json().wallet.availableCredits, 2_000);
 
   const currentSubscriptionResponse = await app.inject({
     method: "GET",
@@ -1032,6 +1090,7 @@ test("GET /plans returns country-specific subscription pricing", async () => {
   assert.equal(kzResponse.statusCode, 200);
   assert.equal(ruResponse.statusCode, 200);
   assert.equal(kzResponse.json().plans[0].id, "base");
+  assert.equal(kzResponse.json().plans[0].monthlyCredits, 2_000);
   assert.equal(kzResponse.json().plans[0].price.provider, "kaspi");
   assert.equal(kzResponse.json().plans[0].price.currency, "KZT");
   assert.equal(ruResponse.json().plans[0].price.provider, "yookassa");
@@ -1071,7 +1130,7 @@ test("subscription mock checkout activates plan and grants credits once", async 
   const completeBody = completeResponse.json();
   assert.equal(completeBody.subscription.status, "active");
   assert.equal(completeBody.subscription.planId, "base");
-  assert.equal(completeBody.wallet.availableCredits, 20_012_500);
+  assert.equal(completeBody.wallet.availableCredits, 14_500);
 
   const repeatedCompleteResponse = await app.inject({
     method: "POST",
@@ -1082,7 +1141,7 @@ test("subscription mock checkout activates plan and grants credits once", async 
   });
 
   assert.equal(repeatedCompleteResponse.statusCode, 200);
-  assert.equal(repeatedCompleteResponse.json().wallet.availableCredits, 20_012_500);
+  assert.equal(repeatedCompleteResponse.json().wallet.availableCredits, 14_500);
 
   const currentResponse = await app.inject({
     method: "GET",
@@ -1138,7 +1197,7 @@ test("YooKassa webhook activates a pending RU checkout", async () => {
   assert.equal(webhookResponse.statusCode, 200);
   assert.equal(webhookResponse.json().subscription.status, "active");
   assert.equal(webhookResponse.json().subscription.provider, "yookassa");
-  assert.equal(webhookResponse.json().wallet.availableCredits, 20_012_500);
+  assert.equal(webhookResponse.json().wallet.availableCredits, 14_500);
 
   const duplicateWebhookResponse = await app.inject({
     method: "POST",
@@ -1152,7 +1211,7 @@ test("YooKassa webhook activates a pending RU checkout", async () => {
   });
 
   assert.equal(duplicateWebhookResponse.statusCode, 200);
-  assert.equal(duplicateWebhookResponse.json().wallet.availableCredits, 20_012_500);
+  assert.equal(duplicateWebhookResponse.json().wallet.availableCredits, 14_500);
 
   const ledgerResponse = await app.inject({
     method: "GET",
@@ -1161,7 +1220,7 @@ test("YooKassa webhook activates a pending RU checkout", async () => {
 
   assert.equal(ledgerResponse.statusCode, 200);
   assert.equal(
-    ledgerResponse.json().entries.filter((entry: { type: string; amountCredits: number }) => entry.type === "topup" && entry.amountCredits === 20_000_000).length,
+    ledgerResponse.json().entries.filter((entry: { type: string; amountCredits: number }) => entry.type === "topup" && entry.amountCredits === 2_000).length,
     1
   );
 

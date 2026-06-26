@@ -192,13 +192,14 @@ export class GenerationService {
       return fail(new DomainError("not_found", "Generation job was not found.", 404));
     }
 
-    if (job.status !== "running") {
+    const operationName = stringMetadata(job, "operationName");
+    const recoveringRefundedArtifact = canRecoverRefundedArtifact(job, operationName);
+    if (job.status !== "running" && !recoveringRefundedArtifact) {
       return ok({
         job,
       });
     }
 
-    const operationName = stringMetadata(job, "operationName");
     if (!operationName) {
       return ok({
         job,
@@ -239,13 +240,14 @@ export class GenerationService {
       const finalized = await this.finalizeSucceededJob({
         userId: input.userId,
         job,
-        finalCredits: job.reservedCredits,
+        finalCredits: recoveringRefundedArtifact ? 0 : job.reservedCredits,
         mimeType: refreshResult.mimeType ?? defaultMimeType(job.modality),
         base64Data: refreshResult.base64Data,
         providerUri: refreshResult.providerUri,
         metadata: {
           providerRaw: refreshResult.raw,
         },
+        skipBillingCapture: recoveringRefundedArtifact,
       });
 
       return ok({
@@ -312,8 +314,9 @@ export class GenerationService {
     base64Data?: string;
     providerUri?: string;
     metadata?: Record<string, unknown>;
+    skipBillingCapture?: boolean;
   }) {
-    if (input.job.reservationId) {
+    if (input.job.reservationId && !input.skipBillingCapture) {
       const captured = await this.billing.capture({
         userId: input.userId,
         reservationId: input.job.reservationId,
@@ -423,6 +426,12 @@ function publicMediaErrorMessage(error: unknown) {
   }
 
   return message;
+}
+
+function canRecoverRefundedArtifact(job: MediaGenerationJob, operationName?: string) {
+  if (!operationName) return false;
+  if (job.status !== "refunded") return false;
+  return job.errorMessage === "Gemini operation completed without a media artifact.";
 }
 
 function artifactUrl(jobId: string) {

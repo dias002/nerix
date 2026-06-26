@@ -95,12 +95,12 @@ export class SubscriptionService {
     });
   }
 
-  async completeMockCheckout(input: { checkoutId: string }) {
-    if (!config.PAYMENT_MOCK_CHECKOUT_ENABLED) {
+  async completeMockCheckout(input: { checkoutId: string; userId: string }) {
+    if (process.env.NODE_ENV === "production" || config.NODE_ENV === "production" || !config.PAYMENT_MOCK_CHECKOUT_ENABLED) {
       return fail(new DomainError("provider_unavailable", "Mock checkout is disabled.", 403));
     }
 
-    const completion = await this.repository.completeCheckoutPayment(input.checkoutId);
+    const completion = await this.repository.completeCheckoutPayment(input.checkoutId, undefined, input.userId);
     if (!completion) {
       return fail(new DomainError("not_found", `Checkout '${input.checkoutId}' was not found.`, 404));
     }
