@@ -16,6 +16,7 @@ export const ru = {
       businessIdeas: "Идеи роста",
       admin: "Админ",
       control: "Запуск",
+      aiBudget: "AI бюджет",
       users: "Пользователи",
       price: "Прайс",
       balance: "Баланс",

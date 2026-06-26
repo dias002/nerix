@@ -29,6 +29,10 @@ export type MediaGenerationRefreshResult = {
   raw?: Record<string, unknown>;
 };
 
+export type MediaGenerationCancelResult = {
+  raw?: Record<string, unknown>;
+};
+
 export type MediaArtifact = {
   mimeType: string;
   data: Buffer;
@@ -37,6 +41,7 @@ export type MediaArtifact = {
 export interface MediaGenerationProvider {
   generate(input: MediaGenerationProviderInput): Promise<MediaGenerationProviderResult>;
   refresh(operationName: string): Promise<MediaGenerationRefreshResult>;
+  cancel(operationName: string): Promise<MediaGenerationCancelResult>;
   fetchArtifact(uri: string): Promise<MediaArtifact>;
 }
 
@@ -64,6 +69,15 @@ export class MockMediaGenerationProvider implements MediaGenerationProvider {
     return {
       status: "failed" as const,
       errorMessage: "Mock media generations complete synchronously.",
+    };
+  }
+
+  async cancel(_operationName?: string) {
+    return {
+      raw: {
+        mock: true,
+        cancelled: true,
+      },
     };
   }
 
@@ -136,6 +150,32 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
       mimeType: artifact.mimeType,
       base64Data: artifact.base64Data,
       providerUri: artifact.uri,
+      raw: body,
+    };
+  }
+
+  async cancel(operationName: string) {
+    if (!config.GOOGLE_AI_API_KEY) {
+      throw new Error("GOOGLE_AI_API_KEY is required for Gemini media generation cancellation.");
+    }
+
+    const url = new URL(`https://generativelanguage.googleapis.com/v1beta/${operationName}:cancel`);
+    url.searchParams.set("key", config.GOOGLE_AI_API_KEY);
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({}),
+    });
+
+    const body = await readJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(`Gemini operation cancel failed with ${response.status}: ${JSON.stringify(body).slice(0, 500)}`);
+    }
+
+    return {
       raw: body,
     };
   }
@@ -250,7 +290,13 @@ export class BackendMediaGenerationProvider implements MediaGenerationProvider {
   }
 
   async refresh(operationName: string) {
+    if (operationName.startsWith("mock://")) return this.mock.refresh();
     return this.gemini.refresh(operationName);
+  }
+
+  async cancel(operationName: string) {
+    if (operationName.startsWith("mock://")) return this.mock.cancel(operationName);
+    return this.gemini.cancel(operationName);
   }
 
   async fetchArtifact(uri: string) {
@@ -273,8 +319,19 @@ function extractMediaArtifact(
     "uri",
     "gcsUri",
     "gcs_uri",
+    "url",
     "videoUri",
     "video_uri",
+    "videoUrl",
+    "video_url",
+    "audioUri",
+    "audio_uri",
+    "audioUrl",
+    "audio_url",
+    "imageUri",
+    "image_uri",
+    "imageUrl",
+    "image_url",
     "downloadUri",
     "download_uri",
     "fileUri",
@@ -346,6 +403,19 @@ function extractFirstString(input: unknown, keys: string[]): string | undefined 
   }
 
   return undefined;
+}
+
+async function readJsonResponse(response: Response) {
+  const text = await response.text();
+  if (!text.trim()) return {};
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return {
+      body: text,
+    };
+  }
 }
 
 function inferMimeType(record: Record<string, unknown>) {

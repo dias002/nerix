@@ -1,4 +1,5 @@
 import { ok } from "../../domain/result.js";
+import { config } from "../../config.js";
 import type { DatabaseClient } from "../../database/index.js";
 import { getConfiguredProviders, getProviderPolicyMode } from "../ai-gateway/provider-registry.js";
 import { seedAgents } from "../agents/agent.repository.js";
@@ -112,6 +113,53 @@ export type AdminControlState = {
   contentBlocks: AdminContentBlockRecord[];
   auditLog: AdminAuditRecord[];
   policyMode: string;
+  note: string;
+};
+
+export type AdminAiBudgetProviderStatus = "ok" | "attention" | "risk" | "unknown";
+
+export type AdminAiBudgetProviderRecord = {
+  code: string;
+  name: string;
+  enabled: boolean;
+  backendConfigured: boolean;
+  trafficMode: "primary" | "reserve" | "paused";
+  model: string;
+  modalities: string[];
+  budgetUsd: number | null;
+  balanceUsd: number | null;
+  balanceSource: "manual_env" | "estimated_from_budget" | "not_configured";
+  estimatedCreditsRemaining: number | null;
+  spentCredits24h: number;
+  spentCredits7d: number;
+  spentCredits30d: number;
+  spentUsd30d: number;
+  requests24h: number;
+  requests7d: number;
+  requests30d: number;
+  avgCreditsPerDay30d: number;
+  avgUsdPerDay30d: number;
+  daysRemaining: number | null;
+  status: AdminAiBudgetProviderStatus;
+  refillHint: string;
+  lastActivityAt: string | null;
+};
+
+export type AdminAiBudgetState = {
+  providers: AdminAiBudgetProviderRecord[];
+  totals: {
+    budgetUsd: number | null;
+    balanceUsd: number | null;
+    estimatedCreditsRemaining: number | null;
+    spentCredits30d: number;
+    spentUsd30d: number;
+    avgUsdPerDay30d: number;
+    daysRemaining: number | null;
+    activeProviders: number;
+    configuredProviders: number;
+  };
+  creditsPerUsd: number;
+  generatedAt: string;
   note: string;
 };
 
@@ -272,6 +320,17 @@ type AiProviderSettingRow = {
   updated_at: Date | string;
 } & Record<string, unknown>;
 
+type AiBudgetUsageRow = {
+  provider: string | null;
+  requests_24h: string | number | null;
+  requests_7d: string | number | null;
+  requests_30d: string | number | null;
+  credits_24h: string | number | null;
+  credits_7d: string | number | null;
+  credits_30d: string | number | null;
+  last_activity_at: Date | string | null;
+} & Record<string, unknown>;
+
 type PromotionRow = {
   slug: string;
   title: string;
@@ -334,6 +393,8 @@ export type AdminPricingState = {
 const exchangeRateTtlMs = 24 * 60 * 60 * 1000;
 const cbrDailyUrl = "https://www.cbr.ru/scripts/XML_daily.asp";
 const nbkDailyUrl = "https://nationalbank.kz/rss/rates_all.xml";
+const aiBudgetProviderCodes = ["openai", "anthropic", "gemini"] as const;
+type AiBudgetProviderCode = (typeof aiBudgetProviderCodes)[number];
 
 export class AdminService {
   private exchangeRateCache: { expiresAt: number; rates: AdminPricingState["exchangeRates"] } | null = null;
@@ -673,6 +734,23 @@ export class AdminService {
     }
   }
 
+  async aiBudget() {
+    try {
+      await this.ensureControlSeeded();
+      const [aiProviders, usageByProvider] = await Promise.all([
+        this.aiProviderSettings(),
+        this.aiBudgetUsageByProvider(),
+      ]);
+      const providerRecords = aiProviders
+        .filter((provider) => isAiBudgetProviderCode(provider.code))
+        .map((provider) => buildAiBudgetProviderRecord(provider, usageByProvider.get(provider.code)));
+
+      return ok<AdminAiBudgetState>(buildAiBudgetState(providerRecords));
+    } catch {
+      return ok<AdminAiBudgetState>(fallbackAiBudgetState());
+    }
+  }
+
   async updateFeatureFlag(input: {
     key: string;
     enabled?: boolean;
@@ -997,6 +1075,77 @@ export class AdminService {
     );
 
     return result.rows.map((row) => mapAiProviderSettingRow(row, configuredProviders.get(row.provider_code)));
+  }
+
+  private async aiBudgetUsageByProvider() {
+    const usageByProvider = new Map<string, AiBudgetUsageRow>();
+
+    try {
+      const result = await this.database.query<AiBudgetUsageRow>(
+        `
+          with answer_usage as (
+            select
+              lower(provider) as provider,
+              coalesce(
+                case
+                  when provider_usage ->> 'finalCredits' ~ '^[0-9]+(\\.[0-9]+)?$'
+                    then (provider_usage ->> 'finalCredits')::numeric
+                end,
+                case
+                  when route_metadata ->> 'estimatedCredits' ~ '^[0-9]+(\\.[0-9]+)?$'
+                    then (route_metadata ->> 'estimatedCredits')::numeric
+                end,
+                0
+              ) as credits,
+              created_at
+            from message_answer_variants
+            where lower(provider) = any($1::text[])
+          ),
+          event_usage as (
+            select
+              lower(ap.code) as provider,
+              ue.charged_credits::numeric as credits,
+              ue.created_at
+            from usage_events ue
+            join ai_providers ap on ap.id = ue.provider_id
+            where lower(ap.code) = any($1::text[])
+          ),
+          event_count as (
+            select count(*)::int as value
+            from event_usage
+          ),
+          source_usage as (
+            select *
+            from event_usage
+            where (select value from event_count) > 0
+            union all
+            select *
+            from answer_usage
+            where (select value from event_count) = 0
+          )
+          select
+            provider,
+            count(*) filter (where created_at >= now() - interval '24 hours')::text as requests_24h,
+            count(*) filter (where created_at >= now() - interval '7 days')::text as requests_7d,
+            count(*) filter (where created_at >= now() - interval '30 days')::text as requests_30d,
+            coalesce(sum(credits) filter (where created_at >= now() - interval '24 hours'), 0)::text as credits_24h,
+            coalesce(sum(credits) filter (where created_at >= now() - interval '7 days'), 0)::text as credits_7d,
+            coalesce(sum(credits) filter (where created_at >= now() - interval '30 days'), 0)::text as credits_30d,
+            max(created_at) as last_activity_at
+          from source_usage
+          group by provider
+        `,
+        [[...aiBudgetProviderCodes]]
+      );
+
+      for (const row of result.rows) {
+        if (row.provider) usageByProvider.set(row.provider, row);
+      }
+    } catch {
+      return usageByProvider;
+    }
+
+    return usageByProvider;
   }
 
   private async promotions() {
@@ -1393,6 +1542,183 @@ function fallbackControlState(agents?: AgentRecord[]): AdminControlState {
       ? "API управления пока работает в fallback-режиме без записи в базу."
       : "API управления пока не подключен.",
   };
+}
+
+function buildAiBudgetState(providers: AdminAiBudgetProviderRecord[]): AdminAiBudgetState {
+  const budgetUsd = sumNullable(providers.map((provider) => provider.budgetUsd));
+  const balanceUsd = sumNullable(providers.map((provider) => provider.balanceUsd));
+  const estimatedCreditsRemaining =
+    balanceUsd === null ? null : Math.max(0, Math.floor(balanceUsd * config.AI_CREDITS_PER_USD));
+  const spentCredits30d = providers.reduce((sum, provider) => sum + provider.spentCredits30d, 0);
+  const spentUsd30d = creditsToUsd(spentCredits30d);
+  const avgUsdPerDay30d = spentUsd30d / 30;
+  const daysRemaining =
+    balanceUsd !== null && avgUsdPerDay30d > 0 ? roundMetric(balanceUsd / avgUsdPerDay30d, 1) : null;
+
+  return {
+    providers,
+    totals: {
+      budgetUsd,
+      balanceUsd,
+      estimatedCreditsRemaining,
+      spentCredits30d,
+      spentUsd30d,
+      avgUsdPerDay30d,
+      daysRemaining,
+      activeProviders: providers.filter((provider) => provider.enabled && provider.trafficMode !== "paused").length,
+      configuredProviders: providers.filter((provider) => provider.backendConfigured).length,
+    },
+    creditsPerUsd: config.AI_CREDITS_PER_USD,
+    generatedAt: new Date().toISOString(),
+    note:
+      "Остаток берется из *_BALANCE_USD, если переменная задана. Если задан только *_BUDGET_USD, баланс считается как бюджет минус расход за 30 дней. Расход считается по сохраненным ответам и генерациям в базе, внешние кабинеты провайдеров не опрашиваются.",
+  };
+}
+
+function buildAiBudgetProviderRecord(
+  provider: AdminAiProviderSettingRecord,
+  usageRow?: AiBudgetUsageRow
+): AdminAiBudgetProviderRecord {
+  const code = isAiBudgetProviderCode(provider.code) ? provider.code : "openai";
+  const budgetUsd = providerBudgetUsd(code);
+  const spentCredits24h = rowNumber(usageRow?.credits_24h);
+  const spentCredits7d = rowNumber(usageRow?.credits_7d);
+  const spentCredits30d = rowNumber(usageRow?.credits_30d);
+  const spentUsd30d = creditsToUsd(spentCredits30d);
+  const explicitBalanceUsd = providerBalanceUsd(code);
+  const balanceUsd =
+    explicitBalanceUsd ?? (budgetUsd === null ? null : Math.max(0, roundMetric(budgetUsd - spentUsd30d, 2)));
+  const balanceSource =
+    explicitBalanceUsd !== null ? "manual_env" : budgetUsd !== null ? "estimated_from_budget" : "not_configured";
+  const avgCreditsPerDay30d = spentCredits30d / 30;
+  const avgUsdPerDay30d = spentUsd30d / 30;
+  const daysRemaining =
+    balanceUsd !== null && avgUsdPerDay30d > 0 ? roundMetric(balanceUsd / avgUsdPerDay30d, 1) : null;
+  const status = aiBudgetStatus(provider, balanceUsd, daysRemaining);
+
+  return {
+    code: provider.code,
+    name: provider.name,
+    enabled: provider.enabled,
+    backendConfigured: provider.backendConfigured,
+    trafficMode: provider.trafficMode,
+    model: provider.model,
+    modalities: provider.modalities,
+    budgetUsd,
+    balanceUsd,
+    balanceSource,
+    estimatedCreditsRemaining:
+      balanceUsd === null ? null : Math.max(0, Math.floor(balanceUsd * config.AI_CREDITS_PER_USD)),
+    spentCredits24h,
+    spentCredits7d,
+    spentCredits30d,
+    spentUsd30d,
+    requests24h: rowNumber(usageRow?.requests_24h),
+    requests7d: rowNumber(usageRow?.requests_7d),
+    requests30d: rowNumber(usageRow?.requests_30d),
+    avgCreditsPerDay30d,
+    avgUsdPerDay30d,
+    daysRemaining,
+    status,
+    refillHint: aiBudgetRefillHint(code, provider, balanceUsd, daysRemaining, spentCredits30d),
+    lastActivityAt: usageRow?.last_activity_at ? toIsoString(usageRow.last_activity_at) : null,
+  };
+}
+
+function fallbackAiBudgetState(): AdminAiBudgetState {
+  const providers = getConfiguredProviders()
+    .filter((provider) => isAiBudgetProviderCode(provider.code))
+    .map((provider) =>
+      buildAiBudgetProviderRecord({
+        code: provider.code,
+        name: provider.name,
+        enabled: provider.enabled,
+        backendConfigured: provider.enabled,
+        model: provider.modelByModality.text ?? defaultProviderModel(provider.code),
+        trafficMode: provider.enabled ? "primary" : "paused",
+        modalities: provider.modalities,
+        reason: provider.reason,
+        updatedAt: new Date().toISOString(),
+      })
+    );
+
+  return buildAiBudgetState(providers);
+}
+
+function aiBudgetStatus(
+  provider: Pick<AdminAiProviderSettingRecord, "backendConfigured" | "enabled" | "trafficMode">,
+  balanceUsd: number | null,
+  daysRemaining: number | null
+): AdminAiBudgetProviderStatus {
+  if (!provider.backendConfigured) return "risk";
+  if (!provider.enabled || provider.trafficMode === "paused") return "attention";
+  if (balanceUsd === null) return "unknown";
+  if (balanceUsd <= 5 || (daysRemaining !== null && daysRemaining <= 3)) return "risk";
+  if (balanceUsd <= 15 || (daysRemaining !== null && daysRemaining <= 7)) return "attention";
+  return "ok";
+}
+
+function aiBudgetRefillHint(
+  code: AiBudgetProviderCode,
+  provider: Pick<AdminAiProviderSettingRecord, "backendConfigured" | "enabled" | "trafficMode">,
+  balanceUsd: number | null,
+  daysRemaining: number | null,
+  spentCredits30d: number
+) {
+  const envNames = providerBudgetEnvNames(code);
+  if (!provider.backendConfigured) return "Сначала добавьте API key провайдера и сделайте деплой backend.";
+  if (!provider.enabled || provider.trafficMode === "paused") return "Провайдер сейчас не принимает трафик. Проверьте вкладку запуска.";
+  if (balanceUsd === null) return `Заполните ${envNames.balance} или ${envNames.budget} в Render Environment.`;
+  if (spentCredits30d <= 0) return "Расхода за 30 дней пока нет. Баланс контролируется, но прогноз дней появится после первых запросов.";
+  if (daysRemaining !== null && daysRemaining <= 3) return "Пополнить сейчас: остаток меньше трех дней при текущем темпе.";
+  if (daysRemaining !== null && daysRemaining <= 7) return "Запланируйте пополнение: запас меньше недели.";
+  return "Запас выглядит нормальным при текущем темпе расхода.";
+}
+
+function providerBudgetUsd(code: AiBudgetProviderCode) {
+  if (code === "openai") return nullableNumber(config.OPENAI_BUDGET_USD);
+  if (code === "anthropic") return nullableNumber(config.ANTHROPIC_BUDGET_USD);
+  return nullableNumber(config.GEMINI_BUDGET_USD);
+}
+
+function providerBalanceUsd(code: AiBudgetProviderCode) {
+  if (code === "openai") return nullableNumber(config.OPENAI_BALANCE_USD);
+  if (code === "anthropic") return nullableNumber(config.ANTHROPIC_BALANCE_USD);
+  return nullableNumber(config.GEMINI_BALANCE_USD);
+}
+
+function providerBudgetEnvNames(code: AiBudgetProviderCode) {
+  if (code === "openai") return { budget: "OPENAI_BUDGET_USD", balance: "OPENAI_BALANCE_USD" };
+  if (code === "anthropic") return { budget: "ANTHROPIC_BUDGET_USD", balance: "ANTHROPIC_BALANCE_USD" };
+  return { budget: "GEMINI_BUDGET_USD", balance: "GEMINI_BALANCE_USD" };
+}
+
+function creditsToUsd(value: number) {
+  return roundMetric(value / config.AI_CREDITS_PER_USD, 2);
+}
+
+function isAiBudgetProviderCode(value: string): value is AiBudgetProviderCode {
+  return aiBudgetProviderCodes.includes(value as AiBudgetProviderCode);
+}
+
+function nullableNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function rowNumber(value: string | number | null | undefined) {
+  const numericValue = Number(value ?? 0);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function roundMetric(value: number, digits = 2) {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+}
+
+function sumNullable(values: Array<number | null>) {
+  const numericValues = values.filter((value): value is number => value !== null && Number.isFinite(value));
+  if (numericValues.length === 0) return null;
+  return roundMetric(numericValues.reduce((sum, value) => sum + value, 0), 2);
 }
 
 function defaultFeatureFlags(): AdminFeatureFlagRecord[] {

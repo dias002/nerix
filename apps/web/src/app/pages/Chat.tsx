@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import {
   Check,
   ChevronDown,
+  CircleStop,
   Copy,
   Download,
   FileText,
@@ -23,6 +24,7 @@ import { useLanguage } from "../i18n";
 import AuthPromptDialog from "../components/AuthPromptDialog";
 import {
   getAgents,
+  cancelGenerationJob,
   getChatConversation,
   fetchGenerationArtifact,
   regenerateChatMessage,
@@ -81,6 +83,7 @@ export default function Chat() {
   const [isListening, setIsListening] = useState(false);
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
   const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string>>({});
+  const [cancellingGenerationIds, setCancellingGenerationIds] = useState<Set<string>>(() => new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -215,6 +218,26 @@ export default function Chat() {
       ...prev,
       [job.id]: objectUrl,
     }));
+  };
+
+  const handleCancelGeneration = async (job: MediaGenerationJobApiRecord) => {
+    if (job.status !== "queued" && job.status !== "running") return;
+
+    setCancellingGenerationIds((prev) => new Set(prev).add(job.id));
+
+    try {
+      const response = await cancelGenerationJob(job.id);
+      updateGenerationJob(response.job);
+      window.dispatchEvent(new Event("nomduchat-usage-updated"));
+    } catch (error) {
+      setUnavailableNotice(toPublicApiError(error, "Не удалось остановить генерацию."));
+    } finally {
+      setCancellingGenerationIds((prev) => {
+        const next = new Set(prev);
+        next.delete(job.id);
+        return next;
+      });
+    }
   };
 
   const activeGenerationJobs = useMemo(
@@ -571,7 +594,12 @@ export default function Chat() {
                   }`}
                 >
                   {msg.generationJob ? (
-                    <GenerationJobCard job={msg.generationJob} artifactUrl={mediaObjectUrls[msg.generationJob.id]} />
+                    <GenerationJobCard
+                      job={msg.generationJob}
+                      artifactUrl={mediaObjectUrls[msg.generationJob.id]}
+                      isCancelling={cancellingGenerationIds.has(msg.generationJob.id)}
+                      onCancel={() => handleCancelGeneration(msg.generationJob!)}
+                    />
                   ) : (
                     msg.text
                   )}
@@ -772,10 +800,21 @@ export default function Chat() {
   );
 }
 
-function GenerationJobCard({ job, artifactUrl }: { job: MediaGenerationJobApiRecord; artifactUrl?: string }) {
+function GenerationJobCard({
+  job,
+  artifactUrl,
+  isCancelling,
+  onCancel,
+}: {
+  job: MediaGenerationJobApiRecord;
+  artifactUrl?: string;
+  isCancelling?: boolean;
+  onCancel?: () => void;
+}) {
   const isPending = job.status === "queued" || job.status === "running";
   const isReady = job.status === "succeeded";
   const isFailed = job.status === "failed" || job.status === "refunded";
+  const isCancelled = job.status === "cancelled";
   const title = mediaTitle(job.modality, job.status);
   const detail = mediaDetail(job);
 
@@ -791,7 +830,21 @@ function GenerationJobCard({ job, artifactUrl }: { job: MediaGenerationJobApiRec
             <div className="mt-1 text-xs text-gray-500">{detail}</div>
           </div>
         </div>
-        {artifactUrl ? (
+        {isPending && onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isCancelling}
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isCancelling ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.7} />
+            ) : (
+              <CircleStop className="h-3.5 w-3.5" strokeWidth={1.7} />
+            )}
+            Остановить
+          </button>
+        ) : artifactUrl ? (
           <a
             href={artifactUrl}
             download={`nomduchat-${job.modality}-${job.id.slice(0, 8)}${mediaExtension(job.resultMimeType)}`}
@@ -858,6 +911,12 @@ function GenerationJobCard({ job, artifactUrl }: { job: MediaGenerationJobApiRec
         {isFailed ? (
           <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
             {job.errorMessage || "Генерация не завершилась. Кредиты возвращены."}
+          </div>
+        ) : null}
+
+        {isCancelled ? (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-300">
+            Генерация остановлена. Кредиты вернулись на баланс.
           </div>
         ) : null}
       </div>
@@ -930,11 +989,12 @@ function coerceGenerationJob(value: unknown): MediaGenerationJobApiRecord | unde
 }
 
 function isGenerationStatus(status: string): status is MediaGenerationJobApiRecord["status"] {
-  return status === "queued" || status === "running" || status === "succeeded" || status === "failed" || status === "refunded";
+  return status === "queued" || status === "running" || status === "succeeded" || status === "failed" || status === "refunded" || status === "cancelled";
 }
 
 function generationStatusText(job: MediaGenerationJobApiRecord) {
   if (job.status === "succeeded") return `Готово. ${mediaTitle(job.modality, job.status)}`;
+  if (job.status === "cancelled") return "Генерация остановлена. Кредиты возвращены.";
   if (job.status === "failed" || job.status === "refunded") {
     return job.errorMessage || "Генерация не завершилась. Кредиты возвращены.";
   }
@@ -944,6 +1004,7 @@ function generationStatusText(job: MediaGenerationJobApiRecord) {
 function mediaTitle(modality: string, status: MediaGenerationJobApiRecord["status"]) {
   const pending = status === "queued" || status === "running";
   const failed = status === "failed" || status === "refunded";
+  if (status === "cancelled") return "Генерация остановлена";
   if (failed) return "Генерация остановилась";
   if (modality === "video") return pending ? "Собираю видео" : "Видео готово";
   if (modality === "music") return pending ? "Пишу музыку" : "Музыка готова";
@@ -956,6 +1017,7 @@ function mediaDetail(job: MediaGenerationJobApiRecord) {
   if (job.status === "queued") return "Задача в очереди. Обычно это занимает пару минут.";
   if (job.status === "running") return "Gemini уже работает. Можно остаться в чате, результат появится сам.";
   if (job.status === "succeeded") return "Файл можно посмотреть здесь или скачать.";
+  if (job.status === "cancelled") return "Процесс остановлен вручную.";
   return "Кредиты возвращены на баланс.";
 }
 

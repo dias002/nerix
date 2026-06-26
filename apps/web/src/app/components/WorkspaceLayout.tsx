@@ -1,7 +1,8 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
+import type { WalletBalance } from "@nomduchat/shared";
 import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Home, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { getUsageLimits, type UsageLimitsApiResponse } from "../api";
+import { getCurrentSubscription, getPlans, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 
@@ -12,6 +13,9 @@ export default function WorkspaceLayout() {
   const { canUseRoleSwitcher, isAuthenticated, logout, roleOverride, setRoleOverride, user } = useAuth();
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [usageLimits, setUsageLimits] = useState<UsageLimitsApiResponse | null>(null);
+  const [wallet, setWallet] = useState<WalletBalance | null>(null);
+  const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscriptionApiResponse | null>(null);
+  const [plans, setPlans] = useState<PlanApiRecord[]>([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("nomduchat-sidebar-collapsed") === "true";
@@ -44,7 +48,13 @@ export default function WorkspaceLayout() {
           icon: ShieldCheck,
           label: t.nav.admin,
           visible: true,
-          active: () => location.pathname === "/workspace/admin" && adminTab !== "users" && adminTab !== "memory" && adminTab !== "pricing" && adminTab !== "control",
+          active: () =>
+            location.pathname === "/workspace/admin" &&
+            adminTab !== "users" &&
+            adminTab !== "memory" &&
+            adminTab !== "pricing" &&
+            adminTab !== "control" &&
+            adminTab !== "ai-budget",
         },
         {
           path: "/workspace/admin?tab=control",
@@ -52,6 +62,13 @@ export default function WorkspaceLayout() {
           label: t.nav.control,
           visible: true,
           active: () => location.pathname === "/workspace/admin" && adminTab === "control",
+        },
+        {
+          path: "/workspace/admin?tab=ai-budget",
+          icon: Zap,
+          label: t.nav.aiBudget,
+          visible: true,
+          active: () => location.pathname === "/workspace/admin" && adminTab === "ai-budget",
         },
         {
           path: "/workspace/admin?tab=users",
@@ -96,13 +113,28 @@ export default function WorkspaceLayout() {
   const refreshUsageLimits = useCallback(() => {
     if (isAdminNavigation) {
       setUsageLimits(null);
+      setWallet(null);
+      setCurrentSubscription(null);
+      setPlans([]);
       return;
     }
 
-    getUsageLimits()
-      .then(setUsageLimits)
-      .catch(() => setUsageLimits(null));
-  }, [isAdminNavigation, user?.id, user?.activePlanId, roleOverride]);
+    const country = user?.country === "RU" ? "RU" : "KZ";
+
+    Promise.allSettled([getUsageLimits(), getWallet(), getCurrentSubscription(), getPlans(country)])
+      .then(([usageResult, walletResult, subscriptionResult, plansResult]) => {
+        setUsageLimits(usageResult.status === "fulfilled" ? usageResult.value : null);
+        setWallet(walletResult.status === "fulfilled" ? walletResult.value : null);
+        setCurrentSubscription(subscriptionResult.status === "fulfilled" ? subscriptionResult.value : null);
+        setPlans(plansResult.status === "fulfilled" ? plansResult.value.plans : []);
+      })
+      .catch(() => {
+        setUsageLimits(null);
+        setWallet(null);
+        setCurrentSubscription(null);
+        setPlans([]);
+      });
+  }, [isAdminNavigation, user?.id, user?.activePlanId, user?.country, roleOverride]);
 
   useEffect(() => {
     if (!isAdminNavigation) return;
@@ -279,7 +311,7 @@ export default function WorkspaceLayout() {
 
         {!sidebarCollapsed && !isAdminNavigation ? (
           <div className="hidden px-3 pb-3 md:block">
-            <UsageLimitPanel usage={usageLimits} />
+            <UsageLimitPanel usage={usageLimits} wallet={wallet} subscription={currentSubscription} plans={plans} />
           </div>
         ) : null}
 
@@ -426,7 +458,17 @@ export default function WorkspaceLayout() {
   );
 }
 
-function UsageLimitPanel({ usage }: { usage: UsageLimitsApiResponse | null }) {
+function UsageLimitPanel({
+  usage,
+  wallet,
+  subscription,
+  plans,
+}: {
+  usage: UsageLimitsApiResponse | null;
+  wallet: WalletBalance | null;
+  subscription: CurrentSubscriptionApiResponse | null;
+  plans: PlanApiRecord[];
+}) {
   if (!usage) {
     return (
       <div className="rounded-2xl border border-white/10 bg-[#070707] p-3 text-xs text-gray-500">
@@ -436,6 +478,12 @@ function UsageLimitPanel({ usage }: { usage: UsageLimitsApiResponse | null }) {
   }
 
   if (usage.hasActiveSubscription) {
+    const plan = plans.find((item) => item.id === subscription?.subscription?.planId) ?? plans.find((item) => item.id === usage.planId);
+    const availableCredits = wallet?.availableCredits ?? 0;
+    const monthlyCredits = plan?.monthlyCredits ?? Math.max(availableCredits, 1);
+    const remainingPercent =
+      monthlyCredits > 0 ? Math.min(100, Math.max(0, (availableCredits / monthlyCredits) * 100)) : 0;
+
     return (
       <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-3">
         <div className="flex items-center justify-between gap-2">
@@ -445,8 +493,18 @@ function UsageLimitPanel({ usage }: { usage: UsageLimitsApiResponse | null }) {
           </span>
         </div>
         <p className="mt-2 text-sm font-medium text-white">Текст, видео и песни доступны.</p>
-        <p className="mt-1 text-xs leading-relaxed text-emerald-100/60">
-          Лимит зависит от баланса nomduchat-кредитов.
+        <div className="mt-3 flex items-end justify-between gap-3">
+          <div>
+            <p className="text-xl font-semibold text-white">{formatCredits(availableCredits)}</p>
+            <p className="text-xs text-emerald-100/60">nomduchat-кредитов</p>
+          </div>
+          <p className="pb-0.5 text-xs text-emerald-100/60">{Math.round(remainingPercent)}%</p>
+        </div>
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${remainingPercent}%` }} />
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-emerald-100/60">
+          {plan ? `${plan.name}: пакет на ${formatCredits(plan.monthlyCredits)} кредитов.` : "Баланс обновляется после каждого запроса."}
         </p>
       </div>
     );
@@ -455,7 +513,7 @@ function UsageLimitPanel({ usage }: { usage: UsageLimitsApiResponse | null }) {
   const limit = usage.text.dailyLimit ?? 7;
   const remaining = usage.text.remainingToday ?? 0;
   const used = usage.text.usedToday ?? Math.max(0, limit - remaining);
-  const progress = limit > 0 ? Math.min(100, Math.max(0, (used / limit) * 100)) : 0;
+  const remainingProgress = limit > 0 ? Math.min(100, Math.max(0, (remaining / limit) * 100)) : 0;
 
   return (
     <div className="rounded-2xl border border-white/10 bg-[#070707] p-3">
@@ -470,13 +528,13 @@ function UsageLimitPanel({ usage }: { usage: UsageLimitsApiResponse | null }) {
           <p className="text-lg font-semibold text-white">{remaining}</p>
           <p className="text-xs text-gray-500">текстовых осталось</p>
         </div>
-        <p className="pb-0.5 text-xs text-gray-500">{used}/{limit}</p>
+        <p className="pb-0.5 text-xs text-gray-500">{Math.round(remainingProgress)}%</p>
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${progress}%` }} />
+        <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${remainingProgress}%` }} />
       </div>
       <p className="mt-3 text-xs leading-relaxed text-gray-500">
-        Видео и песни откроются после подписки.
+        Использовано {used}/{limit}. Видео и песни откроются после подписки.
       </p>
       <Link
         to="/workspace/balance"
@@ -486,4 +544,8 @@ function UsageLimitPanel({ usage }: { usage: UsageLimitsApiResponse | null }) {
       </Link>
     </div>
   );
+}
+
+function formatCredits(value: number) {
+  return new Intl.NumberFormat("ru-RU").format(Math.max(0, Math.round(value)));
 }

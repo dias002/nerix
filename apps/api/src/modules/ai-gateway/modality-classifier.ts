@@ -34,20 +34,22 @@ const explicitMusicGenerationNeedles = [
 const songWritingNeedles = ["песн", "текст песни", "куплет", "припев", "lyrics", "лирик"];
 const musicSubjectNeedles = ["песн", "музык", "трек", "бит", "джингл", "минус", "мелод"];
 const audioOutputNeedles = ["голос", "озвуч", "audio", "аудио", "mp3", "wav", "спой", "вокал", "запиши"];
+const generationVerbNeedles = ["сгенер", "создай", "создать", "сделай", "запиши", "спой", "generate", "create", "make"];
 
 export function inferModality(prompt: string): AiModality {
-  const normalized = prompt.toLowerCase();
+  const normalized = extractLatestRequest(prompt).toLowerCase();
 
   if (containsAny(normalized, codeNeedles)) return "code";
-  if (containsAny(normalized, imageNeedles)) return "image";
-  if (containsAny(normalized, videoNeedles)) return "video";
   if (
     containsAny(normalized, explicitMusicGenerationNeedles) ||
     wantsGeneratedAudio(normalized) ||
+    wantsGeneratedMusic(normalized) ||
     (containsAny(normalized, musicSubjectNeedles) && containsAny(normalized, audioOutputNeedles))
   ) {
     return "music";
   }
+  if (containsAny(normalized, imageNeedles)) return "image";
+  if (containsAny(normalized, videoNeedles)) return "video";
   if (containsAny(normalized, voiceNeedles)) return "voice";
 
   // "Напиши/сочини песню" is usually a text-writing request. Actual audio generation
@@ -62,5 +64,21 @@ function containsAny(value: string, needles: string[]) {
 }
 
 function wantsGeneratedAudio(value: string) {
-  return containsAny(value, ["аудио", "audio"]) && containsAny(value, ["сделай", "создай", "сгенер", "запиши", "make", "generate", "create"]);
+  return containsAny(value, ["аудио", "audio"]) && containsAny(value, generationVerbNeedles);
+}
+
+function wantsGeneratedMusic(value: string) {
+  return containsAny(value, musicSubjectNeedles) && containsAny(value, generationVerbNeedles);
+}
+
+function extractLatestRequest(prompt: string) {
+  const markers = ["Последняя просьба пользователя:", "Последнее сообщение пользователя:"];
+  for (const marker of markers) {
+    const markerIndex = prompt.lastIndexOf(marker);
+    if (markerIndex >= 0) {
+      return prompt.slice(markerIndex + marker.length).trim();
+    }
+  }
+
+  return prompt;
 }

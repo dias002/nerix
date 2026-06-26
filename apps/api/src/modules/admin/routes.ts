@@ -105,6 +105,13 @@ export async function registerAdminRoutes(app: FastifyInstance, admin: AdminServ
     return sendResult(reply, await admin.controlState());
   });
 
+  app.get("/admin/ai-budget", async (request, reply) => {
+    const currentUser = await resolveAdmin(request, auth);
+    if (!currentUser.ok) return sendResult(reply, currentUser);
+
+    return sendResult(reply, await admin.aiBudget());
+  });
+
   app.patch("/admin/control/feature-flags/:key", async (request, reply) => {
     const currentUser = await resolveAdmin(request, auth);
     if (!currentUser.ok) return sendResult(reply, currentUser);

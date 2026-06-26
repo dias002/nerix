@@ -16,6 +16,7 @@ export const en = {
       businessIdeas: "Growth ideas",
       admin: "Admin",
       control: "Control",
+      aiBudget: "AI budget",
       users: "Users",
       price: "Pricing",
       balance: "Balance",

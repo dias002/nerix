@@ -132,7 +132,7 @@ export type MediaGenerationJobApiRecord = {
   userId: string;
   agentId?: string;
   modality: AiModality;
-  status: "queued" | "running" | "succeeded" | "failed" | "refunded";
+  status: "queued" | "running" | "succeeded" | "failed" | "refunded" | "cancelled";
   prompt: string;
   provider?: string;
   model?: string;
@@ -479,6 +479,51 @@ export type AdminControlStateApiResponse = {
   contentBlocks: AdminContentBlockApiRecord[];
   auditLog: AdminAuditApiRecord[];
   policyMode: string;
+  note: string;
+};
+
+export type AdminAiBudgetProviderApiRecord = {
+  code: string;
+  name: string;
+  enabled: boolean;
+  backendConfigured: boolean;
+  trafficMode: "primary" | "reserve" | "paused";
+  model: string;
+  modalities: AiModality[];
+  budgetUsd: number | null;
+  balanceUsd: number | null;
+  balanceSource: "manual_env" | "estimated_from_budget" | "not_configured";
+  estimatedCreditsRemaining: number | null;
+  spentCredits24h: number;
+  spentCredits7d: number;
+  spentCredits30d: number;
+  spentUsd30d: number;
+  requests24h: number;
+  requests7d: number;
+  requests30d: number;
+  avgCreditsPerDay30d: number;
+  avgUsdPerDay30d: number;
+  daysRemaining: number | null;
+  status: "ok" | "attention" | "risk" | "unknown";
+  refillHint: string;
+  lastActivityAt: string | null;
+};
+
+export type AdminAiBudgetApiResponse = {
+  providers: AdminAiBudgetProviderApiRecord[];
+  totals: {
+    budgetUsd: number | null;
+    balanceUsd: number | null;
+    estimatedCreditsRemaining: number | null;
+    spentCredits30d: number;
+    spentUsd30d: number;
+    avgUsdPerDay30d: number;
+    daysRemaining: number | null;
+    activeProviders: number;
+    configuredProviders: number;
+  };
+  creditsPerUsd: number;
+  generatedAt: string;
   note: string;
 };
 
@@ -1046,6 +1091,10 @@ export async function getAdminControlState() {
   return request<AdminControlStateApiResponse>("/admin/control");
 }
 
+export async function getAdminAiBudget() {
+  return request<AdminAiBudgetApiResponse>("/admin/ai-budget");
+}
+
 export async function updateAdminFeatureFlag(
   key: string,
   input: Partial<Pick<AdminFeatureFlagApiRecord, "enabled" | "label" | "description" | "audience" | "rolloutPercent">>
@@ -1431,6 +1480,13 @@ export async function submitChatMessageFeedback(input: {
 
 export async function refreshGenerationJob(jobId: string) {
   return request<{ job: MediaGenerationJobApiRecord }>(`/generation/jobs/${encodeURIComponent(jobId)}/refresh`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function cancelGenerationJob(jobId: string) {
+  return request<{ job: MediaGenerationJobApiRecord }>(`/generation/jobs/${encodeURIComponent(jobId)}/cancel`, {
     method: "POST",
     body: JSON.stringify({}),
   });

@@ -1,6 +1,6 @@
 import type { AiModality, JobStatus } from "@nomduchat/shared";
 
-export type MediaGenerationStatus = Extract<JobStatus, "queued" | "running" | "succeeded" | "failed" | "refunded">;
+export type MediaGenerationStatus = Extract<JobStatus, "queued" | "running" | "succeeded" | "failed" | "refunded" | "cancelled">;
 
 export type MediaGenerationJob = {
   id: string;

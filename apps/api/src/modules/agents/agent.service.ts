@@ -37,17 +37,12 @@ export class AgentService {
       return this.requireAgent(requestedAgentId);
     }
 
-    const normalized = prompt.toLowerCase();
+    const normalized = extractLatestRequest(prompt).toLowerCase();
     const enabledAgents = await this.repository.listEnabled();
     const selectEnabledAgent = (agentId: string) => {
       const agent = enabledAgents.find((enabledAgent) => enabledAgent.id === agentId);
       return agent ? ok(agent) : null;
     };
-
-    if (containsAny(normalized, ["видео", "video", "ролик", "shorts", "reels", "анимац", "сценарий ролика"])) {
-      const agent = selectEnabledAgent("video");
-      if (agent) return agent;
-    }
 
     if (
       wantsGeneratedAudio(normalized) ||
@@ -69,6 +64,11 @@ export class AgentService {
       ])
     ) {
       const agent = selectEnabledAgent("music");
+      if (agent) return agent;
+    }
+
+    if (containsAny(normalized, ["видео", "video", "ролик", "shorts", "reels", "анимац", "сценарий ролика"])) {
+      const agent = selectEnabledAgent("video");
       if (agent) return agent;
     }
 
@@ -141,4 +141,16 @@ function containsAny(value: string, needles: string[]) {
 
 function wantsGeneratedAudio(value: string) {
   return containsAny(value, ["аудио", "audio"]) && containsAny(value, ["сделай", "создай", "сгенер", "запиши", "make", "generate", "create"]);
+}
+
+function extractLatestRequest(prompt: string) {
+  const markers = ["Последняя просьба пользователя:", "Последнее сообщение пользователя:"];
+  for (const marker of markers) {
+    const markerIndex = prompt.lastIndexOf(marker);
+    if (markerIndex >= 0) {
+      return prompt.slice(markerIndex + marker.length).trim();
+    }
+  }
+
+  return prompt;
 }

@@ -17,7 +17,7 @@ export type AgentCategory =
 
 export type AiModality = "text" | "code" | "image" | "video" | "music" | "voice" | "file";
 
-export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "refunded";
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "refunded" | "cancelled";
 
 export type LedgerEntryType =
   | "topup"

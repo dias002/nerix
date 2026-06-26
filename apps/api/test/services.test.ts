@@ -46,12 +46,15 @@ test("modality classifier detects media and code tasks", () => {
   assert.equal(inferModality("сочини песню про войну"), "text");
   assert.equal(inferModality("напиши текст песни для рекламы"), "text");
   assert.equal(inferModality("сгенерируй трек для рекламы"), "music");
+  assert.equal(inferModality("сгенерируй короткий музыкальный трек про кофе"), "music");
   assert.equal(inferModality("теперь сделай мне именно голосовым песню"), "music");
   assert.equal(inferModality("сгенерируй мне картинку по этому тексту"), "image");
   assert.equal(inferModality("озвучь этот текст голосом"), "voice");
   assert.equal(inferModality("сделай мне прям аудио"), "music");
+  assert.equal(inferModality("Контекст диалога:\nсоздай видео про кофе\n\nПоследнее сообщение пользователя:\nсделай мне прям аудио"), "music");
   assert.equal(inferModality("найди bug в коде"), "code");
   assert.equal(inferModality("создай видео ролик"), "video");
+  assert.equal(inferModality("сделай видео на 3 секунды про кофе"), "video");
   assert.equal(inferModality("обычный вопрос"), "text");
 });
 
@@ -799,6 +802,27 @@ test("Gemini media provider extracts video URI from completed Veo operation", as
     const url = new URL(calls[0].url);
     assert.equal(url.pathname, "/v1beta/models/veo-test/operations/video-test");
     assert.equal(url.searchParams.get("key"), "gemini-key");
+  });
+});
+
+test("Gemini media provider cancels long running operations", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({});
+    }, async () => {
+      const result = await new GeminiMediaGenerationProvider().cancel("models/veo-test/operations/video-test");
+      assert.deepEqual(result.raw, {});
+    });
+
+    assert.equal(calls.length, 1);
+    const url = new URL(calls[0].url);
+    assert.equal(url.origin, "https://generativelanguage.googleapis.com");
+    assert.equal(url.pathname, "/v1beta/models/veo-test/operations/video-test:cancel");
+    assert.equal(url.searchParams.get("key"), "gemini-key");
+    assert.equal(calls[0].init?.method, "POST");
   });
 });
 

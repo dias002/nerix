@@ -29,6 +29,7 @@ import {
   Wallet,
 } from "lucide-react";
 import {
+  getAdminAiBudget,
   getAdminControlState,
   getAdminUsers,
   getAdminOverview,
@@ -40,6 +41,7 @@ import {
   updateAdminPlanPrice,
   updateAdminPromotion,
   type AdminAgentApiRecord,
+  type AdminAiBudgetApiResponse,
   type AdminAiProviderSettingApiRecord,
   type AdminContentBlockApiRecord,
   type AdminControlStateApiResponse,
@@ -53,7 +55,7 @@ import {
 import { useAuth } from "../auth";
 import { useSearchParams } from "react-router";
 
-type AdminTab = "direction" | "users" | "memory" | "pricing" | "control";
+type AdminTab = "direction" | "users" | "memory" | "pricing" | "control" | "ai-budget";
 
 type FeatureFlagDraft = {
   label: string;
@@ -82,6 +84,13 @@ const statusClass = {
   risk: "border-red-400/20 bg-red-400/10 text-red-100",
 };
 
+const aiBudgetStatusClass = {
+  ok: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
+  attention: "border-amber-400/20 bg-amber-400/10 text-amber-100",
+  risk: "border-red-400/20 bg-red-400/10 text-red-100",
+  unknown: "border-white/10 bg-white/[0.03] text-gray-400",
+};
+
 export default function Admin() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
@@ -90,6 +99,7 @@ export default function Admin() {
   const [overview, setOverview] = useState<AdminOverviewApiResponse | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUsersApiResponse | null>(null);
   const [controlState, setControlState] = useState<AdminControlStateApiResponse | null>(null);
+  const [aiBudget, setAiBudget] = useState<AdminAiBudgetApiResponse | null>(null);
   const [userSearch, setUserSearch] = useState("");
   const [draftPrices, setDraftPrices] = useState<Record<string, string>>({});
   const [providerModelDrafts, setProviderModelDrafts] = useState<Record<string, string>>({});
@@ -99,6 +109,7 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(false);
   const [controlLoading, setControlLoading] = useState(false);
+  const [aiBudgetLoading, setAiBudgetLoading] = useState(false);
   const [savingPrice, setSavingPrice] = useState<string | null>(null);
   const [controlBusyKey, setControlBusyKey] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -107,9 +118,11 @@ export default function Admin() {
   const emptyOverview = useMemo(createEmptyAdminOverview, []);
   const emptyUsers = useMemo(() => createEmptyAdminUsers(userSearch), [userSearch]);
   const emptyControlState = useMemo(createEmptyAdminControlState, []);
+  const emptyAiBudget = useMemo(createEmptyAdminAiBudget, []);
   const effectiveOverview = overview ?? emptyOverview;
   const effectiveUsers = adminUsers ?? emptyUsers;
   const effectiveControl = controlState ?? emptyControlState;
+  const effectiveAiBudget = aiBudget ?? emptyAiBudget;
 
   const pricing = effectiveOverview.pricing;
   const memory = effectiveOverview.memory;
@@ -151,6 +164,35 @@ export default function Admin() {
     ],
     [effectiveControl]
   );
+  const aiBudgetStats = useMemo(
+    () => [
+      {
+        label: "Остаток",
+        value: formatUsdNullable(effectiveAiBudget.totals.balanceUsd),
+        detail: `бюджет ${formatUsdNullable(effectiveAiBudget.totals.budgetUsd)}`,
+        icon: Wallet,
+      },
+      {
+        label: "Кредиты",
+        value: formatCompactCredits(effectiveAiBudget.totals.estimatedCreditsRemaining),
+        detail: `${formatNumber(effectiveAiBudget.creditsPerUsd)} кредитов за $1`,
+        icon: Sparkles,
+      },
+      {
+        label: "Расход за 30 дней",
+        value: formatUsdNullable(effectiveAiBudget.totals.spentUsd30d),
+        detail: `${formatCompactCredits(effectiveAiBudget.totals.spentCredits30d)} списано`,
+        icon: Activity,
+      },
+      {
+        label: "Прогноз",
+        value: formatDaysRemaining(effectiveAiBudget.totals.daysRemaining),
+        detail: `${formatUsdNullable(effectiveAiBudget.totals.avgUsdPerDay30d)} в день`,
+        icon: TrendingUp,
+      },
+    ],
+    [effectiveAiBudget]
+  );
 
   const memoryStats = useMemo(
     () => [
@@ -179,6 +221,12 @@ export default function Admin() {
   useEffect(() => {
     if (activeTab === "control") {
       void loadControl();
+    }
+  }, [activeTab, user?.permissions.adminPanel]);
+
+  useEffect(() => {
+    if (activeTab === "ai-budget") {
+      void loadAiBudget();
     }
   }, [activeTab, user?.permissions.adminPanel]);
 
@@ -245,6 +293,23 @@ export default function Admin() {
       setControlState(null);
     } finally {
       setControlLoading(false);
+    }
+  };
+
+  const loadAiBudget = async () => {
+    if (!user?.permissions.adminPanel) {
+      setAiBudget(null);
+      setAiBudgetLoading(false);
+      return;
+    }
+
+    setAiBudgetLoading(true);
+    try {
+      setAiBudget(await getAdminAiBudget());
+    } catch {
+      setAiBudget(null);
+    } finally {
+      setAiBudgetLoading(false);
     }
   };
 
@@ -448,14 +513,19 @@ export default function Admin() {
                 void loadUsers(userSearch);
               } else if (activeTab === "control") {
                 void loadControl();
+              } else if (activeTab === "ai-budget") {
+                void loadAiBudget();
               } else {
                 void loadOverview();
               }
             }}
-            disabled={loading || usersLoading || controlLoading}
+            disabled={loading || usersLoading || controlLoading || aiBudgetLoading}
             className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <RefreshCw className={`h-4 w-4 ${loading || usersLoading || controlLoading ? "animate-spin" : ""}`} strokeWidth={1.7} />
+            <RefreshCw
+              className={`h-4 w-4 ${loading || usersLoading || controlLoading || aiBudgetLoading ? "animate-spin" : ""}`}
+              strokeWidth={1.7}
+            />
             Обновить
           </button>
         </header>
@@ -1348,6 +1418,48 @@ export default function Admin() {
           </section>
         ) : null}
 
+        {activeTab === "ai-budget" ? (
+          <section className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {aiBudgetStats.map((stat) => (
+                <article key={stat.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                  <stat.icon className="h-5 w-5 text-gray-500" strokeWidth={1.5} />
+                  <p className="mt-6 text-3xl font-medium">{aiBudgetLoading ? "..." : stat.value}</p>
+                  <h2 className="mt-2 text-sm font-medium text-gray-200">{stat.label}</h2>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-600">{stat.detail}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black p-5">
+              <div className="flex items-start gap-3">
+                <Lock className="mt-0.5 h-5 w-5 shrink-0 text-gray-500" strokeWidth={1.5} />
+                <div className="min-w-0 space-y-2">
+                  <p className="text-sm leading-relaxed text-gray-400">
+                    {effectiveAiBudget.note}
+                  </p>
+                  <p className="text-xs leading-relaxed text-gray-600">
+                    Чтобы задать точный остаток, добавьте в Render Environment переменные OPENAI_BALANCE_USD,
+                    ANTHROPIC_BALANCE_USD и GEMINI_BALANCE_USD. Если их нет, используется расчет от *_BUDGET_USD минус расход.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-3">
+              {effectiveAiBudget.providers.length > 0 ? (
+                effectiveAiBudget.providers.map((provider) => (
+                  <AiBudgetProviderCard key={provider.code} provider={provider} />
+                ))
+              ) : (
+                <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 text-sm leading-relaxed text-gray-500 xl:col-span-3">
+                  Данные по AI бюджету пока не загрузились. Проверьте backend, ключи провайдеров и переменные бюджета в Render.
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
+
         {activeTab === "pricing" ? (
           <section className="space-y-5">
             {pricing.exchangeRates.length > 0 ? (
@@ -1517,6 +1629,82 @@ function PaymentStat({
   );
 }
 
+function AiBudgetProviderCard({ provider }: { provider: AdminAiBudgetApiResponse["providers"][number] }) {
+  return (
+    <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xl font-medium text-white">{provider.name}</h2>
+            <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-gray-500">
+              {provider.code}
+            </span>
+          </div>
+          <p className="mt-2 truncate text-sm text-gray-500">{provider.model}</p>
+        </div>
+        <span className={`shrink-0 rounded-full border px-3 py-1 text-xs ${aiBudgetStatusClass[provider.status]}`}>
+          {aiBudgetStatusLabel(provider.status)}
+        </span>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-500">
+        <span className="rounded-full border border-white/10 bg-black px-3 py-1">
+          {provider.backendConfigured ? "ключ задан" : "ключ не задан"}
+        </span>
+        <span className="rounded-full border border-white/10 bg-black px-3 py-1">
+          {provider.enabled ? "включен" : "выключен"}
+        </span>
+        <span className="rounded-full border border-white/10 bg-black px-3 py-1">
+          {trafficModeLabel(provider.trafficMode)}
+        </span>
+      </div>
+
+      <div className="mt-5 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-black p-3">
+          <p className="text-xs text-gray-600">Остаток</p>
+          <p className="mt-2 text-lg font-medium text-white">{formatUsdNullable(provider.balanceUsd)}</p>
+          <p className="mt-1 text-xs text-gray-600">{balanceSourceLabel(provider.balanceSource)}</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black p-3">
+          <p className="text-xs text-gray-600">Кредиты</p>
+          <p className="mt-2 text-lg font-medium text-white">
+            {formatCompactCredits(provider.estimatedCreditsRemaining)}
+          </p>
+          <p className="mt-1 text-xs text-gray-600">примерный остаток</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black p-3">
+          <p className="text-xs text-gray-600">Расход 30 дней</p>
+          <p className="mt-2 text-lg font-medium text-white">{formatUsdNullable(provider.spentUsd30d)}</p>
+          <p className="mt-1 text-xs text-gray-600">{formatCompactCredits(provider.spentCredits30d)} кредитов</p>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-black p-3">
+          <p className="text-xs text-gray-600">Хватит на</p>
+          <p className="mt-2 text-lg font-medium text-white">{formatDaysRemaining(provider.daysRemaining)}</p>
+          <p className="mt-1 text-xs text-gray-600">{formatUsdNullable(provider.avgUsdPerDay30d)} в день</p>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/10 bg-black p-3">
+        <p className="text-xs text-gray-600">Запросы</p>
+        <p className="mt-2 text-sm text-gray-300">
+          24ч: {formatNumber(provider.requests24h)} · 7д: {formatNumber(provider.requests7d)} · 30д:{" "}
+          {formatNumber(provider.requests30d)}
+        </p>
+        <p className="mt-2 text-xs text-gray-600">
+          Модальности: {provider.modalities.map(modalityLabel).join(" · ") || "не заданы"}
+        </p>
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-white/10 bg-black p-3">
+        <p className="text-sm leading-relaxed text-gray-400">{provider.refillHint}</p>
+        <p className="mt-2 text-xs text-gray-700">
+          Последняя активность: {provider.lastActivityAt ? formatDateTime(provider.lastActivityAt) : "нет данных"}
+        </p>
+      </div>
+    </article>
+  );
+}
+
 function priceDrafts(pricing: AdminPricingApiRecord) {
   const drafts: Record<string, string> = {};
   for (const plan of pricing.plans) {
@@ -1591,7 +1779,9 @@ function contentBlockKey(block: Pick<AdminContentBlockApiRecord, "key" | "locale
 }
 
 function readAdminTab(value: string | null): AdminTab {
-  return value === "users" || value === "memory" || value === "pricing" || value === "control" ? value : "direction";
+  return value === "users" || value === "memory" || value === "pricing" || value === "control" || value === "ai-budget"
+    ? value
+    : "direction";
 }
 
 function adminHeader(tab: AdminTab) {
@@ -1618,6 +1808,12 @@ function adminHeader(tab: AdminTab) {
         title: "Запуск и контент",
         subtitle:
           "No-code управление тем, что работает в приложении: AI/API провайдеры, акции, флаги функций и тексты ключевых блоков.",
+      };
+    case "ai-budget":
+      return {
+        title: "AI бюджет",
+        subtitle:
+          "Остатки, расход и прогноз пополнения по OpenAI, Claude и Gemini. Баланс задается безопасно через env, расход считается по базе nomduchat.",
       };
     default:
       return {
@@ -1666,6 +1862,57 @@ function formatMoney(amountMinor: number, currency: string) {
     style: "currency",
     currency: currency === "RUB" || currency === "KZT" ? currency : "KZT",
   }).format(amountMinor / 100);
+}
+
+function formatUsdNullable(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "не задано";
+  return new Intl.NumberFormat("ru-RU", {
+    currency: "USD",
+    maximumFractionDigits: 2,
+    style: "currency",
+  }).format(value);
+}
+
+function formatCompactCredits(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "не задано";
+  return new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 1,
+    notation: "compact",
+  }).format(value);
+}
+
+function formatDaysRemaining(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "нет прогноза";
+  if (value <= 0) return "закончился";
+  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value)} дн.`;
+}
+
+function aiBudgetStatusLabel(value: AdminAiBudgetApiResponse["providers"][number]["status"]) {
+  const labels = {
+    ok: "норма",
+    attention: "внимание",
+    risk: "риск",
+    unknown: "нет данных",
+  };
+  return labels[value];
+}
+
+function balanceSourceLabel(value: AdminAiBudgetApiResponse["providers"][number]["balanceSource"]) {
+  const labels = {
+    manual_env: "точный env-остаток",
+    estimated_from_budget: "расчет от бюджета",
+    not_configured: "env не задан",
+  };
+  return labels[value];
+}
+
+function trafficModeLabel(value: AdminAiProviderSettingApiRecord["trafficMode"]) {
+  const labels = {
+    primary: "основной",
+    reserve: "резерв",
+    paused: "не используется",
+  };
+  return labels[value];
 }
 
 function modalityLabel(value: string) {
@@ -1737,6 +1984,27 @@ function createEmptyAdminControlState(): AdminControlStateApiResponse {
     auditLog: [],
     policyMode: "local",
     note: "Реальное состояние запуска загрузится из API. Демо-значения здесь не подставляются.",
+  };
+}
+
+function createEmptyAdminAiBudget(): AdminAiBudgetApiResponse {
+  return {
+    providers: [],
+    totals: {
+      budgetUsd: null,
+      balanceUsd: null,
+      estimatedCreditsRemaining: null,
+      spentCredits30d: 0,
+      spentUsd30d: 0,
+      avgUsdPerDay30d: 0,
+      daysRemaining: null,
+      activeProviders: 0,
+      configuredProviders: 0,
+    },
+    creditsPerUsd: 1_000,
+    generatedAt: new Date(0).toISOString(),
+    note:
+      "AI бюджет загрузится из API. Реальные внешние кабинеты провайдеров не опрашиваются напрямую.",
   };
 }
 

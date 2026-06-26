@@ -78,6 +78,23 @@ export async function registerGenerationRoutes(app: FastifyInstance, generation:
     return sendResult(reply, await generation.refreshJob({ userId: user.value.userId, jobId: params.data.jobId }));
   });
 
+  app.post("/generation/jobs/:jobId/cancel", async (request, reply) => {
+    const params = jobParamsSchema.safeParse(request.params);
+    if (!params.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Generation job id is required.",
+        },
+      });
+    }
+
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await generation.cancelJob({ userId: user.value.userId, jobId: params.data.jobId }));
+  });
+
   app.get("/generation/jobs/:jobId/artifact", async (request, reply) => {
     const params = jobParamsSchema.safeParse(request.params);
     if (!params.success) {

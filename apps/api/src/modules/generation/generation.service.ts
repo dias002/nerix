@@ -266,6 +266,55 @@ export class GenerationService {
     }
   }
 
+  async cancelJob(input: { userId: string; jobId: string }) {
+    const job = await this.generationRepository.findJob(input.userId, input.jobId);
+    if (!job) {
+      return fail(new DomainError("not_found", "Generation job was not found.", 404));
+    }
+
+    if (job.status !== "queued" && job.status !== "running") {
+      return ok({
+        job,
+      });
+    }
+
+    const operationName = stringMetadata(job, "operationName");
+    let providerCancelRaw: Record<string, unknown> | undefined;
+    let providerCancelError: string | undefined;
+
+    if (operationName) {
+      try {
+        providerCancelRaw = (await this.mediaProvider.cancel(operationName)).raw;
+      } catch (error) {
+        providerCancelError = error instanceof Error ? error.message : "Provider cancellation failed.";
+      }
+    }
+
+    if (job.reservationId && job.reservedCredits > 0) {
+      await this.billing.refund({
+        userId: input.userId,
+        reservationId: job.reservationId,
+        credits: job.reservedCredits,
+      });
+    }
+
+    const cancelled =
+      (await this.generationRepository.updateJob(input.userId, job.id, {
+        status: "cancelled",
+        finalCredits: 0,
+        errorMessage: "Генерация остановлена. Кредиты возвращены.",
+        metadata: compactObject({
+          cancelledAt: new Date().toISOString(),
+          providerCancelRaw,
+          providerCancelError,
+        }),
+      })) ?? job;
+
+    return ok({
+      job: cancelled,
+    });
+  }
+
   async getArtifact(input: { userId: string; jobId: string }) {
     const job = await this.generationRepository.findJob(input.userId, input.jobId);
     if (!job) {

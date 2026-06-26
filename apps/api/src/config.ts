@@ -64,6 +64,13 @@ const envSchema = z.object({
   GEMINI_IMAGE_MODEL: z.string().optional(),
   GEMINI_VIDEO_MODEL: z.string().optional(),
   GEMINI_MUSIC_MODEL: z.string().optional(),
+  OPENAI_BUDGET_USD: z.coerce.number().nonnegative().optional(),
+  OPENAI_BALANCE_USD: z.coerce.number().nonnegative().optional(),
+  ANTHROPIC_BUDGET_USD: z.coerce.number().nonnegative().optional(),
+  ANTHROPIC_BALANCE_USD: z.coerce.number().nonnegative().optional(),
+  GEMINI_BUDGET_USD: z.coerce.number().nonnegative().optional(),
+  GEMINI_BALANCE_USD: z.coerce.number().nonnegative().optional(),
+  AI_CREDITS_PER_USD: z.coerce.number().positive().default(1_000),
   AI_PROVIDER_POLICY: z.enum(["dev_allow_all", "production_rules"]).default("dev_allow_all"),
   AI_MOCK_PROVIDER_ENABLED: z
     .enum(["true", "false"])

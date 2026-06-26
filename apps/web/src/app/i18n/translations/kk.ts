@@ -16,6 +16,7 @@ export const kk = {
       businessIdeas: "Өсу идеялары",
       admin: "Админ",
       control: "Іске қосу",
+      aiBudget: "AI бюджет",
       users: "Пайдаланушылар",
       price: "Баға",
       balance: "Баланс",
