@@ -54,6 +54,10 @@ function preferredProviderOrder(input: {
   if (input.modality === "video") return ["gemini", "mock-provider"];
   if (input.modality === "music") return ["gemini", "mock-provider"];
 
+  if (input.agentId === "music" || input.agentId === "video") {
+    return ["gemini", "openai", "anthropic", "mock-provider"];
+  }
+
   if (isBusinessRoute(input)) {
     return ["anthropic", "openai", "gemini", "mock-provider"];
   }

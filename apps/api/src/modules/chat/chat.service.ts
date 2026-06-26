@@ -60,40 +60,53 @@ export class ChatService {
     }
 
     const prompt = buildPrompt(message, attachments);
+    const existingConversation = input.conversationId
+      ? await this.conversations.findById(input.conversationId)
+      : null;
+
+    if (input.conversationId && !existingConversation) {
+      return fail(new DomainError("not_found", "Conversation was not found.", 404));
+    }
+
+    if (existingConversation && existingConversation.userId !== input.userId) {
+      return fail(new DomainError("unauthorized", "Conversation belongs to another user.", 401));
+    }
+
+    const routeAgentId = input.agentId ?? existingConversation?.agentId;
 
     const routeResult = await this.aiGateway.route({
       userId: input.userId,
       country: input.country ?? "KZ",
       language: input.language ?? "ru",
-      agentId: input.agentId,
+      agentId: routeAgentId,
       prompt,
     });
     if (!routeResult.ok) {
       await this.conversations.recordAiError({
         userId: input.userId,
+        conversationId: existingConversation?.id ?? null,
         stage: "route",
         severity: "error",
         errorCode: routeResult.error.code,
         errorMessage: routeResult.error.message,
-        agentId: input.agentId ?? null,
+        agentId: routeAgentId ?? null,
         promptExcerpt: createPromptExcerpt(prompt),
         requestPayload: {
           country: input.country ?? "KZ",
           language: input.language ?? "ru",
-          agentId: input.agentId ?? null,
+          agentId: routeAgentId ?? null,
         },
       });
       return routeResult;
     }
 
     const conversation =
-      input.conversationId
-        ? await this.conversations.findById(input.conversationId)
-        : await this.conversations.create({
-            userId: input.userId,
-            agentId: routeResult.value.agentId,
-            title: createConversationTitle(message),
-          });
+      existingConversation ??
+      (await this.conversations.create({
+        userId: input.userId,
+        agentId: routeResult.value.agentId,
+        title: createConversationTitle(message),
+      }));
 
     if (!conversation) {
       return fail(new DomainError("not_found", "Conversation was not found.", 404));
@@ -205,7 +218,7 @@ export class ChatService {
       userId: input.userId,
       country: input.country ?? "KZ",
       language: input.language ?? "ru",
-      agentId: input.agentId ?? metadataAgentId,
+      agentId: input.agentId ?? metadataAgentId ?? conversation.agentId,
       prompt,
     });
     if (!routeResult.ok) {
@@ -217,7 +230,7 @@ export class ChatService {
         severity: "error",
         errorCode: routeResult.error.code,
         errorMessage: routeResult.error.message,
-        agentId: input.agentId ?? metadataAgentId ?? null,
+        agentId: input.agentId ?? metadataAgentId ?? conversation.agentId ?? null,
         promptExcerpt: createPromptExcerpt(prompt),
       });
       return routeResult;
@@ -525,6 +538,8 @@ function buildConversationPrompt(previousMessages: ConversationMessage[], curren
   return [
     "Используй контекст текущего диалога. Учитывай имена, просьбы, уточнения и ограничения, которые уже были сказаны.",
     "Не начинай разговор заново, если пользователь пишет короткое уточнение.",
+    "Если последнее сообщение пользователя спрашивает \"какие детали?\", \"что именно?\" или \"каких?\", отвечай относительно последней просьбы из контекста. Не спрашивай, какие детали пользователь имеет в виду.",
+    "Если запрос достаточно понятен, дай готовый результат и только потом предложи, что можно уточнить.",
     "",
     "Контекст диалога:",
     context,

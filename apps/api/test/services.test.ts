@@ -42,7 +42,9 @@ test("credits estimator has a minimum and applies multiplier", () => {
 });
 
 test("modality classifier detects media and code tasks", () => {
-  assert.equal(inferModality("сделай песню для рекламы"), "music");
+  assert.equal(inferModality("сочини песню про войну"), "text");
+  assert.equal(inferModality("напиши текст песни для рекламы"), "text");
+  assert.equal(inferModality("сгенерируй трек для рекламы"), "music");
   assert.equal(inferModality("найди bug в коде"), "code");
   assert.equal(inferModality("создай видео ролик"), "video");
   assert.equal(inferModality("обычный вопрос"), "text");
@@ -103,6 +105,7 @@ test("provider router separates supported and regional country routes", async ()
       ANTHROPIC_TEXT_MODEL: "anthropic-text",
       ANTHROPIC_CODE_MODEL: "anthropic-code",
       GOOGLE_AI_API_KEY: "gemini-key",
+      GEMINI_TEXT_MODEL: "gemini-text",
       GEMINI_IMAGE_MODEL: "gemini-image",
       GEMINI_VIDEO_MODEL: "gemini-video",
       GEMINI_MUSIC_MODEL: "gemini-music",
@@ -192,6 +195,21 @@ test("provider router separates supported and regional country routes", async ()
         {
           provider: "gemini",
           model: "gemini-music",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: Google Gemini is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          preferredModel: "music-primary",
+          agentId: "music",
+        }),
+        {
+          provider: "gemini",
+          model: "gemini-text",
           policyMode: "dev_allow_all",
           reason: "Dev policy: Google Gemini is available for KZ.",
         }
@@ -571,6 +589,52 @@ test("chat completions include previous messages for follow-up context", async (
       assert.match(followUpPrompt, /Контекст диалога/);
       assert.match(followUpPrompt, /Меня зовут Диас, помоги написать теплый текст про маму/);
       assert.match(followUpPrompt, /Последнее сообщение пользователя:\nкаких деталей тебе не хватает/);
+    }
+  );
+});
+
+test("chat follow-ups inherit the conversation agent and keep creative context", async () => {
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: true,
+      OPENAI_API_KEY: undefined,
+      ANTHROPIC_API_KEY: undefined,
+      GOOGLE_AI_API_KEY: undefined,
+    },
+    async () => {
+      const agents = new AgentService(new InMemoryAgentRepository());
+      const billing = new BillingService(new InMemoryWalletRepository(), agents);
+      const completionProvider = new CapturingCompletionProvider();
+      const aiGateway = new AiGatewayService(agents, billing, completionProvider);
+      const chat = new ChatService(new InMemoryConversationRepository(), aiGateway);
+
+      const firstResponse = await chat.sendMessage({
+        userId: "local-user",
+        country: "KZ",
+        language: "ru",
+        message: "сочини песню про войну",
+      });
+      assert.equal(firstResponse.ok, true);
+      if (!firstResponse.ok) return;
+      assert.equal(firstResponse.value.route.agentId, "music");
+      assert.equal(firstResponse.value.route.modality, "text");
+
+      const followUpResponse = await chat.sendMessage({
+        userId: "local-user",
+        country: "KZ",
+        language: "ru",
+        conversationId: firstResponse.value.conversationId,
+        message: "какие детали?",
+      });
+      assert.equal(followUpResponse.ok, true);
+      if (!followUpResponse.ok) return;
+      assert.equal(followUpResponse.value.route.agentId, "music");
+      assert.equal(followUpResponse.value.route.modality, "text");
+
+      const followUpPrompt = completionProvider.inputs.at(-1)?.prompt ?? "";
+      assert.match(followUpPrompt, /сочини песню про войну/);
+      assert.match(followUpPrompt, /какие детали/);
+      assert.match(followUpPrompt, /относительно последней просьбы/);
     }
   );
 });

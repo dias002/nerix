@@ -227,10 +227,10 @@ export default function Chat() {
 
       setConversationId(response.conversationId);
       setMessages((prev) => [...prev, toAssistantMessage(response, t.chat.response)]);
-    } catch {
+    } catch (sendError) {
       const fallbackMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: t.chat.response,
+        text: toPublicApiError(sendError, t.chat.response),
         sender: "ai",
       };
       setMessages((prev) => [...prev, fallbackMessage]);

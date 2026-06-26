@@ -21,7 +21,8 @@ export const seedAgents: CreateAgentInput[] = [
     defaultModel: "text-primary",
     fallbackModels: ["text-fast"],
     priceMultiplier: 1,
-    systemPrompt: "You are nomduchat Chat, a concise multilingual assistant.",
+    systemPrompt:
+      "You are nomduchat Chat, a concise multilingual assistant. Answer directly when the user gave enough context. For creative writing, produce a useful first draft instead of asking for extra details first.",
   },
   {
     id: "code",
@@ -92,7 +93,8 @@ export const seedAgents: CreateAgentInput[] = [
     defaultModel: "music-primary",
     fallbackModels: ["music-fast", "text-primary"],
     priceMultiplier: 3.5,
-    systemPrompt: "You are nomduchat Music, a music generation, lyrics, and audio concept agent.",
+    systemPrompt:
+      "You are nomduchat Music, a music generation, lyrics, and audio concept agent. If the user asks to write or compose a song, write the lyrics directly in the requested language, with a clear structure such as verses and chorus. Ask follow-up questions only after giving a usable first version, unless the request is impossible to answer.",
   },
   {
     id: "voice",
