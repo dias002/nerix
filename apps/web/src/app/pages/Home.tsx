@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { ArrowRight, BookOpen, ChevronDown } from "lucide-react";
+import { ArrowRight, BookOpen, Building2, ChevronDown } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 import LanguageSwitch from "../components/LanguageSwitch";
 import DownloadAppBanner from "../components/DownloadAppBanner";
@@ -84,6 +84,13 @@ export default function Home() {
                   <ArrowRight className="h-4 w-4" strokeWidth={1.6} />
                   {t.home.forBusiness}
                 </Link>
+                <Link
+                  to="/requisites"
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <Building2 className="h-4 w-4" strokeWidth={1.6} />
+                  Реквизиты
+                </Link>
               </div>
             </div>
           </div>
@@ -151,25 +158,6 @@ export default function Home() {
               ))}
             </div>
           </motion.div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {t.home.steps.map((step, index) => (
-              <motion.div
-                key={step.title}
-                initial={{ opacity: 1, y: 0 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-120px" }}
-                transition={{ duration: 0.45, delay: index * 0.06 }}
-                className="rounded-2xl border border-white/10 bg-[#0A0A0A]/80 p-5 backdrop-blur-md"
-              >
-                <div className="mb-5 text-sm text-gray-500">
-                  {String(index + 1).padStart(2, "0")}
-                </div>
-                <h3 className="text-lg font-medium text-white">{step.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">{step.text}</p>
-              </motion.div>
-            ))}
-          </div>
 
           <DownloadAppBanner />
         </div>

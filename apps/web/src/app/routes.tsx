@@ -2,13 +2,12 @@ import { createBrowserRouter } from "react-router";
 import Home from "./pages/Home";
 import About from "./pages/About";
 import Business from "./pages/Business";
+import Requisites from "./pages/Requisites";
 import AuthPage from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import WorkspaceLayout from "./components/WorkspaceLayout";
-import WorkspaceHome from "./pages/WorkspaceHome";
 import Chat from "./pages/Chat";
 import History from "./pages/History";
-import Agents from "./pages/Agents";
 import Memory from "./pages/Memory";
 import Mailings from "./pages/Mailings";
 import BusinessCabinet from "./pages/BusinessCabinet";
@@ -43,6 +42,14 @@ export const router = createBrowserRouter(
       Component: Business,
     },
     {
+      path: "/requisites",
+      Component: Requisites,
+    },
+    {
+      path: "/company",
+      Component: Requisites,
+    },
+    {
       path: "/telegram/miniapp/bot-builder",
       Component: TelegramBotMiniApp,
     },
@@ -62,10 +69,10 @@ export const router = createBrowserRouter(
       path: "/workspace",
       Component: WorkspaceLayout,
       children: [
-        { index: true, Component: WorkspaceHome },
+        { index: true, Component: Chat },
         { path: "chat", Component: Chat },
         { path: "history", Component: History },
-        { path: "agents", Component: Agents },
+        { path: "agents", Component: Chat },
         { path: "memory", Component: Memory },
         { path: "mailings", Component: Mailings },
         { path: "business", Component: BusinessCabinet },
@@ -75,6 +82,11 @@ export const router = createBrowserRouter(
         { path: "business/telegram-bot", Component: BusinessTelegramBot },
         { path: "business/website", Component: BusinessWebsiteBuilder },
         { path: "admin", Component: Admin },
+        { path: "admin/users", Component: Admin },
+        { path: "admin/memory", Component: Admin },
+        { path: "admin/pricing", Component: Admin },
+        { path: "admin/control", Component: Admin },
+        { path: "admin/ai-budget", Component: Admin },
         { path: "balance", Component: Balance },
         { path: "settings", Component: Settings },
         { path: "settings/profile", Component: SettingsProfile },
