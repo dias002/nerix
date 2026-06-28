@@ -4,6 +4,7 @@ const defaultApiUrl = resolveDefaultApiUrl();
 const apiUrl = (import.meta.env.VITE_API_URL ?? defaultApiUrl).replace(/\/$/, "");
 let accessToken: string | null = null;
 let localRoleOverride: string | null = null;
+const deviceIdStorageKey = "nomduchat-device-id";
 
 function resolveDefaultApiUrl() {
   if (!import.meta.env.PROD) return "http://127.0.0.1:4000";
@@ -253,6 +254,8 @@ export type SubscriptionCheckoutApiResponse = {
     monthlyCredits: number;
   };
 };
+
+export type SubscriptionCheckoutApiRecord = SubscriptionCheckoutApiResponse["checkout"];
 
 export type SubscriptionCompleteApiResponse = {
   checkout: SubscriptionCheckoutApiResponse["checkout"];
@@ -785,6 +788,30 @@ export type BusinessOpsOverviewApiResponse = {
   teamMessages: BusinessTeamMessageApiRecord[];
 };
 
+export type BusinessJobApiRecord = {
+  id: string;
+  workspaceId: string;
+  createdByUserId: string | null;
+  channel: "website" | "telegram" | "email" | "crm" | "internal";
+  capability: "website_generation" | "bot_setup" | "campaign_generation" | "knowledge_ingest" | "workspace_analysis";
+  taskType: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  payload: Record<string, unknown>;
+  result: Record<string, unknown> | null;
+  provider: string | null;
+  model: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+export type BusinessJobsApiResponse = {
+  workspaceId: string;
+  jobs: BusinessJobApiRecord[];
+};
+
 export type CreateBusinessCustomerConversationInput = {
   channel: BusinessCustomerChannel;
   customerName?: string;
@@ -843,6 +870,15 @@ export type TelegramBotOrderApiRecord = {
   systemPrompt: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type TelegramBotTestReplyApiRecord = {
+  orderId: string;
+  customerMessage: string;
+  reply: string;
+  shouldEscalate: boolean;
+  escalationContact: string;
+  matchedKnowledge: string[];
 };
 
 export type TelegramBotProductApiResponse = {
@@ -1011,6 +1047,7 @@ export async function registerUser(input: {
   name?: string;
   country?: "KZ" | "RU";
   language?: Language;
+  turnstileToken?: string;
 }) {
   return request<AuthApiResponse>("/auth/register", {
     method: "POST",
@@ -1027,6 +1064,22 @@ export async function loginUser(input: { email: string; password: string }) {
 
 export async function getCurrentUser() {
   return request<{ user: UserApiRecord }>("/auth/me");
+}
+
+export async function exportCurrentUserData() {
+  return request<unknown>("/users/me/export");
+}
+
+export async function deleteCurrentUser(confirmation: string) {
+  return request<{
+    userId: string;
+    deletedAt: string;
+    emailBeforeDeletion: string | null;
+    retainedRecords: string[];
+  }>("/users/me/delete", {
+    method: "POST",
+    body: JSON.stringify({ confirmation }),
+  });
 }
 
 export async function startOAuth(provider: "google" | "vk", returnTo = "/workspace") {
@@ -1081,6 +1134,10 @@ export async function getLedger() {
 
 export async function getCurrentSubscription() {
   return request<CurrentSubscriptionApiResponse>("/subscriptions/current");
+}
+
+export async function getSubscriptionCheckouts() {
+  return request<{ checkouts: SubscriptionCheckoutApiRecord[] }>("/subscriptions/checkouts");
 }
 
 export async function getAdminOverview() {
@@ -1163,12 +1220,13 @@ export async function updateAdminPlanPrice(input: {
   });
 }
 
-export async function createSubscriptionCheckout(input: { planId: PlanId; country?: "KZ" | "RU" }) {
+export async function createSubscriptionCheckout(input: { planId: PlanId; country?: "KZ" | "RU"; customerEmail?: string | null }) {
   return request<SubscriptionCheckoutApiResponse>("/subscriptions/checkout", {
     method: "POST",
     body: JSON.stringify({
       planId: input.planId,
       country: input.country ?? "KZ",
+      customerEmail: input.customerEmail ?? undefined,
     }),
   });
 }
@@ -1291,6 +1349,24 @@ export async function getBusinessOpsOverview() {
   return request<BusinessOpsOverviewApiResponse>("/business/ops");
 }
 
+export async function getBusinessJobs() {
+  return request<BusinessJobsApiResponse>("/business/jobs");
+}
+
+export async function getBusinessJob(jobId: string) {
+  return request<{ workspaceId: string; job: BusinessJobApiRecord }>(`/business/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export async function cancelBusinessJob(jobId: string) {
+  return request<{ workspaceId: string; job: BusinessJobApiRecord }>(
+    `/business/jobs/${encodeURIComponent(jobId)}/cancel`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    }
+  );
+}
+
 export async function createBusinessCustomerConversation(input: CreateBusinessCustomerConversationInput) {
   return request<{
     conversation: BusinessCustomerConversationApiRecord;
@@ -1397,6 +1473,16 @@ export async function createTelegramBotOrder(input: CreateTelegramBotOrderInput)
   });
 }
 
+export async function testTelegramBotOrder(input: { orderId: string; message: string }) {
+  return request<TelegramBotTestReplyApiRecord>(
+    `/telegram-bots/orders/${encodeURIComponent(input.orderId)}/test-message`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message: input.message }),
+    }
+  );
+}
+
 export async function createTelegramMiniAppDraft(input: TelegramMiniAppDraftInput) {
   return request<{ draft: TelegramMiniAppDraftApiRecord }>("/telegram-bots/miniapp/draft", {
     method: "POST",
@@ -1494,12 +1580,7 @@ export async function cancelGenerationJob(jobId: string) {
 
 export async function fetchGenerationArtifact(jobId: string) {
   const headers = new Headers();
-  if (accessToken) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
-  if (localRoleOverride) {
-    headers.set("X-nomduchat-Local-Role", localRoleOverride);
-  }
+  appendClientHeaders(headers);
 
   let response: Response;
   try {
@@ -1521,12 +1602,7 @@ export async function fetchGenerationArtifact(jobId: string) {
 async function request<T>(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
-  if (accessToken && !headers.has("Authorization")) {
-    headers.set("Authorization", `Bearer ${accessToken}`);
-  }
-  if (localRoleOverride && !headers.has("X-nomduchat-Local-Role")) {
-    headers.set("X-nomduchat-Local-Role", localRoleOverride);
-  }
+  appendClientHeaders(headers);
 
   let response: Response;
   try {
@@ -1544,6 +1620,32 @@ async function request<T>(path: string, init: RequestInit = {}) {
   }
 
   return response.json() as Promise<T>;
+}
+
+function appendClientHeaders(headers: Headers) {
+  if (accessToken && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+  if (localRoleOverride && !headers.has("X-nomduchat-Local-Role")) {
+    headers.set("X-nomduchat-Local-Role", localRoleOverride);
+  }
+  if (!headers.has("X-nomduchat-Device-Id")) {
+    headers.set("X-nomduchat-Device-Id", getOrCreateDeviceId());
+  }
+}
+
+function getOrCreateDeviceId() {
+  if (typeof window === "undefined") return "server-render";
+
+  const existing = window.localStorage.getItem(deviceIdStorageKey);
+  if (existing) return existing;
+
+  const nextId =
+    typeof window.crypto?.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  window.localStorage.setItem(deviceIdStorageKey, nextId);
+  return nextId;
 }
 
 export function toPublicApiError(error: unknown, fallback = "Не удалось выполнить действие.") {

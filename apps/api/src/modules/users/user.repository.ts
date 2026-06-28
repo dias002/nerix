@@ -4,8 +4,51 @@ import type { DatabaseClient } from "../../database/index.js";
 import { ensureLocalUser, LOCAL_USER_PUBLIC_ID, toDatabaseUserId, toPublicUserId } from "./local-user.js";
 import type { SystemRole, UserPermissions, UserRecord, WorkspaceRole } from "./user.types.js";
 
+export type UserDataExportRecord = {
+  generatedAt: string;
+  user: UserRecord;
+  counts: {
+    conversations: number;
+    messages: number;
+    memoryItems: number;
+    generationJobs: number;
+    businessWorkspaces: number;
+    businessMemberships: number;
+    telegramBotOrders: number;
+    subscriptionCheckouts: number;
+    ledgerEntries: number;
+  };
+  recentConversations: Array<{
+    id: string;
+    title: string;
+    messagesCount: number;
+    updatedAt: string;
+  }>;
+  memoryItems: Array<{
+    id: string;
+    title: string;
+    source: string | null;
+    updatedAt: string;
+  }>;
+  businessMemberships: Array<{
+    workspaceName: string;
+    roleKey: string;
+    roleTitle: string;
+    status: string;
+  }>;
+};
+
+export type UserDeletionResult = {
+  userId: string;
+  deletedAt: string;
+  emailBeforeDeletion: string | null;
+  retainedRecords: string[];
+};
+
 export interface UserRepository {
   findById(userId: string): Promise<UserRecord | null>;
+  exportData(userId: string, fallbackUser?: UserRecord): Promise<UserDataExportRecord | null>;
+  deactivateAccount(userId: string, fallbackUser?: UserRecord): Promise<UserDeletionResult | null>;
 }
 
 export class InMemoryUserRepository implements UserRepository {
@@ -30,6 +73,38 @@ export class InMemoryUserRepository implements UserRepository {
 
   async findById(userId: string) {
     return this.users.get(userId) ?? null;
+  }
+
+  async exportData(userId: string, fallbackUser?: UserRecord) {
+    const user = this.users.get(userId) ?? fallbackUser ?? null;
+    if (!user) return null;
+
+    return emptyExport(user);
+  }
+
+  async deactivateAccount(userId: string, fallbackUser?: UserRecord) {
+    const existing = this.users.get(userId) ?? fallbackUser ?? null;
+    if (!existing) return null;
+
+    const deletedAt = new Date().toISOString();
+    const anonymized: UserRecord = {
+      ...existing,
+      name: "Deleted user",
+      email: null,
+      phone: null,
+      businessWorkspace: null,
+      permissions: permissionsFor("user", "personal"),
+      workspaceRole: "personal",
+      activePlanId: null,
+    };
+    this.users.set(userId, anonymized);
+
+    return {
+      userId,
+      deletedAt,
+      emailBeforeDeletion: existing.email,
+      retainedRecords: ["billing_ledger", "subscription_checkouts"],
+    };
   }
 }
 
@@ -99,6 +174,323 @@ export class PostgresUserRepository implements UserRepository {
     const row = result.rows[0];
     return row ? mapUserRow(row) : null;
   }
+
+  async exportData(userId: string, fallbackUser?: UserRecord) {
+    const user = await this.findById(userId);
+    if (!user && !fallbackUser) return null;
+
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return fallbackUser ? emptyExport(fallbackUser) : null;
+
+    const [
+      conversationCount,
+      messageCount,
+      memoryCount,
+      generationCount,
+      workspaceCount,
+      membershipCount,
+      telegramOrderCount,
+      checkoutCount,
+      ledgerCount,
+      conversations,
+      memoryItems,
+      memberships,
+    ] = await Promise.all([
+      this.count("conversations", "user_id", databaseUserId),
+      this.countMessages(databaseUserId),
+      this.count("memory_items", "user_id", databaseUserId),
+      this.count("generation_jobs", "user_id", databaseUserId),
+      this.count("business_workspaces", "user_id", databaseUserId),
+      this.count("business_members", "user_id", databaseUserId),
+      this.count("telegram_bot_orders", "user_id", databaseUserId),
+      this.count("subscription_checkouts", "user_id", databaseUserId),
+      this.countLedgerEntries(databaseUserId),
+      this.listRecentConversations(databaseUserId),
+      this.listMemoryItems(databaseUserId),
+      this.listBusinessMemberships(databaseUserId),
+    ]);
+
+    return {
+      generatedAt: new Date().toISOString(),
+      user: user ?? fallbackUser!,
+      counts: {
+        conversations: conversationCount,
+        messages: messageCount,
+        memoryItems: memoryCount,
+        generationJobs: generationCount,
+        businessWorkspaces: workspaceCount,
+        businessMemberships: membershipCount,
+        telegramBotOrders: telegramOrderCount,
+        subscriptionCheckouts: checkoutCount,
+        ledgerEntries: ledgerCount,
+      },
+      recentConversations: conversations,
+      memoryItems,
+      businessMemberships: memberships,
+    };
+  }
+
+  async deactivateAccount(userId: string, fallbackUser?: UserRecord) {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return null;
+
+    const existingUser = await this.findById(userId);
+    if (!existingUser && !fallbackUser) return null;
+
+    const deletedAt = new Date().toISOString();
+    const anonymizedEmail = `deleted+${databaseUserId}@nomduchat.local`;
+
+    await this.database.query(
+      `
+        update messages
+        set content = '[deleted]',
+            metadata = '{}'::jsonb
+        where conversation_id in (
+          select id from conversations where user_id = $1
+        )
+      `,
+      [databaseUserId]
+    );
+
+    await this.database.query(
+      `
+        update conversations
+        set title = 'Deleted conversation',
+            updated_at = now()
+        where user_id = $1
+      `,
+      [databaseUserId]
+    );
+
+    await this.database.query(
+      `
+        update memory_items
+        set title = 'Deleted memory',
+            content = '[deleted]',
+            source = null,
+            enabled = false,
+            updated_at = now()
+        where user_id = $1
+      `,
+      [databaseUserId]
+    );
+
+    await this.database.query(
+      `
+        update generation_jobs
+        set prompt = '[deleted]',
+            error_message = null,
+            metadata = '{}'::jsonb,
+            updated_at = now()
+        where user_id = $1
+      `,
+      [databaseUserId]
+    );
+
+    await this.database.query(
+      `
+        update telegram_bot_orders
+        set owner_name = '',
+            contact = '[deleted]',
+            business_description = '[deleted]',
+            services = '[deleted]',
+            audience = '',
+            bot_purpose = '[deleted]',
+            response_rules = '[deleted]',
+            escalation_contact = '[deleted]',
+            faq = '',
+            source_links = '',
+            bot_username = null,
+            bot_token_provided = false,
+            bot_token_hint = null,
+            setup_summary = '[deleted]',
+            system_prompt = '[deleted]',
+            updated_at = now()
+        where user_id = $1
+      `,
+      [databaseUserId]
+    );
+
+    await this.database.query(
+      `
+        update business_members
+        set user_id = null,
+            invited_email = null,
+            status = 'offline',
+            updated_at = now()
+        where user_id = $1
+      `,
+      [databaseUserId]
+    );
+
+    await this.database.query(
+      `
+        update oauth_accounts
+        set email = null,
+            display_name = 'Deleted user',
+            raw_profile = '{}'::jsonb,
+            updated_at = now()
+        where user_id = $1
+      `,
+      [databaseUserId]
+    );
+
+    await this.database.query(
+      `
+        update users
+        set email = $2,
+            phone = null,
+            password_hash = null,
+            display_name = 'Deleted user',
+            updated_at = now()
+        where id = $1
+      `,
+      [databaseUserId, anonymizedEmail]
+    );
+
+    return {
+      userId,
+      deletedAt,
+      emailBeforeDeletion: existingUser?.email ?? fallbackUser?.email ?? null,
+      retainedRecords: ["billing_ledger", "subscription_checkouts", "subscription_events", "audit_logs"],
+    };
+  }
+
+  private async count(table: string, column: string, databaseUserId: string) {
+    const result = await this.database.query<{ count: string }>(
+      `select count(*)::text as count from ${table} where ${column} = $1`,
+      [databaseUserId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  private async countMessages(databaseUserId: string) {
+    const result = await this.database.query<{ count: string }>(
+      `
+        select count(*)::text as count
+        from messages m
+        join conversations c on c.id = m.conversation_id
+        where c.user_id = $1
+      `,
+      [databaseUserId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  private async countLedgerEntries(databaseUserId: string) {
+    const result = await this.database.query<{ count: string }>(
+      `
+        select count(*)::text as count
+        from ledger_entries e
+        join wallets w on w.id = e.wallet_id
+        where w.user_id = $1
+      `,
+      [databaseUserId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  private async listRecentConversations(databaseUserId: string) {
+    const result = await this.database.query<{
+      id: string;
+      title: string | null;
+      messages_count: string;
+      updated_at: Date | string;
+    }>(
+      `
+        select
+          c.id::text as id,
+          c.title,
+          count(m.id)::text as messages_count,
+          c.updated_at
+        from conversations c
+        left join messages m on m.conversation_id = c.id
+        where c.user_id = $1
+        group by c.id
+        order by c.updated_at desc
+        limit 20
+      `,
+      [databaseUserId]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      title: row.title ?? "Conversation",
+      messagesCount: Number(row.messages_count),
+      updatedAt: toIso(row.updated_at),
+    }));
+  }
+
+  private async listMemoryItems(databaseUserId: string) {
+    const result = await this.database.query<{
+      id: string;
+      title: string;
+      source: string | null;
+      updated_at: Date | string;
+    }>(
+      `
+        select id::text as id, title, source, updated_at
+        from memory_items
+        where user_id = $1
+        order by updated_at desc
+        limit 50
+      `,
+      [databaseUserId]
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      source: row.source,
+      updatedAt: toIso(row.updated_at),
+    }));
+  }
+
+  private async listBusinessMemberships(databaseUserId: string) {
+    const result = await this.database.query<{
+      workspace_name: string;
+      role_key: string;
+      role_title: string;
+      status: string;
+    }>(
+      `
+        select w.name as workspace_name, m.role_key, m.role_title, m.status
+        from business_members m
+        join business_workspaces w on w.id = m.workspace_id
+        where m.user_id = $1
+        order by m.created_at desc
+      `,
+      [databaseUserId]
+    );
+
+    return result.rows.map((row) => ({
+      workspaceName: row.workspace_name,
+      roleKey: row.role_key,
+      roleTitle: row.role_title,
+      status: row.status,
+    }));
+  }
+}
+
+function emptyExport(user: UserRecord): UserDataExportRecord {
+  return {
+    generatedAt: new Date().toISOString(),
+    user,
+    counts: {
+      conversations: 0,
+      messages: 0,
+      memoryItems: 0,
+      generationJobs: 0,
+      businessWorkspaces: 0,
+      businessMemberships: 0,
+      telegramBotOrders: 0,
+      subscriptionCheckouts: 0,
+      ledgerEntries: 0,
+    },
+    recentConversations: [],
+    memoryItems: [],
+    businessMemberships: [],
+  };
 }
 
 function mapUserRow(row: UserRow): UserRecord {
@@ -194,4 +586,8 @@ function permissionsFor(systemRole: SystemRole, workspaceRole: WorkspaceRole): U
 
 function isLanguage(value: string): value is Language {
   return value === "ru" || value === "kz" || value === "en";
+}
+
+function toIso(value: Date | string) {
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }

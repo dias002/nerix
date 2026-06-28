@@ -4,6 +4,7 @@ import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import { countrySchema, languageSchema } from "../../server/schemas.js";
 import type { AuthService } from "../auth/auth.service.js";
+import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { GenerationService } from "./generation.service.js";
 
 const createJobSchema = z.object({
@@ -19,7 +20,12 @@ const jobParamsSchema = z.object({
   jobId: z.string().min(1),
 });
 
-export async function registerGenerationRoutes(app: FastifyInstance, generation: GenerationService, auth: AuthService) {
+export async function registerGenerationRoutes(
+  app: FastifyInstance,
+  generation: GenerationService,
+  auth: AuthService,
+  abuseGuard: AbuseGuardService
+) {
   app.get("/generation/jobs", async (request, reply) => {
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
@@ -40,6 +46,9 @@ export async function registerGenerationRoutes(app: FastifyInstance, generation:
 
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertExpensiveActionAllowed(request, user.value.userId, "generation");
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await generation.createJob({ ...input.data, userId: user.value.userId }));
   });
@@ -74,6 +83,9 @@ export async function registerGenerationRoutes(app: FastifyInstance, generation:
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertExpensiveActionAllowed(request, user.value.userId, "generation.refresh");
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await generation.refreshJob({ userId: user.value.userId, jobId: params.data.jobId }));
   });

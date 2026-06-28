@@ -41,7 +41,7 @@ export class SubscriptionService {
     });
   }
 
-  async createCheckout(input: { userId: string; planId: string; country: string }) {
+  async createCheckout(input: { userId: string; planId: string; country: string; customerEmail?: string | null }) {
     const country = input.country.toUpperCase();
     if (!isSubscriptionCountry(country)) {
       return fail(new DomainError("validation_failed", "Subscriptions are currently available only for KZ and RU.", 400));
@@ -61,10 +61,16 @@ export class SubscriptionService {
       return fail(new DomainError("validation_failed", `Plan '${input.planId}' is not available in ${country}.`, 400));
     }
 
+    const customerEmail = normalizeCustomerEmail(input.customerEmail);
+    if (price.provider === "yookassa" && !customerEmail) {
+      return fail(new DomainError("validation_failed", "Customer email is required for YooKassa receipt.", 400));
+    }
+
     let providerCheckout: ProviderCheckout;
     try {
       providerCheckout = await createSubscriptionPaymentProvider(price.provider).createCheckout({
         userId: input.userId,
+        customerEmail,
         plan,
         price,
       });
@@ -155,6 +161,12 @@ export class SubscriptionService {
     });
   }
 
+  async listCheckouts(userId = "local-user") {
+    return ok({
+      checkouts: await this.repository.listCheckouts(userId),
+    });
+  }
+
   private async finalizeCompletion(completion: SubscriptionCompletion) {
     const plan = await this.repository.findPlan(completion.subscription.planId);
     if (!plan) {
@@ -202,4 +214,9 @@ export class SubscriptionService {
       subscription,
     });
   }
+}
+
+function normalizeCustomerEmail(email: string | null | undefined) {
+  const value = email?.trim().toLowerCase();
+  return value || undefined;
 }

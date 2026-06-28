@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { config } from "../src/config.js";
 import type { DatabaseClient, DatabaseQueryResult } from "../src/database/index.js";
+import { AbuseGuardService, InMemoryAbuseRateLimitRepository } from "../src/modules/security/abuse-guard.js";
 import { createApp } from "../src/server/create-app.js";
 import { createDependencies } from "../src/server/dependencies.js";
 
@@ -130,6 +131,153 @@ test("auth register, login, and me use signed access tokens", async () => {
   });
 
   assert.equal(invalidLoginResponse.statusCode, 401);
+
+  await app.close();
+});
+
+test("abuse guard rate-limits repeated registrations from the same device", async () => {
+  const abuseGuard = new AbuseGuardService(new InMemoryAbuseRateLimitRepository(), {
+    enabled: true,
+    hashSecret: "test-abuse-secret",
+    turnstileRequired: false,
+  });
+  const app = await createApp({
+    dependencies: createDependencies({ abuseGuard }),
+  });
+
+  for (let index = 0; index < 3; index += 1) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/auth/register",
+      headers: {
+        "x-nomduchat-device-id": "repeat-registration-device",
+      },
+      payload: {
+        email: `register-limit-${index}@example.com`,
+        password: "secure-password",
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+  }
+
+  const blockedResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    headers: {
+      "x-nomduchat-device-id": "repeat-registration-device",
+    },
+    payload: {
+      email: "register-limit-blocked@example.com",
+      password: "secure-password",
+    },
+  });
+
+  assert.equal(blockedResponse.statusCode, 429);
+  assert.equal(blockedResponse.json().error.code, "rate_limit_exceeded");
+
+  await app.close();
+});
+
+test("abuse guard rate-limits public AI route probes", async () => {
+  const abuseGuard = new AbuseGuardService(new InMemoryAbuseRateLimitRepository(), {
+    enabled: true,
+    hashSecret: "test-abuse-secret",
+    turnstileRequired: false,
+  });
+  const app = await createApp({
+    dependencies: createDependencies({ abuseGuard }),
+  });
+
+  for (let index = 0; index < 60; index += 1) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/ai/route",
+      headers: {
+        "x-nomduchat-device-id": "ai-route-probe-device",
+      },
+      payload: {
+        prompt: "hello",
+      },
+    });
+
+    assert.notEqual(response.statusCode, 429);
+  }
+
+  const blockedResponse = await app.inject({
+    method: "POST",
+    url: "/ai/route",
+    headers: {
+      "x-nomduchat-device-id": "ai-route-probe-device",
+    },
+    payload: {
+      prompt: "hello",
+    },
+  });
+
+  assert.equal(blockedResponse.statusCode, 429);
+  assert.equal(blockedResponse.json().error.code, "rate_limit_exceeded");
+
+  await app.close();
+});
+
+test("user can export and deactivate own account data", async () => {
+  const app = await createApp();
+
+  const registerResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: {
+      email: "delete-me@example.com",
+      password: "secure-password",
+      name: "Delete Me",
+      country: "KZ",
+      language: "ru",
+    },
+  });
+
+  assert.equal(registerResponse.statusCode, 200);
+  const accessToken = registerResponse.json().accessToken;
+
+  const exportResponse = await app.inject({
+    method: "GET",
+    url: "/users/me/export",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  assert.equal(exportResponse.statusCode, 200);
+  assert.equal(exportResponse.json().user.email, "delete-me@example.com");
+  assert.equal(typeof exportResponse.json().generatedAt, "string");
+
+  const blockedDeleteResponse = await app.inject({
+    method: "POST",
+    url: "/users/me/delete",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+    payload: {
+      confirmation: "delete",
+    },
+  });
+
+  assert.equal(blockedDeleteResponse.statusCode, 400);
+
+  const deleteResponse = await app.inject({
+    method: "POST",
+    url: "/users/me/delete",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+    payload: {
+      confirmation: "DELETE",
+    },
+  });
+
+  assert.equal(deleteResponse.statusCode, 200);
+  assert.equal(deleteResponse.json().emailBeforeDeletion, "delete-me@example.com");
+  assert.ok(deleteResponse.json().retainedRecords.includes("subscription_checkouts"));
 
   await app.close();
 });
@@ -780,6 +928,7 @@ test("POST /ai/route chooses code agent and model for code tasks", async () => {
   assert.equal(body.provider, "mock-provider");
   assert.equal(body.model, "mock-code");
   assert.equal(body.modality, "code");
+  assert.equal(body.taskType, "code_generation");
   assert.equal(body.asyncJob, false);
 
   await app.close();
@@ -804,6 +953,7 @@ test("POST /ai/route allows every country in local provider policy", async () =>
   assert.equal(body.provider, "mock-provider");
   assert.equal(body.model, "mock-text");
   assert.equal(body.agentId, "business");
+  assert.equal(body.taskType, "internal_analysis");
   assert.equal(body.policyMode, "dev_allow_all");
 
   await app.close();
@@ -827,6 +977,7 @@ test("POST /ai/route treats websites and Telegram bots as business tasks", async
   const body = response.json();
   assert.equal(body.agentId, "business");
   assert.equal(body.modality, "text");
+  assert.equal(body.taskType, "website_copy");
   assert.equal(body.provider, "mock-provider");
 
   await app.close();
@@ -1151,6 +1302,16 @@ test("subscription mock checkout activates plan and grants credits once", async 
   assert.equal(currentResponse.statusCode, 200);
   assert.equal(currentResponse.json().subscription.planId, "base");
 
+  const checkoutsResponse = await app.inject({
+    method: "GET",
+    url: "/subscriptions/checkouts",
+  });
+
+  assert.equal(checkoutsResponse.statusCode, 200);
+  assert.equal(checkoutsResponse.json().checkouts.length, 1);
+  assert.equal(checkoutsResponse.json().checkouts[0].id, checkout.id);
+  assert.equal(checkoutsResponse.json().checkouts[0].status, "completed");
+
   const cancelResponse = await app.inject({
     method: "POST",
     url: "/subscriptions/cancel",
@@ -1165,6 +1326,26 @@ test("subscription mock checkout activates plan and grants credits once", async 
   await app.close();
 });
 
+test("RU subscription checkout requires customer email for YooKassa receipt", async () => {
+  const app = await createApp();
+
+  const checkoutResponse = await app.inject({
+    method: "POST",
+    url: "/subscriptions/checkout",
+    payload: {
+      userId: "local-user",
+      planId: "base",
+      country: "RU",
+    },
+  });
+
+  assert.equal(checkoutResponse.statusCode, 400);
+  assert.equal(checkoutResponse.json().error.code, "validation_failed");
+  assert.match(checkoutResponse.json().error.message, /Customer email/);
+
+  await app.close();
+});
+
 test("YooKassa webhook activates a pending RU checkout", async () => {
   const app = await createApp();
 
@@ -1175,6 +1356,7 @@ test("YooKassa webhook activates a pending RU checkout", async () => {
       userId: "local-user",
       planId: "base",
       country: "RU",
+      customerEmail: "buyer@example.com",
     },
   });
 
@@ -1237,6 +1419,7 @@ test("YooKassa canceled webhook closes checkout without granting credits", async
       userId: "local-user",
       planId: "base",
       country: "RU",
+      customerEmail: "buyer@example.com",
     },
   });
 
@@ -1267,6 +1450,55 @@ test("YooKassa canceled webhook closes checkout without granting credits", async
   assert.equal(walletResponse.json().availableCredits, 12_500);
 
   await app.close();
+});
+
+test("YooKassa webhook accepts configured secret in query string", async () => {
+  await withConfig({ PAYMENT_WEBHOOK_SECRET: "webhook-secret" }, async () => {
+    const app = await createApp();
+
+    const checkoutResponse = await app.inject({
+      method: "POST",
+      url: "/subscriptions/checkout",
+      payload: {
+        userId: "local-user",
+        planId: "base",
+        country: "RU",
+        customerEmail: "buyer@example.com",
+      },
+    });
+
+    assert.equal(checkoutResponse.statusCode, 200);
+    const checkout = checkoutResponse.json().checkout;
+
+    const blockedWebhookResponse = await app.inject({
+      method: "POST",
+      url: "/subscriptions/webhooks/yookassa",
+      payload: {
+        event: "payment.succeeded",
+        object: {
+          id: checkout.providerCheckoutId,
+        },
+      },
+    });
+
+    assert.equal(blockedWebhookResponse.statusCode, 401);
+
+    const webhookResponse = await app.inject({
+      method: "POST",
+      url: "/subscriptions/webhooks/yookassa?secret=webhook-secret",
+      payload: {
+        event: "payment.succeeded",
+        object: {
+          id: checkout.providerCheckoutId,
+        },
+      },
+    });
+
+    assert.equal(webhookResponse.statusCode, 200);
+    assert.equal(webhookResponse.json().subscription.status, "active");
+
+    await app.close();
+  });
 });
 
 test("GET /business/workspace returns demo CRM, employees, and advisor ideas", async () => {
@@ -1461,6 +1693,19 @@ test("business operations store customer conversations, analysis, ratings, and t
 test("business website builder creates, edits, publishes, and serves a public site", async () => {
   const app = await createApp();
 
+  const knowledgeResponse = await app.inject({
+    method: "POST",
+    url: "/business/knowledge-base",
+    payload: {
+      type: "faq",
+      title: "Доставка и оплата",
+      content: "Доставка по Алматы в день заказа. Оплата Kaspi и картой.",
+      tags: ["delivery", "payment"],
+    },
+  });
+
+  assert.equal(knowledgeResponse.statusCode, 200);
+
   const draftResponse = await app.inject({
     method: "POST",
     url: "/business/websites/draft",
@@ -1478,6 +1723,8 @@ test("business website builder creates, edits, publishes, and serves a public si
 
   assert.equal(draftResponse.statusCode, 200);
   const draft = draftResponse.json();
+  assert.equal(draft.job.status, "succeeded");
+  assert.equal(draft.job.channel, "website");
   assert.equal(draft.website.status, "draft");
   assert.equal(draft.website.title, "Nomdu Market");
   assert.equal(draft.website.style, "premium");
@@ -1570,6 +1817,19 @@ test("telegram bot order creates priced setup without exposing full bot token", 
   assert.equal(ordersResponse.json().orders.length, 1);
   assert.equal(ordersResponse.json().orders[0].companyName, "Nomdu Market");
 
+  const testReplyResponse = await app.inject({
+    method: "POST",
+    url: `/telegram-bots/orders/${body.order.id}/test-message`,
+    payload: {
+      message: "Здравствуйте, хочу оплатить и получить индивидуальную цену на большую партию.",
+    },
+  });
+
+  assert.equal(testReplyResponse.statusCode, 200);
+  assert.equal(testReplyResponse.json().shouldEscalate, true);
+  assert.ok(testReplyResponse.json().reply.includes("@egor"));
+  assert.equal(testReplyResponse.json().orderId, body.order.id);
+
   await app.close();
 });
 
@@ -1592,7 +1852,10 @@ test("telegram mini app draft generates bot elements from a short business brief
   });
 
   assert.equal(response.statusCode, 200);
-  const draft = response.json().draft;
+  const body = response.json();
+  const draft = body.draft;
+  assert.equal(body.job.status, "succeeded");
+  assert.equal(body.job.channel, "telegram");
   assert.equal(draft.currency, "RUB");
   assert.equal(draft.amountMinor, 700_000);
   assert.ok(draft.botUsernameSuggestions.length > 0);

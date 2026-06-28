@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { ArrowRight, BookOpen, Building2, ChevronDown } from "lucide-react";
+import { ArrowRight, BookOpen, Building2, ChevronDown, FileText, LifeBuoy } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 import LanguageSwitch from "../components/LanguageSwitch";
 import DownloadAppBanner from "../components/DownloadAppBanner";
@@ -91,6 +91,20 @@ export default function Home() {
                   <Building2 className="h-4 w-4" strokeWidth={1.6} />
                   Реквизиты
                 </Link>
+                <Link
+                  to="/legal/terms"
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <FileText className="h-4 w-4" strokeWidth={1.6} />
+                  Документы
+                </Link>
+                <Link
+                  to="/support"
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <LifeBuoy className="h-4 w-4" strokeWidth={1.6} />
+                  Поддержка
+                </Link>
               </div>
             </div>
           </div>
@@ -160,6 +174,27 @@ export default function Home() {
           </motion.div>
 
           <DownloadAppBanner />
+
+          <nav className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-500">
+            <Link to="/legal/terms" className="transition-colors hover:text-white">
+              Пользовательское соглашение
+            </Link>
+            <Link to="/legal/privacy" className="transition-colors hover:text-white">
+              Политика конфиденциальности
+            </Link>
+            <Link to="/legal/refund" className="transition-colors hover:text-white">
+              Возвраты
+            </Link>
+            <Link to="/legal/pricing" className="transition-colors hover:text-white">
+              Тарифы
+            </Link>
+            <Link to="/support" className="transition-colors hover:text-white">
+              Поддержка
+            </Link>
+            <Link to="/data-deletion" className="transition-colors hover:text-white">
+              Удаление данных
+            </Link>
+          </nav>
         </div>
       </section>
 

@@ -35,6 +35,7 @@ export interface SubscriptionRepository {
   completeCheckoutPaymentByProvider(input: ProviderCheckoutEventInput): Promise<SubscriptionCompletion | null>;
   failCheckoutPaymentByProvider(input: ProviderCheckoutEventInput): Promise<SubscriptionCheckoutRecord | null>;
   markCheckoutCreditsGranted(checkoutId: string): Promise<SubscriptionCheckoutRecord | null>;
+  listCheckouts(userId: string): Promise<SubscriptionCheckoutRecord[]>;
   currentSubscription(userId: string): Promise<SubscriptionRecord | null>;
   cancelCurrentSubscription(userId: string): Promise<SubscriptionRecord | null>;
 }
@@ -151,6 +152,12 @@ export class InMemorySubscriptionRepository implements SubscriptionRepository {
     checkout.updatedAt = new Date().toISOString();
     this.checkouts.set(checkout.id, checkout);
     return checkout;
+  }
+
+  async listCheckouts(userId: string) {
+    return [...this.checkouts.values()]
+      .filter((checkout) => checkout.userId === userId)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   async currentSubscription(userId: string) {
@@ -599,6 +606,37 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
 
     const row = result.rows[0];
     return row ? mapCheckoutRow(row) : null;
+  }
+
+  async listCheckouts(userId: string) {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return [];
+
+    const result = await this.database.query<CheckoutRow>(
+      `
+        select
+          id,
+          user_id,
+          plan_slug,
+          country_code,
+          provider,
+          currency,
+          amount_minor,
+          status,
+          credits_granted,
+          provider_checkout_id,
+          checkout_url,
+          created_at,
+          updated_at
+        from subscription_checkouts
+        where user_id = $1
+        order by created_at desc
+        limit 50
+      `,
+      [databaseUserId]
+    );
+
+    return result.rows.map(mapCheckoutRow);
   }
 
   async currentSubscription(userId: string) {

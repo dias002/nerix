@@ -1199,6 +1199,42 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    create table if not exists workspace_knowledge_entries (
+      id uuid primary key default uuid_generate_v4(),
+      workspace_id uuid not null references business_workspaces(id) on delete cascade,
+      created_by_user_id uuid references users(id) on delete set null,
+      type text not null,
+      title text not null,
+      content text not null,
+      source_url text,
+      tags text[] not null default array[]::text[],
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create table if not exists business_jobs (
+      id uuid primary key default uuid_generate_v4(),
+      workspace_id uuid not null references business_workspaces(id) on delete cascade,
+      created_by_user_id uuid references users(id) on delete set null,
+      channel text not null,
+      capability text not null,
+      task_type text not null,
+      status text not null default 'queued',
+      payload jsonb not null default '{}'::jsonb,
+      result jsonb,
+      provider text,
+      model text,
+      error_message text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      started_at timestamptz,
+      finished_at timestamptz
+    )
+  `);
+
+  await database.query(`
     create index if not exists users_created_idx
       on users(created_at desc)
   `);
@@ -1365,5 +1401,64 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   await database.query(`
     create index if not exists ai_quality_reviews_status_created_idx
       on ai_quality_reviews(status, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists workspace_knowledge_entries_workspace_updated_idx
+      on workspace_knowledge_entries(workspace_id, updated_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists business_jobs_workspace_created_idx
+      on business_jobs(workspace_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists business_jobs_workspace_status_created_idx
+      on business_jobs(workspace_id, status, created_at desc)
+  `);
+
+  await database.query(`
+    create table if not exists abuse_rate_limits (
+      id uuid primary key default uuid_generate_v4(),
+      bucket_key text not null,
+      window_start timestamptz not null,
+      window_end timestamptz not null,
+      count integer not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      unique(bucket_key, window_start)
+    )
+  `);
+
+  await database.query(`
+    create index if not exists abuse_rate_limits_window_end_idx
+      on abuse_rate_limits(window_end)
+  `);
+
+  await database.query(`
+    with plan_limits(plan_slug, monthly_credits) as (
+      values
+        ('base', 2000::bigint),
+        ('ultra', 5000::bigint),
+        ('pro', 20000::bigint),
+        ('business', 50000::bigint)
+    ),
+    latest_active_subscription as (
+      select distinct on (user_id)
+        user_id,
+        plan_slug
+      from subscriptions
+      where status = 'active'
+      order by user_id, created_at desc
+    )
+    update wallets w
+    set available_credits = plan_limits.monthly_credits,
+        updated_at = now()
+    from latest_active_subscription s
+    join plan_limits on plan_limits.plan_slug = s.plan_slug
+    where w.user_id = s.user_id
+      and w.currency = 'NOMDUCHAT'
+      and w.available_credits > plan_limits.monthly_credits
   `);
 }

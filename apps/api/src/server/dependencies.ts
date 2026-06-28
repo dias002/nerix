@@ -11,6 +11,11 @@ import { BillingService } from "../modules/billing/billing.service.js";
 import { InMemoryBusinessRepository, PostgresBusinessRepository } from "../modules/business/business.repository.js";
 import { BusinessService } from "../modules/business/business.service.js";
 import {
+  InMemoryBusinessJobRepository,
+  PostgresBusinessJobRepository,
+} from "../modules/business-jobs/business-job.repository.js";
+import { BusinessJobService } from "../modules/business-jobs/business-job.service.js";
+import {
   InMemoryBusinessOpsRepository,
   PostgresBusinessOpsRepository,
 } from "../modules/business-ops/business-ops.repository.js";
@@ -25,9 +30,19 @@ import { InMemoryConversationRepository, PostgresConversationRepository } from "
 import { InMemoryGenerationRepository, PostgresGenerationRepository } from "../modules/generation/generation.repository.js";
 import { GenerationService } from "../modules/generation/generation.service.js";
 import { createMediaGenerationProvider } from "../modules/generation/media-provider.js";
+import {
+  InMemoryKnowledgeBaseRepository,
+  PostgresKnowledgeBaseRepository,
+} from "../modules/knowledge-base/knowledge-base.repository.js";
+import { KnowledgeBaseService } from "../modules/knowledge-base/knowledge-base.service.js";
 import { InMemoryMailingRepository, PostgresMailingRepository } from "../modules/mailings/mailing.repository.js";
 import { MailingService } from "../modules/mailings/mailing.service.js";
 import { SmtpBzClient, type MailingTransport } from "../modules/mailings/smtp-bz.client.js";
+import {
+  AbuseGuardService,
+  createAbuseRateLimitRepository,
+  type AbuseRateLimitRepository,
+} from "../modules/security/abuse-guard.js";
 import {
   InMemorySubscriptionRepository,
   PostgresSubscriptionRepository,
@@ -53,16 +68,21 @@ export type AppDependencies = {
   subscriptions: SubscriptionService;
   mailings: MailingService;
   business: BusinessService;
+  knowledgeBase: KnowledgeBaseService;
   businessOps: BusinessOpsService;
   businessWebsites: BusinessWebsiteService;
+  businessJobs: BusinessJobService;
   telegramBots: TelegramBotOrderService;
   admin: AdminService;
+  abuseGuard: AbuseGuardService;
 };
 
 export type CreateDependenciesOptions = {
   database?: DatabaseClient;
   persistence?: "memory" | "postgres";
   mailingTransport?: MailingTransport;
+  abuseRateLimitRepository?: AbuseRateLimitRepository;
+  abuseGuard?: AbuseGuardService;
 };
 
 export function createDependencies(options: CreateDependenciesOptions = {}): AppDependencies {
@@ -86,16 +106,24 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     persistence === "postgres" ? new PostgresBusinessRepository(database) : new InMemoryBusinessRepository();
   const businessOpsRepository =
     persistence === "postgres" ? new PostgresBusinessOpsRepository(database) : new InMemoryBusinessOpsRepository();
+  const businessJobRepository =
+    persistence === "postgres" ? new PostgresBusinessJobRepository(database) : new InMemoryBusinessJobRepository();
   const businessWebsiteRepository =
     persistence === "postgres"
       ? new PostgresBusinessWebsiteRepository(database)
       : new InMemoryBusinessWebsiteRepository();
+  const knowledgeBaseRepository =
+    persistence === "postgres"
+      ? new PostgresKnowledgeBaseRepository(database)
+      : new InMemoryKnowledgeBaseRepository();
   const generationRepository =
     persistence === "postgres" ? new PostgresGenerationRepository(database) : new InMemoryGenerationRepository();
   const telegramBotOrderRepository =
     persistence === "postgres"
       ? new PostgresTelegramBotOrderRepository(database)
       : new InMemoryTelegramBotOrderRepository();
+  const abuseRateLimitRepository =
+    options.abuseRateLimitRepository ?? createAbuseRateLimitRepository(database, persistence);
 
   const users = new UserService(userRepository);
   const auth = new AuthService(authRepository);
@@ -113,10 +141,19 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
   const chat = new ChatService(conversationRepository, aiGateway, generation, subscriptions);
   const mailings = new MailingService(mailingRepository, options.mailingTransport ?? new SmtpBzClient());
   const business = new BusinessService(businessRepository, subscriptions);
+  const knowledgeBase = new KnowledgeBaseService(knowledgeBaseRepository, business);
   const businessOps = new BusinessOpsService(businessOpsRepository, business);
   const businessWebsites = new BusinessWebsiteService(businessWebsiteRepository);
   const telegramBots = new TelegramBotOrderService(telegramBotOrderRepository);
+  const businessJobs = new BusinessJobService(
+    businessJobRepository,
+    business,
+    knowledgeBase,
+    businessWebsites,
+    telegramBots
+  );
   const admin = new AdminService(database, agents);
+  const abuseGuard = options.abuseGuard ?? new AbuseGuardService(abuseRateLimitRepository);
 
   return {
     database,
@@ -130,9 +167,12 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     subscriptions,
     mailings,
     business,
+    knowledgeBase,
     businessOps,
     businessWebsites,
+    businessJobs,
     telegramBots,
     admin,
+    abuseGuard,
   };
 }

@@ -6,7 +6,6 @@ import {
   ArrowRight,
   CheckCircle2,
   Copy,
-  CreditCard,
   Eye,
   Globe,
   Loader2,
@@ -14,11 +13,13 @@ import {
   Plus,
   Rocket,
   Save,
+  Share2,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import { useAuth } from "../auth";
 import BusinessWebsiteRenderer from "../components/BusinessWebsiteRenderer";
+import ShareSheet, { type SharePayload } from "../components/ShareSheet";
 import {
   createBusinessWebsiteDraft,
   getBusinessWebsites,
@@ -44,19 +45,6 @@ const initialInput: CreateBusinessWebsiteDraftInput = {
   siteType: "landing",
 };
 
-type PaymentState = {
-  cardNumber: string;
-  cardHolder: string;
-  expiry: string;
-  cvv: string;
-  receiptContact: string;
-};
-
-const websitePrices: Record<BusinessWebsiteCountry, number> = {
-  KZ: 5_900_000,
-  RU: 1_190_000,
-};
-
 const styleOptions: Array<{ value: BusinessWebsiteStyle; label: string; detail: string }> = [
   { value: "clean", label: "Чистый", detail: "Светлый сайт для услуг" },
   { value: "premium", label: "Премиум", detail: "Темный, спокойный, дорогой" },
@@ -71,7 +59,7 @@ const siteTypeOptions: Array<{ value: BusinessWebsiteType; label: string; detail
 ];
 
 type WebsiteWizardStep = {
-  key: "brief" | "details" | "style" | "payment";
+  key: "brief" | "details" | "style" | "review";
   title: string;
   text: string;
 };
@@ -93,9 +81,9 @@ const websiteWizardSteps: WebsiteWizardStep[] = [
     text: "Выберите тип и настроение. Потом блоки можно будет поправить вручную.",
   },
   {
-    key: "payment",
-    title: "Оплата запуска",
-    text: "Цена появляется здесь. Мы берем страну из аккаунта и показываем одну понятную сумму.",
+    key: "review",
+    title: "Проверка и сборка",
+    text: "Проверьте смысл, контакт и стиль. Черновик сайта создается без ввода карты.",
   },
 ];
 
@@ -105,9 +93,6 @@ export default function BusinessWebsiteBuilder() {
   const [input, setInput] = useState<CreateBusinessWebsiteDraftInput>(() => ({ ...initialInput, country: accountCountry }));
   const [builderOpen, setBuilderOpen] = useState(false);
   const [siteStepIndex, setSiteStepIndex] = useState(0);
-  const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentTouched, setPaymentTouched] = useState(false);
-  const [payment, setPayment] = useState<PaymentState>(() => createEmptyPayment());
   const [websites, setWebsites] = useState<BusinessWebsiteApiRecord[]>([]);
   const [selected, setSelected] = useState<BusinessWebsiteApiRecord | null>(null);
   const [assistantSummary, setAssistantSummary] = useState<string | null>(null);
@@ -118,6 +103,7 @@ export default function BusinessWebsiteBuilder() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
 
   useEffect(() => {
     setInput((current) => (current.country === accountCountry ? current : { ...current, country: accountCountry }));
@@ -155,40 +141,33 @@ export default function BusinessWebsiteBuilder() {
   const content = selected?.content ?? null;
   const sections = content?.pages[0]?.sections ?? [];
   const currentWebsiteStep = websiteWizardSteps[siteStepIndex];
-  const websitePaymentReady = isPaymentReady(payment);
   const websiteStepReady =
     currentWebsiteStep.key === "brief"
       ? input.prompt.trim().length >= 20
       : currentWebsiteStep.key === "details"
         ? Boolean(input.companyName?.trim() && input.contact?.trim())
-        : currentWebsiteStep.key === "payment"
-          ? websitePaymentReady
+        : currentWebsiteStep.key === "review"
+          ? canGenerate
           : true;
   const websiteProgress = Math.round(((siteStepIndex + 1) / websiteWizardSteps.length) * 100);
 
   const requestDraft = () => {
     if (!canGenerate) return;
-    setPaymentOpen(true);
-    setPaymentTouched(false);
+    void generateDraft();
   };
 
   const openBuilder = () => {
     setBuilderOpen(true);
     setSiteStepIndex(0);
-    setPaymentTouched(false);
   };
 
   const closeBuilder = () => {
     if (generating) return;
     setBuilderOpen(false);
-    setPaymentTouched(false);
   };
 
   const nextWebsiteStep = () => {
-    if (!websiteStepReady) {
-      if (currentWebsiteStep.key === "payment") setPaymentTouched(true);
-      return;
-    }
+    if (!websiteStepReady) return;
     setSiteStepIndex((current) => Math.min(current + 1, websiteWizardSteps.length - 1));
   };
 
@@ -198,10 +177,6 @@ export default function BusinessWebsiteBuilder() {
 
   const generateDraft = async () => {
     if (!canGenerate) return;
-    if (!isPaymentReady(payment)) {
-      setPaymentTouched(true);
-      return;
-    }
 
     setGenerating(true);
     setError(null);
@@ -212,9 +187,8 @@ export default function BusinessWebsiteBuilder() {
       setAssistantSummary(response.assistantSummary);
       setNextSteps(response.suggestedNextSteps);
       setWebsites((current) => [response.website, ...current.filter((site) => site.id !== response.website.id)]);
-      setPaymentOpen(false);
-      setPayment(createEmptyPayment());
-      setPaymentTouched(false);
+      setBuilderOpen(false);
+      setNotice("Черновик сайта собран. Теперь его можно править и публиковать.");
     } catch (generateError) {
       setError(toPublicApiError(generateError, "Не удалось собрать сайт."));
     } finally {
@@ -275,6 +249,15 @@ export default function BusinessWebsiteBuilder() {
     } catch {
       setNotice(publicUrl);
     }
+  };
+
+  const sharePublicUrl = () => {
+    if (!publicUrl || !selected) return;
+    setSharePayload({
+      title: selected.title,
+      text: selected.content.seo.description || `${selected.title} в nomduchat`,
+      url: publicUrl,
+    });
   };
 
   const updateSelected = (patch: Partial<BusinessWebsiteApiRecord>) => {
@@ -341,6 +324,12 @@ export default function BusinessWebsiteBuilder() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-5 text-white md:p-10">
+      <ShareSheet
+        open={Boolean(sharePayload)}
+        payload={sharePayload}
+        onClose={() => setSharePayload(null)}
+        onShared={setNotice}
+      />
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
@@ -362,14 +351,6 @@ export default function BusinessWebsiteBuilder() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={openBuilder}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
-            >
-              Создать сайт
-              <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
-            </button>
             <div className="hidden">
               {selected ? (
                 <>
@@ -597,14 +578,24 @@ export default function BusinessWebsiteBuilder() {
                           {publicUrl}
                         </a>
                       </div>
-                      <button
-                        type="button"
-                        onClick={copyPublicUrl}
-                        className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-300/20 px-4 py-2 text-sm text-emerald-100"
-                      >
-                        <Copy className="h-4 w-4" strokeWidth={1.7} />
-                        Скопировать
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={sharePublicUrl}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-300/20 px-4 py-2 text-sm text-emerald-100"
+                        >
+                          <Share2 className="h-4 w-4" strokeWidth={1.7} />
+                          Поделиться
+                        </button>
+                        <button
+                          type="button"
+                          onClick={copyPublicUrl}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-300/20 px-4 py-2 text-sm text-emerald-100"
+                        >
+                          <Copy className="h-4 w-4" strokeWidth={1.7} />
+                          Скопировать
+                        </button>
+                      </div>
                     </div>
                   ) : null}
                 </article>
@@ -784,7 +775,7 @@ export default function BusinessWebsiteBuilder() {
                   </div>
                   <h2 className="mt-3 text-2xl font-medium md:text-3xl">Собрать сайт по короткому опросу</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
-                    Сначала заполняем смысл, контакт и стиль. На финальном шаге подтверждаем оплату, после чего справа появится первая версия сайта.
+                    Сначала заполняем смысл, контакт и стиль. На финальном шаге проверяем данные, после чего справа появится первая версия сайта.
                   </p>
                 </div>
                 <button
@@ -802,7 +793,7 @@ export default function BusinessWebsiteBuilder() {
                   className="rounded-3xl border border-white/10 bg-[#0A0A0A] p-5 md:p-6"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (currentWebsiteStep.key === "payment") {
+                    if (currentWebsiteStep.key === "review") {
                       void generateDraft();
                     } else {
                       nextWebsiteStep();
@@ -839,14 +830,14 @@ export default function BusinessWebsiteBuilder() {
                       Назад
                     </button>
 
-                    {currentWebsiteStep.key === "payment" ? (
+                    {currentWebsiteStep.key === "review" ? (
                       <button
                         type="submit"
                         disabled={!canGenerate || !websiteStepReady || generating}
                         className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" strokeWidth={1.8} />}
-                        Подтвердить и собрать сайт
+                        Собрать сайт
                       </button>
                     ) : (
                       <button
@@ -912,7 +903,7 @@ export default function BusinessWebsiteBuilder() {
                             <Globe className="mx-auto h-10 w-10 text-gray-300" strokeWidth={1.5} />
                             <h3 className="mt-4 text-2xl font-medium">Превью появится здесь</h3>
                             <p className="mt-2 max-w-md text-sm leading-relaxed text-gray-500">
-                              Дойдите до оплаты запуска. После сборки здесь будет первая версия сайта, которую можно править дальше.
+                              Дойдите до финального шага. После сборки здесь будет первая версия сайта, которую можно править дальше.
                             </p>
                           </div>
                         </div>
@@ -936,22 +927,6 @@ export default function BusinessWebsiteBuilder() {
           document.body
         ) : null}
       </div>
-      {paymentOpen ? (
-        <WebsitePaymentDialog
-          country={input.country}
-          amountMinor={websitePrices[input.country]}
-          payment={payment}
-          touched={paymentTouched}
-          submitting={generating}
-          onChange={setPayment}
-          onClose={() => {
-            if (generating) return;
-            setPaymentOpen(false);
-            setPaymentTouched(false);
-          }}
-          onSubmit={() => void generateDraft()}
-        />
-      ) : null}
     </div>
   );
 
@@ -1021,67 +996,40 @@ export default function BusinessWebsiteBuilder() {
       );
     }
 
-    const receiptLabel = input.country === "KZ" ? "Телефон для чека" : "Email для чека";
-    const updatePayment = (field: keyof PaymentState, value: string) => setPayment((current) => ({ ...current, [field]: value }));
-
     return (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.82fr_1.18fr]">
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <CreditCard className="h-4 w-4" strokeWidth={1.7} />
-            Запуск по стране аккаунта
+            <Rocket className="h-4 w-4" strokeWidth={1.7} />
+            Готово к сборке
           </div>
-          <div className="mt-4 text-5xl font-medium">{formatPlainAmount(websitePrices[input.country])}</div>
+          <div className="mt-4 text-3xl font-medium">Черновик без карты</div>
           <p className="mt-3 text-sm leading-relaxed text-gray-500">
-            Страна аккаунта: {input.country === "KZ" ? "Казахстан" : "Россия"}. Сумма показана без переключателей и лишних вариантов.
+            Страна аккаунта: {input.country === "KZ" ? "Казахстан" : "Россия"}. Сейчас мы собираем сайт, который можно редактировать и публиковать.
           </p>
           <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-gray-500">
-            Сейчас это тестовая форма для проверки пути клиента. В боевом запуске карту должен принимать платежный провайдер.
+            Оплату, чеки и договоры подключаем отдельно через платежного провайдера. В этой версии пользователь не вводит карту в интерфейс сайта.
           </p>
         </div>
         <div className="rounded-3xl border border-white/10 bg-[#050505] p-5">
           <div className="flex items-center gap-2 text-sm text-gray-500">
-            <CreditCard className="h-4 w-4" strokeWidth={1.7} />
-            Данные карты
+            <CheckCircle2 className="h-4 w-4" strokeWidth={1.7} />
+            Что будет использовано
           </div>
-          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field
-              label="Номер карты"
-              value={payment.cardNumber}
-              onChange={(value) => updatePayment("cardNumber", value)}
-              placeholder="0000 0000 0000 0000"
-            />
-            <Field
-              label="Имя на карте"
-              value={payment.cardHolder}
-              onChange={(value) => updatePayment("cardHolder", value)}
-              placeholder="IVAN IVANOV"
-            />
-            <Field
-              label="Срок"
-              value={payment.expiry}
-              onChange={(value) => updatePayment("expiry", value)}
-              placeholder="MM/YY"
-            />
-            <Field
-              label="CVV"
-              value={payment.cvv}
-              onChange={(value) => updatePayment("cvv", value)}
-              placeholder="000"
-              type="password"
-            />
+          <div className="mt-4 space-y-3">
+            {[
+              ["Промпт", input.prompt],
+              ["Компания", input.companyName ?? ""],
+              ["Контакт", input.contact ?? ""],
+              ["Тип сайта", siteTypeOptions.find((option) => option.value === input.siteType)?.label ?? input.siteType],
+              ["Стиль", styleOptions.find((option) => option.value === input.style)?.label ?? input.style],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <div className="text-xs text-gray-600">{label}</div>
+                <div className="mt-1 line-clamp-3 text-sm leading-relaxed text-gray-300">{value}</div>
+              </div>
+            ))}
           </div>
-          <Field
-            label={receiptLabel}
-            value={payment.receiptContact}
-            onChange={(value) => updatePayment("receiptContact", value)}
-            placeholder={input.country === "KZ" ? "+7..." : "mail@example.com"}
-          />
-          {paymentTouched && !websitePaymentReady ? (
-            <div className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              Заполните карту и контакт для чека.
-            </div>
-          ) : null}
         </div>
       </div>
     );
@@ -1173,152 +1121,8 @@ function OptionGrid<T extends string>({
   );
 }
 
-function WebsitePaymentDialog({
-  country,
-  amountMinor,
-  payment,
-  touched,
-  submitting,
-  onChange,
-  onClose,
-  onSubmit,
-}: {
-  country: BusinessWebsiteCountry;
-  amountMinor: number;
-  payment: PaymentState;
-  touched: boolean;
-  submitting: boolean;
-  onChange: (payment: PaymentState) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-}) {
-  const update = (field: keyof PaymentState, value: string) => onChange({ ...payment, [field]: value });
-  const ready = isPaymentReady(payment);
-  const receiptLabel = country === "KZ" ? "Телефон для чека" : "Email для чека";
-
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-3xl rounded-3xl border border-white/10 bg-[#080808] p-5 text-white shadow-2xl md:p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <CreditCard className="h-4 w-4" strokeWidth={1.7} />
-              Оплата запуска сайта
-            </div>
-            <h2 className="mt-3 text-3xl font-medium">{formatPlainAmount(amountMinor)}</h2>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-gray-500">
-              Цена рассчитана по стране аккаунта: {country === "KZ" ? "Казахстан" : "Россия"}. После подтверждения nomduchat соберет первый черновик сайта.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="rounded-full border border-white/10 px-4 py-2 text-sm text-gray-400 transition-colors hover:border-white/20 hover:text-white disabled:opacity-40"
-          >
-            Закрыть
-          </button>
-        </div>
-
-        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-xs leading-relaxed text-gray-500">
-          Это тестовая форма для проверки сценария. В реальном запуске данные карты должен принимать платежный провайдер, а не наш фронтенд.
-        </div>
-
-        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field
-            label="Номер карты"
-            value={payment.cardNumber}
-            onChange={(value) => update("cardNumber", value)}
-            placeholder="0000 0000 0000 0000"
-          />
-          <Field
-            label="Имя на карте"
-            value={payment.cardHolder}
-            onChange={(value) => update("cardHolder", value)}
-            placeholder="IVAN IVANOV"
-          />
-          <Field
-            label="Срок"
-            value={payment.expiry}
-            onChange={(value) => update("expiry", value)}
-            placeholder="MM/YY"
-          />
-          <Field
-            label="CVV"
-            value={payment.cvv}
-            onChange={(value) => update("cvv", value)}
-            placeholder="000"
-            type="password"
-          />
-        </div>
-        <Field
-          label={receiptLabel}
-          value={payment.receiptContact}
-          onChange={(value) => update("receiptContact", value)}
-          placeholder={country === "KZ" ? "+7..." : "mail@example.com"}
-        />
-
-        {touched && !ready ? (
-          <div className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            Заполните карту и контакт для чека.
-          </div>
-        ) : null}
-
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={submitting}
-            className="inline-flex justify-center rounded-full border border-white/10 px-5 py-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white disabled:opacity-40"
-          >
-            Вернуться
-          </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={submitting}
-            className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" strokeWidth={1.8} />}
-            Подтвердить и собрать сайт
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  );
-}
-
-function createEmptyPayment(): PaymentState {
-  return {
-    cardNumber: "",
-    cardHolder: "",
-    expiry: "",
-    cvv: "",
-    receiptContact: "",
-  };
-}
-
 function resolveCountry(country: string | null | undefined): BusinessWebsiteCountry {
   return country === "RU" ? "RU" : "KZ";
-}
-
-function isPaymentReady(payment: PaymentState) {
-  return (
-    payment.cardNumber.replace(/\D/g, "").length >= 12 &&
-    payment.cardHolder.trim().length >= 3 &&
-    payment.expiry.trim().length >= 4 &&
-    payment.cvv.replace(/\D/g, "").length >= 3 &&
-    payment.receiptContact.trim().length >= 5
-  );
-}
-
-function formatPlainAmount(amountMinor: number) {
-  return new Intl.NumberFormat("ru-RU", {
-    maximumFractionDigits: 0,
-  }).format(amountMinor / 100);
 }
 
 function choiceClass(active: boolean) {

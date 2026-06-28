@@ -1,29 +1,34 @@
+import { lazy } from "react";
 import { createBrowserRouter } from "react-router";
-import Home from "./pages/Home";
-import About from "./pages/About";
-import Business from "./pages/Business";
-import Requisites from "./pages/Requisites";
-import AuthPage from "./pages/Auth";
-import AuthCallback from "./pages/AuthCallback";
-import WorkspaceLayout from "./components/WorkspaceLayout";
-import Chat from "./pages/Chat";
-import History from "./pages/History";
-import Memory from "./pages/Memory";
-import Mailings from "./pages/Mailings";
-import BusinessCabinet from "./pages/BusinessCabinet";
-import BusinessDialogs from "./pages/BusinessDialogs";
-import BusinessEmployeeAnalytics from "./pages/BusinessEmployeeAnalytics";
-import BusinessIdeas from "./pages/BusinessIdeas";
-import BusinessTelegramBot from "./pages/BusinessTelegramBot";
-import BusinessWebsiteBuilder from "./pages/BusinessWebsiteBuilder";
-import PublicBusinessWebsite from "./pages/PublicBusinessWebsite";
-import TelegramBotMiniApp from "./pages/TelegramBotMiniApp";
-import Admin from "./pages/Admin";
-import Balance from "./pages/Balance";
-import Settings from "./pages/Settings";
-import SettingsProfile from "./pages/SettingsProfile";
-import SettingsAppearance from "./pages/SettingsAppearance";
-import SettingsNotifications from "./pages/SettingsNotifications";
+
+const Home = lazy(() => import("./pages/Home"));
+const About = lazy(() => import("./pages/About"));
+const Business = lazy(() => import("./pages/Business"));
+const Requisites = lazy(() => import("./pages/Requisites"));
+const Legal = lazy(() => import("./pages/Legal"));
+const Support = lazy(() => import("./pages/Support"));
+const DataDeletion = lazy(() => import("./pages/DataDeletion"));
+const AuthPage = lazy(() => import("./pages/Auth"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
+const Chat = lazy(() => import("./pages/Chat"));
+const History = lazy(() => import("./pages/History"));
+const Memory = lazy(() => import("./pages/Memory"));
+const Mailings = lazy(() => import("./pages/Mailings"));
+const BusinessCabinet = lazy(() => import("./pages/BusinessCabinet"));
+const BusinessDialogs = lazy(() => import("./pages/BusinessDialogs"));
+const BusinessEmployeeAnalytics = lazy(() => import("./pages/BusinessEmployeeAnalytics"));
+const BusinessIdeas = lazy(() => import("./pages/BusinessIdeas"));
+const BusinessTelegramBot = lazy(() => import("./pages/BusinessTelegramBot"));
+const BusinessWebsiteBuilder = lazy(() => import("./pages/BusinessWebsiteBuilder"));
+const PublicBusinessWebsite = lazy(() => import("./pages/PublicBusinessWebsite"));
+const TelegramBotMiniApp = lazy(() => import("./pages/TelegramBotMiniApp"));
+const Admin = lazy(() => import("./pages/Admin"));
+const Balance = lazy(() => import("./pages/Balance"));
+const Settings = lazy(() => import("./pages/Settings"));
+const SettingsProfile = lazy(() => import("./pages/SettingsProfile"));
+const SettingsAppearance = lazy(() => import("./pages/SettingsAppearance"));
+const SettingsNotifications = lazy(() => import("./pages/SettingsNotifications"));
 
 const basename = import.meta.env.BASE_URL === "/" ? undefined : import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -48,6 +53,50 @@ export const router = createBrowserRouter(
     {
       path: "/company",
       Component: Requisites,
+    },
+    {
+      path: "/legal/terms",
+      Component: Legal,
+    },
+    {
+      path: "/legal/privacy",
+      Component: Legal,
+    },
+    {
+      path: "/legal/refund",
+      Component: Legal,
+    },
+    {
+      path: "/legal/pricing",
+      Component: Legal,
+    },
+    {
+      path: "/terms",
+      Component: Legal,
+    },
+    {
+      path: "/privacy",
+      Component: Legal,
+    },
+    {
+      path: "/refund",
+      Component: Legal,
+    },
+    {
+      path: "/pricing",
+      Component: Legal,
+    },
+    {
+      path: "/support",
+      Component: Support,
+    },
+    {
+      path: "/data-deletion",
+      Component: DataDeletion,
+    },
+    {
+      path: "/delete-account",
+      Component: DataDeletion,
     },
     {
       path: "/telegram/miniapp/bot-builder",

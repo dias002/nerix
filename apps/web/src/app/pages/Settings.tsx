@@ -9,9 +9,11 @@ import {
   Globe,
   LogIn,
   LogOut,
+  LifeBuoy,
   Moon,
   Shield,
   Sun,
+  Trash2,
   User,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -102,6 +104,20 @@ export default function Settings() {
           label: t.settings.security,
           icon: Shield,
           value: isAuthenticated ? t.settings.protected : t.auth.guestHint,
+        },
+        {
+          id: "support",
+          label: "Поддержка",
+          icon: LifeBuoy,
+          value: "Оплата, доступ и возвраты",
+          path: "/support",
+        },
+        {
+          id: "data-deletion",
+          label: "Удаление данных",
+          icon: Trash2,
+          value: "Запрос на удаление аккаунта",
+          path: "/data-deletion",
         },
       ],
     },

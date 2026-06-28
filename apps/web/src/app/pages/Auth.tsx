@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react
 import { ArrowLeft, LoaderCircle, Lock, Mail, User } from "lucide-react";
 import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
+import TurnstileBox, { isTurnstileEnabled } from "../components/TurnstileBox";
 import { useLanguage } from "../i18n";
 
 type AuthMode = "login" | "register";
@@ -14,12 +15,17 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const mode: AuthMode = searchParams.get("mode") === "register" ? "register" : "login";
+  const invitedEmail = searchParams.get("email")?.trim() ?? "";
+  const inviteType = searchParams.get("invite");
+  const invitedRole = searchParams.get("role");
   const from = (location.state as { from?: string } | null)?.from ?? "/workspace";
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const turnstileEnabled = isTurnstileEnabled();
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
   const authCountry = useMemo(() => {
     if (typeof window === "undefined") return "KZ";
@@ -32,7 +38,13 @@ export default function AuthPage() {
 
   const switchMode = (nextMode: AuthMode) => {
     setError(null);
-    setSearchParams(nextMode === "register" ? { mode: "register" } : {});
+    setTurnstileToken(null);
+    const nextParams = new URLSearchParams();
+    if (nextMode === "register") nextParams.set("mode", "register");
+    if (inviteType) nextParams.set("invite", inviteType);
+    if (invitedRole) nextParams.set("role", invitedRole);
+    if (invitedEmail) nextParams.set("email", invitedEmail);
+    setSearchParams(nextParams);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -48,6 +60,7 @@ export default function AuthPage() {
           password,
           country: authCountry,
           language: authLanguage,
+          turnstileToken: turnstileToken ?? undefined,
         });
       } else {
         await login({ email, password });
@@ -55,6 +68,7 @@ export default function AuthPage() {
 
       navigate(from, { replace: true });
     } catch (err) {
+      setTurnstileToken(null);
       setError(toPublicApiError(err, t.auth.error));
     } finally {
       setPending(false);
@@ -94,6 +108,12 @@ export default function AuthPage() {
               <p className="mt-2 text-sm leading-relaxed text-gray-500">
                 {mode === "register" ? t.auth.registerSubtitle : t.auth.loginSubtitle}
               </p>
+              {inviteType === "business" && invitedEmail ? (
+                <div className="mt-3 rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-gray-400">
+                  Приглашение в Business workspace для <span className="text-white">{invitedEmail}</span>
+                  {invitedRole ? <span className="text-gray-500"> · роль: {invitedRole}</span> : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="mb-5 grid grid-cols-2 rounded-xl border border-white/10 bg-black p-1">
@@ -165,6 +185,7 @@ export default function AuthPage() {
                     type="email"
                     required
                     autoComplete="email"
+                    readOnly={inviteType === "business" && Boolean(invitedEmail)}
                     className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-700"
                     placeholder="name@example.com"
                   />
@@ -189,6 +210,8 @@ export default function AuthPage() {
               </label>
             </div>
 
+            {mode === "register" ? <TurnstileBox action="register" onTokenChange={setTurnstileToken} /> : null}
+
             {error ? (
               <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
                 {error}
@@ -197,7 +220,7 @@ export default function AuthPage() {
 
             <button
               type="submit"
-              disabled={pending || isLoading}
+              disabled={pending || isLoading || (mode === "register" && turnstileEnabled && !turnstileToken)}
               className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-60"
             >
               {pending ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.8} /> : null}

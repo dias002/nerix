@@ -53,7 +53,7 @@ import {
   type PlanId,
 } from "../api";
 import { useAuth } from "../auth";
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
 
 type AdminTab = "direction" | "users" | "memory" | "pricing" | "control" | "ai-budget";
 
@@ -93,8 +93,9 @@ const aiBudgetStatusClass = {
 
 export default function Admin() {
   const { user } = useAuth();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const tabFromUrl = readAdminTab(searchParams.get("tab"));
+  const tabFromUrl = readAdminPathTab(location.pathname) ?? readAdminTab(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<AdminTab>(tabFromUrl);
   const [overview, setOverview] = useState<AdminOverviewApiResponse | null>(null);
   const [adminUsers, setAdminUsers] = useState<AdminUsersApiResponse | null>(null);
@@ -1778,10 +1779,17 @@ function contentBlockKey(block: Pick<AdminContentBlockApiRecord, "key" | "locale
   return `${block.key}:${block.locale}`;
 }
 
+function readAdminPathTab(pathname: string): AdminTab | null {
+  const section = pathname.split("/workspace/admin/")[1]?.split("/")[0] ?? null;
+  return isAdminSection(section) ? section : null;
+}
+
 function readAdminTab(value: string | null): AdminTab {
-  return value === "users" || value === "memory" || value === "pricing" || value === "control" || value === "ai-budget"
-    ? value
-    : "direction";
+  return isAdminSection(value) ? value : "direction";
+}
+
+function isAdminSection(value: string | null): value is Exclude<AdminTab, "direction"> {
+  return value === "users" || value === "memory" || value === "pricing" || value === "control" || value === "ai-budget";
 }
 
 function adminHeader(tab: AdminTab) {

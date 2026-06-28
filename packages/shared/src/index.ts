@@ -17,6 +17,18 @@ export type AgentCategory =
 
 export type AiModality = "text" | "code" | "image" | "video" | "music" | "voice" | "file";
 
+export type AiTaskType =
+  | "chat_reply"
+  | "customer_support"
+  | "deal_summary"
+  | "website_copy"
+  | "campaign_copy"
+  | "bot_policy"
+  | "knowledge_search"
+  | "internal_analysis"
+  | "code_generation"
+  | "media_generation";
+
 export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "refunded" | "cancelled";
 
 export type LedgerEntryType =
@@ -53,6 +65,7 @@ export type AiRouteRequest = {
   country: CountryCode;
   language: Language;
   agentId?: string;
+  taskType?: AiTaskType;
   modality: AiModality;
   prompt: string;
   attachmentIds?: string[];
@@ -60,6 +73,7 @@ export type AiRouteRequest = {
 
 export type AiRouteDecision = {
   agentId: string;
+  taskType: AiTaskType;
   provider: string;
   model: string;
   estimatedCredits: number;

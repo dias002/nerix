@@ -22,6 +22,7 @@ import { hashPassword, verifyPassword } from "../src/modules/auth/password.js";
 import { signAccessToken, verifyAccessToken } from "../src/modules/auth/token.js";
 import { BillingService } from "../src/modules/billing/billing.service.js";
 import { InMemoryWalletRepository } from "../src/modules/billing/wallet.repository.js";
+import { InMemoryBusinessJobRepository } from "../src/modules/business-jobs/business-job.repository.js";
 import { ChatService } from "../src/modules/chat/chat.service.js";
 import { InMemoryConversationRepository } from "../src/modules/chat/conversation.repository.js";
 import { GeminiMediaGenerationProvider } from "../src/modules/generation/media-provider.js";
@@ -152,14 +153,30 @@ test("provider router separates supported and regional country routes", async ()
         chooseProvider({
           country: "KZ",
           modality: "text",
-          preferredModel: "business-primary",
-          agentId: "business",
+          taskType: "website_copy",
+          preferredModel: "text-primary",
         }),
         {
           provider: "anthropic",
           model: "anthropic-text",
           policyMode: "dev_allow_all",
           reason: "Dev policy: Anthropic is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          taskType: "customer_support",
+          preferredModel: "business-primary",
+          agentId: "support",
+        }),
+        {
+          provider: "openai",
+          model: "openai-text",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: OpenAI is available for KZ.",
         }
       );
 
@@ -224,6 +241,88 @@ test("provider router separates supported and regional country routes", async ()
       );
     }
   );
+});
+
+test("knowledge base entries feed business website jobs within a workspace", async () => {
+  const dependencies = createDependencies();
+
+  const knowledgeEntry = await dependencies.knowledgeBase.createEntry("local-user", {
+    type: "faq",
+    title: "Оплата и доставка",
+    content: "Доставка по Алматы в день заказа. Оплата Kaspi и картой.",
+    tags: ["delivery", "payment"],
+  });
+  assert.equal(knowledgeEntry.ok, true);
+  if (!knowledgeEntry.ok) return;
+
+  const websiteJob = await dependencies.businessJobs.createWebsiteDraftJob("local-user", {
+    country: "KZ",
+    prompt: "Нужен сайт для компании по доставке кофе в Алматы.",
+    companyName: "Nomdu Coffee",
+    city: "Алматы",
+    contact: "@nomducoffee",
+    style: "clean",
+    siteType: "landing",
+  });
+  assert.equal(websiteJob.ok, true);
+  if (!websiteJob.ok) return;
+
+  assert.equal(websiteJob.value.job.status, "succeeded");
+  assert.equal(websiteJob.value.job.channel, "website");
+  assert.equal(websiteJob.value.job.capability, "website_generation");
+  assert.equal(websiteJob.value.job.taskType, "website_copy");
+  assert.ok(websiteJob.value.assistantSummary.includes("workspace"));
+  assert.equal(websiteJob.value.website.workspaceId !== null, true);
+});
+
+test("business jobs can be cancelled before completion", async () => {
+  const repository = new InMemoryBusinessJobRepository();
+  const job = await repository.create({
+    workspaceId: "workspace-1",
+    createdByUserId: "user-1",
+    channel: "internal",
+    capability: "workspace_analysis",
+    taskType: "internal_analysis",
+    payload: { reason: "manual test" },
+  });
+
+  const cancelled = await repository.cancel("workspace-1", job.id);
+  assert.equal(cancelled?.status, "cancelled");
+  assert.ok(cancelled?.finishedAt);
+
+  const completedJob = await repository.create({
+    workspaceId: "workspace-1",
+    createdByUserId: "user-1",
+    channel: "telegram",
+    capability: "bot_setup",
+    taskType: "bot_policy",
+    payload: { companyName: "Nomdu" },
+  });
+  await repository.markSucceeded("workspace-1", completedJob.id, { result: { ok: true } });
+
+  const completedAfterCancel = await repository.cancel("workspace-1", completedJob.id);
+  assert.equal(completedAfterCancel?.status, "succeeded");
+});
+
+test("telegram mini app drafts are persisted as business jobs", async () => {
+  const dependencies = createDependencies();
+
+  const draftJob = await dependencies.businessJobs.createTelegramMiniAppDraftJob("local-user", {
+    country: "KZ",
+    companyName: "Nomdu Services",
+    businessCategory: "автоматизация продаж",
+    contact: "@nomdusales",
+    mainOffer: "Внедряем Telegram-ботов для продаж и поддержки.",
+    goals: ["answers", "leads"],
+  });
+  assert.equal(draftJob.ok, true);
+  if (!draftJob.ok) return;
+
+  assert.equal(draftJob.value.job.status, "succeeded");
+  assert.equal(draftJob.value.job.channel, "telegram");
+  assert.equal(draftJob.value.job.capability, "bot_setup");
+  assert.equal(draftJob.value.job.taskType, "bot_policy");
+  assert.ok(draftJob.value.draft.botUsernameSuggestions.length > 0);
 });
 
 test("billing service reserves, captures, and refunds credits", async () => {
@@ -976,6 +1075,7 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
     {
       YOOKASSA_SHOP_ID: "shop-id",
       YOOKASSA_SECRET_KEY: "secret-key",
+      YOOKASSA_RECEIPT_VAT_CODE: 1,
       YOOKASSA_RETURN_URL: "https://nomduchat.example.test/balance",
     },
     async () => {
@@ -992,6 +1092,7 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
       }, async () => {
         const checkout = await new YooKassaSubscriptionPaymentProvider().createCheckout({
           userId: "user-1",
+          customerEmail: "buyer@example.com",
           plan: basePlan,
           price: ruPrice,
         });
@@ -1011,6 +1112,24 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
       assert.deepEqual(body.amount, {
         value: "990.00",
         currency: "RUB",
+      });
+      assert.deepEqual(body.receipt, {
+        customer: {
+          email: "buyer@example.com",
+        },
+        items: [
+          {
+            description: "Доступ к сервису nomduchat: Easy Start",
+            quantity: "1.00",
+            amount: {
+              value: "990.00",
+              currency: "RUB",
+            },
+            vat_code: 1,
+            payment_subject: "service",
+            payment_mode: "full_payment",
+          },
+        ],
       });
       assert.equal(body.capture, true);
       assert.deepEqual(body.confirmation, {

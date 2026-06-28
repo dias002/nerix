@@ -1,4 +1,4 @@
-import type { AiModality, CountryCode } from "@nomduchat/shared";
+import type { AiModality, AiTaskType, CountryCode } from "@nomduchat/shared";
 import {
   getEnabledProvidersForModality,
   getProviderPolicyMode,
@@ -18,6 +18,7 @@ export function chooseProvider(input: {
   modality: AiModality;
   preferredModel: string;
   agentId?: string;
+  taskType?: AiTaskType;
 }): ProviderDecision | null {
   const policyMode = getProviderPolicyMode();
   const providers = getEnabledProvidersForModality(input.modality);
@@ -46,7 +47,31 @@ function preferredProviderOrder(input: {
   modality: AiModality;
   preferredModel: string;
   agentId?: string;
+  taskType?: AiTaskType;
 }): ProviderCode[] {
+  if (input.taskType === "code_generation") {
+    return ["anthropic", "openai", "gemini", "mock-provider"];
+  }
+
+  if (input.taskType === "media_generation") {
+    return ["gemini", "openai", "anthropic", "mock-provider"];
+  }
+
+  if (
+    input.taskType === "website_copy" ||
+    input.taskType === "campaign_copy" ||
+    input.taskType === "bot_policy" ||
+    input.taskType === "deal_summary" ||
+    input.taskType === "knowledge_search" ||
+    input.taskType === "internal_analysis"
+  ) {
+    return ["anthropic", "openai", "gemini", "mock-provider"];
+  }
+
+  if (input.taskType === "chat_reply" || input.taskType === "customer_support") {
+    return ["openai", "anthropic", "gemini", "mock-provider"];
+  }
+
   if (input.modality === "code") return ["anthropic", "openai", "gemini", "mock-provider"];
   if (input.modality === "image") return ["gemini", "openai", "mock-provider"];
   if (input.modality === "voice") return ["openai", "mock-provider"];

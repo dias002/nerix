@@ -12,6 +12,7 @@ import type {
 
 export interface TelegramBotOrderRepository {
   listByUser(userId: string): Promise<TelegramBotOrderRecord[]>;
+  findById(userId: string, orderId: string): Promise<TelegramBotOrderRecord | null>;
   create(input: CreateTelegramBotOrderRepositoryInput): Promise<TelegramBotOrderRecord | null>;
 }
 
@@ -23,6 +24,11 @@ export class InMemoryTelegramBotOrderRepository implements TelegramBotOrderRepos
       .filter((order) => order.userId === userId)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((order) => ({ ...order }));
+  }
+
+  async findById(userId: string, orderId: string) {
+    const order = this.orders.get(orderId);
+    return order && order.userId === userId ? { ...order } : null;
   }
 
   async create(input: CreateTelegramBotOrderRepositoryInput) {
@@ -133,6 +139,49 @@ export class PostgresTelegramBotOrderRepository implements TelegramBotOrderRepos
     );
 
     return result.rows.map(mapTelegramBotOrderRow);
+  }
+
+  async findById(userId: string, orderId: string) {
+    const databaseUserId = await this.ensureUser(userId);
+    if (!databaseUserId) return null;
+
+    const result = await this.database.query<TelegramBotOrderRow>(
+      `
+        select
+          id,
+          user_id,
+          workspace_id,
+          country,
+          currency,
+          amount_minor,
+          status,
+          company_name,
+          owner_name,
+          contact,
+          business_description,
+          services,
+          audience,
+          bot_purpose,
+          tone,
+          response_rules,
+          escalation_contact,
+          faq,
+          source_links,
+          bot_username,
+          bot_token_provided,
+          bot_token_hint,
+          setup_summary,
+          system_prompt,
+          created_at,
+          updated_at
+        from telegram_bot_orders
+        where user_id = $1 and id::text = $2
+        limit 1
+      `,
+      [databaseUserId, orderId]
+    );
+
+    return result.rows[0] ? mapTelegramBotOrderRow(result.rows[0]) : null;
   }
 
   async create(input: CreateTelegramBotOrderRepositoryInput) {

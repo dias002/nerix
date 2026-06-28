@@ -4,16 +4,21 @@ import {
   ArrowLeft,
   BarChart3,
   CheckCircle2,
+  Copy,
   Clock3,
+  Share2,
   ShieldCheck,
   UserPlus,
   Users,
 } from "lucide-react";
+import ShareSheet, { type SharePayload } from "../components/ShareSheet";
 import {
+  addBusinessMember,
   getBusinessWorkspace,
   type BusinessRoleApiRecord,
   type BusinessRoleKey,
   type BusinessWorkspaceApiResponse,
+  toPublicApiError,
 } from "../api";
 import { useAuth } from "../auth";
 
@@ -23,6 +28,19 @@ export default function BusinessEmployeeAnalytics() {
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [activeRoleKey, setActiveRoleKey] = useState<BusinessRoleKey>("owner");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteLinkEmail, setInviteLinkEmail] = useState<string | null>(null);
+  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
+  const [inviteForm, setInviteForm] = useState({
+    name: "",
+    roleKey: "sales" as BusinessRoleKey,
+    invitedEmail: "",
+    roleTitle: "",
+    access: "",
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -59,16 +77,91 @@ export default function BusinessEmployeeAnalytics() {
   const totalClientReports = reports.reduce((sum, report) => sum + report.clientReportsCount, 0);
   const onlineCount = members.filter((member) => member.status === "online").length;
 
-  const invite = () => {
-    setMessage(
-      canManageBusiness
-        ? "Приглашение будет доступно владельцу Business аккаунта. Сейчас экран показывает структуру доступа и аналитику."
-        : "Приглашать сотрудников может владелец Business аккаунта или администратор."
-    );
+  const openInvite = () => {
+    if (!canManageBusiness) {
+      setMessage("Приглашать сотрудников может владелец Business аккаунта или администратор.");
+      return;
+    }
+
+    const defaultRole = roles.find((role) => role.key !== "owner") ?? roles[0];
+    setInviteForm((current) => ({
+      ...current,
+      roleKey: defaultRole?.key ?? current.roleKey,
+      roleTitle: defaultRole?.title ?? current.roleTitle,
+      access: defaultRole ? defaultRole.permissions.join(", ") : current.access,
+    }));
+    setInviteError(null);
+    setMessage(null);
+    setInviteLink(null);
+    setInviteLinkEmail(null);
+    setInviteOpen(true);
+  };
+
+  const submitInvite = async () => {
+    if (!inviteForm.name.trim()) {
+      setInviteError("Укажите имя сотрудника.");
+      return;
+    }
+
+    const invitedEmail = inviteForm.invitedEmail.trim().toLowerCase();
+    if (!invitedEmail) {
+      setInviteError("Укажите email сотрудника, чтобы он смог зарегистрироваться по invite-ссылке.");
+      return;
+    }
+    if (!isEmailLike(invitedEmail)) {
+      setInviteError("Проверьте email сотрудника.");
+      return;
+    }
+
+    setInviteSubmitting(true);
+    setInviteError(null);
+    try {
+      const updatedWorkspace = await addBusinessMember({
+        name: inviteForm.name.trim(),
+        roleKey: inviteForm.roleKey,
+        invitedEmail,
+        roleTitle: inviteForm.roleTitle.trim() || undefined,
+        access: inviteForm.access.trim() || undefined,
+      });
+      const nextInviteLink = buildInviteLink(invitedEmail, inviteForm.roleKey);
+      setWorkspaceData(updatedWorkspace);
+      setInviteOpen(false);
+      setInviteLink(nextInviteLink);
+      setInviteLinkEmail(invitedEmail);
+      setInviteForm({
+        name: "",
+        roleKey: "sales",
+        invitedEmail: "",
+        roleTitle: "",
+        access: "",
+      });
+      setMessage("Сотрудник добавлен. Отправь ему invite-ссылку, чтобы он зарегистрировался сам.");
+    } catch (error) {
+      setInviteError(toPublicApiError(error, "Не удалось пригласить сотрудника."));
+    } finally {
+      setInviteSubmitting(false);
+    }
+  };
+
+  const shareInvite = (link: string | null, email?: string | null) => {
+    if (!link) return;
+    setSharePayload({
+      title: "Приглашение в nomduchat Business",
+      text: email
+        ? `Приглашение в workspace nomduchat для ${email}. Зарегистрируйтесь по ссылке:`
+        : "Приглашение в workspace nomduchat. Зарегистрируйтесь по ссылке:",
+      url: link,
+    });
   };
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-5 text-white md:p-10">
+      <ShareSheet
+        open={Boolean(sharePayload)}
+        payload={sharePayload}
+        onClose={() => setSharePayload(null)}
+        onShared={setMessage}
+      />
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
@@ -90,7 +183,7 @@ export default function BusinessEmployeeAnalytics() {
           </div>
           <button
             type="button"
-            onClick={invite}
+            onClick={openInvite}
             className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
           >
             <UserPlus className="h-4 w-4" strokeWidth={1.8} />
@@ -98,10 +191,160 @@ export default function BusinessEmployeeAnalytics() {
           </button>
         </header>
 
+        {inviteOpen ? (
+          <section className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-xl font-medium">Новый сотрудник</h2>
+                <p className="mt-2 text-sm text-gray-500">Добавим участника в текущий business workspace и назначим роль.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (inviteSubmitting) return;
+                  setInviteOpen(false);
+                  setInviteError(null);
+                }}
+                className="inline-flex w-fit items-center justify-center rounded-full border border-white/10 px-4 py-2 text-sm text-gray-400 transition-colors hover:border-white/20 hover:text-white"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="text-sm text-gray-400">Имя сотрудника</span>
+                <input
+                  value={inviteForm.name}
+                  onChange={(event) => setInviteForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Например, Алина"
+                  className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-[#050505] px-4 text-sm text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-gray-400">Email для приглашения</span>
+                <input
+                  value={inviteForm.invitedEmail}
+                  onChange={(event) => setInviteForm((current) => ({ ...current, invitedEmail: event.target.value }))}
+                  placeholder="name@company.com"
+                  className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-[#050505] px-4 text-sm text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-gray-400">Роль</span>
+                <select
+                  value={inviteForm.roleKey}
+                  onChange={(event) => {
+                    const nextRoleKey = event.target.value as BusinessRoleKey;
+                    const role = roles.find((candidate) => candidate.key === nextRoleKey);
+                    setInviteForm((current) => ({
+                      ...current,
+                      roleKey: nextRoleKey,
+                      roleTitle: role?.title ?? current.roleTitle,
+                      access: role ? role.permissions.join(", ") : current.access,
+                    }));
+                  }}
+                  className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-[#050505] px-4 text-sm text-white outline-none transition-colors focus:border-white/25"
+                >
+                  {roles
+                    .filter((role) => role.key !== "owner")
+                    .map((role) => (
+                      <option key={role.key} value={role.key}>
+                        {role.title}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-gray-400">Название роли</span>
+                <input
+                  value={inviteForm.roleTitle}
+                  onChange={(event) => setInviteForm((current) => ({ ...current, roleTitle: event.target.value }))}
+                  placeholder="Менеджер продаж"
+                  className="mt-2 h-12 w-full rounded-2xl border border-white/10 bg-[#050505] px-4 text-sm text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block">
+              <span className="text-sm text-gray-400">Доступ</span>
+              <textarea
+                value={inviteForm.access}
+                onChange={(event) => setInviteForm((current) => ({ ...current, access: event.target.value }))}
+                placeholder="CRM, заявки, отчеты"
+                className="mt-2 min-h-28 w-full resize-none rounded-2xl border border-white/10 bg-[#050505] px-4 py-3 text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+              />
+            </label>
+
+            {inviteError ? (
+              <div className="mt-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                {inviteError}
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setInviteOpen(false)}
+                disabled={inviteSubmitting}
+                className="inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white disabled:opacity-40"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitInvite()}
+                disabled={inviteSubmitting}
+                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
+              >
+                {inviteSubmitting ? "Добавляем..." : "Добавить сотрудника"}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
         {message ? (
           <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] px-4 py-3 text-sm text-gray-400">
             {message}
           </div>
+        ) : null}
+
+        {inviteLink ? (
+          <section className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-sm font-medium text-white">Invite-ссылка для сотрудника</div>
+                <div className="mt-1 text-sm text-gray-500">
+                  Сотрудник открывает ссылку, регистрируется с этим email и автоматически попадает в workspace.
+                  {inviteLinkEmail ? <span className="text-gray-400"> Email: {inviteLinkEmail}</span> : null}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => shareInvite(inviteLink, inviteLinkEmail)}
+                  className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                >
+                  <Share2 className="h-4 w-4" strokeWidth={1.7} />
+                  Поделиться
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copyInviteLink(inviteLink, setMessage)}
+                  className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                >
+                  <Copy className="h-4 w-4" strokeWidth={1.7} />
+                  Скопировать
+                </button>
+              </div>
+            </div>
+            <div className="mt-3 overflow-x-auto rounded-2xl border border-white/10 bg-[#050505] px-4 py-3 text-sm text-gray-400">
+              {inviteLink}
+            </div>
+          </section>
         ) : null}
 
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -199,7 +442,19 @@ export default function BusinessEmployeeAnalytics() {
                   <div className="mt-1 text-sm text-gray-500">{member.roleTitle}</div>
                 </div>
                 <div className="text-sm text-gray-400">{member.access}</div>
-                <div className="text-sm text-gray-500">{member.invitedEmail || "Аккаунт подключен"}</div>
+                <div className="space-y-2 text-sm text-gray-500">
+                  <div>{member.invitedEmail || "Аккаунт подключен"}</div>
+                  {member.invitedEmail && !member.userId ? (
+                    <button
+                      type="button"
+                      onClick={() => shareInvite(buildInviteLink(member.invitedEmail, member.roleKey), member.invitedEmail)}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                    >
+                      <Share2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+                      Отправить invite
+                    </button>
+                  ) : null}
+                </div>
                 <div className="flex items-center gap-2 text-sm text-gray-400">
                   <span className={`h-2.5 w-2.5 rounded-full ${statusColor(member.status)}`} />
                   {member.status === "online" ? "в сети" : member.status === "away" ? "занят" : "офлайн"}
@@ -268,4 +523,41 @@ function statusColor(status: string) {
   if (status === "online") return "bg-emerald-400";
   if (status === "away") return "bg-amber-400";
   return "bg-gray-600";
+}
+
+function buildInviteLink(email: string, roleKey: BusinessRoleKey) {
+  if (!email || typeof window === "undefined") return null;
+
+  const url = new URL("/auth", window.location.origin);
+  url.searchParams.set("mode", "register");
+  url.searchParams.set("invite", "business");
+  url.searchParams.set("email", email);
+  url.searchParams.set("role", roleKey);
+  return url.toString();
+}
+
+function isEmailLike(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function copyInviteLink(link: string | null, setMessage: (value: string | null) => void) {
+  if (!link) return;
+
+  try {
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(link);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = link;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    setMessage("Invite-ссылка скопирована.");
+  } catch {
+    setMessage("Не удалось скопировать invite-ссылку.");
+  }
 }

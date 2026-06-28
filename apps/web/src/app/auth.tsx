@@ -32,6 +32,7 @@ type AuthContextValue = {
     name?: string;
     country?: "KZ" | "RU";
     language?: Language;
+    turnstileToken?: string;
   }) => Promise<void>;
   completeOAuth: (session: AuthApiResponse) => void;
   refreshUser: () => Promise<void>;

@@ -7,6 +7,7 @@ import type {
   TelegramBotCountry,
   TelegramMiniAppDraftInput,
   TelegramBotPrice,
+  TelegramBotTestReply,
   TelegramBotTone,
 } from "./telegram-bot.types.js";
 
@@ -40,12 +41,12 @@ export class TelegramBotOrderService {
       product: {
         title: "Telegram-бот под ключ",
         description:
-          "Быстрый опрос собирает данные компании, услуги, правила ответа и контакты для передачи человеку. После оплаты бот подключается к Telegram и получает готовую инструкцию поведения.",
+          "Быстрый опрос собирает данные компании, услуги, правила ответа и контакты для передачи человеку. После согласования запуска бот подключается к Telegram и получает готовую инструкцию поведения.",
         prices: Object.values(telegramBotPrices),
         steps: [
           "Заполнить короткий опрос по компании и услугам.",
           "Получить готовые правила ответа и техническое задание.",
-          "Оплатить фиксированную стоимость.",
+          "Согласовать запуск и следующий шаг подключения.",
           "Передать username/token из BotFather для подключения.",
         ],
       },
@@ -56,6 +57,20 @@ export class TelegramBotOrderService {
     return ok({
       orders: await this.repository.listByUser(userId),
     });
+  }
+
+  async testOrderReply(userId: string, input: { orderId: string; message: string }) {
+    const order = await this.repository.findById(userId, input.orderId);
+    if (!order) {
+      return fail(new DomainError("not_found", "Telegram bot order was not found.", 404));
+    }
+
+    const customerMessage = clean(input.message).slice(0, 2_000);
+    if (!customerMessage) {
+      return fail(new DomainError("validation_failed", "Customer message is required.", 400));
+    }
+
+    return ok(buildTestReply(order, customerMessage));
   }
 
   createMiniAppDraft(input: TelegramMiniAppDraftInput) {
@@ -76,19 +91,28 @@ export class TelegramBotOrderService {
         : "Клиенты, которые пишут в Telegram и хотят быстро получить консультацию.");
     const services = buildServices(normalized.mainOffer, normalized.priceInfo);
     const botPurpose = buildBotPurpose(goals, normalized.businessCategory);
-    const responseRules = buildResponseRules(normalized.contact, normalized.priceInfo);
+    const responseRules = buildResponseRules(normalized.contact, normalized.priceInfo, normalized.knowledgeContext);
     const escalationContact = `Передавать человеку через ${normalized.contact}, если клиент просит индивидуальный расчет, спорит по условиям, хочет оплатить или задает вопрос вне базы знаний.`;
-    const faq = buildFaq(normalized.companyName, services, normalized.priceInfo, normalized.contact);
-    const sourceLinks = [normalized.website].filter(Boolean).join("\n");
+    const faq = buildFaq(
+      normalized.companyName,
+      services,
+      normalized.priceInfo,
+      normalized.contact,
+      normalized.knowledgeContext
+    );
+    const sourceLinks = [normalized.website, normalized.knowledgeContext ? "workspace://knowledge-base" : ""]
+      .filter(Boolean)
+      .join("\n");
     const businessDescription = [
       `${normalized.companyName} работает в нише: ${normalized.businessCategory}.`,
       normalized.city ? `Город/регион: ${normalized.city}.` : "",
       `Основной оффер: ${asSentence(normalized.mainOffer)}`,
+      normalized.knowledgeContext ? `Дополнительные знания компании:\n${normalized.knowledgeContext}` : "",
     ]
       .filter(Boolean)
       .join("\n");
     const orderPayload: Omit<CreateTelegramBotOrderInput, "botToken"> = {
-      userId: "local-user",
+      userId: normalized.userId || "local-user",
       country: normalized.country,
       companyName: normalized.companyName,
       ownerName: "",
@@ -172,8 +196,82 @@ export class TelegramBotOrderService {
   }
 }
 
+function buildTestReply(
+  order: {
+    id: string;
+    companyName: string;
+    services: string;
+    faq: string;
+    responseRules: string;
+    escalationContact: string;
+    botPurpose: string;
+    tone: TelegramBotTone;
+  },
+  customerMessage: string
+): TelegramBotTestReply {
+  const normalized = customerMessage.toLowerCase();
+  const matchedKnowledge = selectRelevantKnowledge([order.services, order.faq, order.responseRules], normalized);
+  const shouldEscalate = shouldEscalateMessage(normalized);
+  const tonePrefix =
+    order.tone === "strict"
+      ? ""
+      : order.tone === "expert"
+        ? "Отвечаю по доступным данным. "
+        : order.tone === "sales"
+          ? "Спасибо за интерес. "
+          : "Здравствуйте. ";
+  const knowledgeText = matchedKnowledge[0] ?? order.services.split("\n").find(Boolean) ?? order.botPurpose;
+  const nextStep = shouldEscalate
+    ? `Передам вопрос человеку: ${order.escalationContact}.`
+    : `Могу уточнить детали и передать заявку менеджеру: ${order.escalationContact}.`;
+
+  return {
+    orderId: order.id,
+    customerMessage,
+    shouldEscalate,
+    escalationContact: order.escalationContact,
+    matchedKnowledge,
+    reply: `${tonePrefix}${knowledgeText}\n\n${nextStep}`.trim(),
+  };
+}
+
+function selectRelevantKnowledge(sources: string[], normalizedMessage: string) {
+  const keywords = normalizedMessage
+    .split(/[^a-zа-яё0-9]+/i)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 4)
+    .slice(0, 12);
+
+  return sources
+    .flatMap((source) => source.split(/\n+/g))
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => {
+      const normalizedLine = line.toLowerCase();
+      return keywords.length === 0 || keywords.some((keyword) => normalizedLine.includes(keyword));
+    })
+    .slice(0, 3);
+}
+
+function shouldEscalateMessage(normalizedMessage: string) {
+  return [
+    "скид",
+    "договор",
+    "оплат",
+    "счет",
+    "счёт",
+    "индивидуаль",
+    "руковод",
+    "менедж",
+    "жалоб",
+    "возврат",
+    "срочно",
+  ].some((needle) => normalizedMessage.includes(needle));
+}
+
 function normalizeMiniAppInput(input: TelegramMiniAppDraftInput) {
   return {
+    userId: input.userId?.trim() || "",
     country: input.country === "RU" ? "RU" as const : "KZ" as const,
     companyName: clean(input.companyName),
     businessCategory: clean(input.businessCategory),
@@ -183,6 +281,7 @@ function normalizeMiniAppInput(input: TelegramMiniAppDraftInput) {
     mainOffer: clean(input.mainOffer),
     priceInfo: clean(input.priceInfo ?? ""),
     audience: clean(input.audience ?? ""),
+    knowledgeContext: clean(input.knowledgeContext ?? ""),
     goals: input.goals.map((goal) => clean(goal)).filter(Boolean).slice(0, 8),
     language: input.language ?? "ru",
     telegramInitData: input.telegramInitData ?? "",
@@ -298,17 +397,18 @@ function buildBotPurpose(goals: string[], category: string) {
   return `Бот для ниши "${category}": ${purpose}.`;
 }
 
-function buildResponseRules(contact: string, priceInfo: string) {
+function buildResponseRules(contact: string, priceInfo: string, knowledgeContext: string) {
   return [
     "Отвечать коротко, понятно и по делу.",
     "Не придумывать цены, сроки, скидки и наличие, если этих данных нет в оффере.",
     priceInfo ? "Если клиент спрашивает цену, опираться только на указанный прайс." : "Если клиент спрашивает цену, собрать задачу и передать менеджеру.",
+    knowledgeContext ? "Если есть факты из базы знаний workspace, опираться на них как на источник правды." : "",
     "В каждом диалоге стараться получить имя, телефон или Telegram username клиента.",
     `Когда нужен человек, передавать контакт: ${contact}.`,
   ].join("\n");
 }
 
-function buildFaq(companyName: string, services: string, priceInfo: string, contact: string) {
+function buildFaq(companyName: string, services: string, priceInfo: string, contact: string, knowledgeContext: string) {
   return [
     `Вопрос: Чем занимается ${companyName}?`,
     `Ответ: ${services.split("\n").slice(0, 3).join(" ")}`,
@@ -318,6 +418,7 @@ function buildFaq(companyName: string, services: string, priceInfo: string, cont
     "",
     "Вопрос: Как оставить заявку?",
     "Ответ: Напишите, что вам нужно, город/объем/сроки и контакт для связи.",
+    knowledgeContext ? `\n\nДополнительные знания:\n${knowledgeContext}` : "",
     "",
     "Вопрос: Как связаться с человеком?",
     `Ответ: Я передам диалог менеджеру: ${contact}.`,

@@ -83,7 +83,7 @@ export class BusinessWebsiteService {
     const generated = generateWebsiteContent(normalized);
     const repositoryInput: CreateBusinessWebsiteRepositoryInput = {
       userId: normalized.userId,
-      workspaceId: null,
+      workspaceId: normalized.workspaceId,
       country: normalized.country,
       status: "draft",
       slug: buildSlug(generated.title),
@@ -132,11 +132,13 @@ export class BusinessWebsiteService {
 function normalizeDraftInput(input: CreateBusinessWebsiteDraftInput): Required<CreateBusinessWebsiteDraftInput> {
   return {
     userId: input.userId,
+    workspaceId: input.workspaceId ?? null,
     country: input.country === "RU" ? "RU" : "KZ",
     prompt: clean(input.prompt),
     companyName: clean(input.companyName ?? ""),
     city: clean(input.city ?? ""),
     contact: clean(input.contact ?? ""),
+    knowledgeContext: clean(input.knowledgeContext ?? ""),
     style: normalizeStyle(input.style),
     siteType: normalizeSiteType(input.siteType),
   };
@@ -147,7 +149,7 @@ function generateWebsiteContent(input: Required<CreateBusinessWebsiteDraftInput>
   content: BusinessWebsiteContent;
   assistantSummary: string;
 } {
-  const prompt = input.prompt;
+  const prompt = [input.knowledgeContext, input.prompt].filter(Boolean).join("\n\n");
   const city = input.city || extractCity(prompt);
   const companyName = cleanupCompanyName(input.companyName || extractCompanyName(prompt), city);
   const niche = extractNiche(prompt, input.siteType);
@@ -246,7 +248,7 @@ function generateWebsiteContent(input: Required<CreateBusinessWebsiteDraftInput>
   return {
     title,
     content,
-    assistantSummary: `Собрал ${typeLabels[input.siteType]} для "${companyName}": ${sections.length} блоков, SEO-описание, CTA и контакты. Хостинг и ссылка будут внутри nomduchat после публикации.`,
+    assistantSummary: `Собрал ${typeLabels[input.siteType]} для "${companyName}": ${sections.length} блоков, SEO-описание, CTA и контакты.${input.knowledgeContext ? " Дополнительно учтены знания workspace." : ""} Хостинг и ссылка будут внутри nomduchat после публикации.`,
   };
 }
 

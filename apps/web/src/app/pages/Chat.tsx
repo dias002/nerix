@@ -3,7 +3,6 @@ import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
   Check,
-  ChevronDown,
   CircleStop,
   Copy,
   Download,
@@ -16,14 +15,15 @@ import {
   Paperclip,
   RotateCcw,
   Send,
+  Share2,
   Star,
   Video,
   X,
 } from "lucide-react";
 import { useLanguage } from "../i18n";
 import AuthPromptDialog from "../components/AuthPromptDialog";
+import ShareSheet, { type SharePayload } from "../components/ShareSheet";
 import {
-  getAgents,
   cancelGenerationJob,
   getChatConversation,
   fetchGenerationArtifact,
@@ -53,13 +53,6 @@ type AttachedFile = ChatAttachmentInput & {
   id: string;
 };
 
-type AgentOption = {
-  id: string;
-  title: string;
-  description: string;
-};
-
-const fallbackAgentIds = ["general", "business", "code", "study", "documents", "image", "video", "music", "voice", "marketing", "support"] as const;
 const maxAttachedFiles = 5;
 const maxFileContentChars = 12_000;
 const guestRequestStorageKey = "nomduchat-guest-chat-requests";
@@ -78,43 +71,20 @@ export default function Chat() {
   const [unavailableNotice, setUnavailableNotice] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
-  const [apiAgents, setApiAgents] = useState<Array<{ id: string; name: string; description: string }> | null>(null);
-  const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
   const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string>>({});
   const [cancellingGenerationIds, setCancellingGenerationIds] = useState<Set<string>>(() => new Set());
+  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceBaseInputRef = useRef("");
   const mediaObjectUrlsRef = useRef<Record<string, string>>({});
-  const selectedAgentId = searchParams.get("agent");
+  const promptParam = searchParams.get("prompt");
+  const newChatParam = searchParams.get("new");
   const conversationParam = searchParams.get("conversationId");
 
-  const agentOptions = useMemo<AgentOption[]>(() => {
-    if (apiAgents?.length) {
-      return apiAgents.map((agent) => {
-        const translationIndex = fallbackAgentIds.findIndex((id) => id === agent.id);
-        const fallback = translationIndex >= 0 ? t.agents.items[translationIndex] : undefined;
-        return {
-          id: agent.id,
-          title: fallback?.title ?? agent.name,
-          description: fallback?.description ?? agent.description,
-        };
-      });
-    }
-
-    return fallbackAgentIds.map((id, index) => ({
-      id,
-      title: t.agents.items[index]?.title ?? id,
-      description: t.agents.items[index]?.description ?? "",
-    }));
-  }, [apiAgents, t.agents.items]);
-
-  const selectedAgent = agentOptions.find((agent) => agent.id === selectedAgentId);
-  const activeAgentId = selectedAgent?.id;
-  const modelLabel = selectedAgent ? `nomduchat · ${selectedAgent.title}` : t.chat.model;
   const canSend = Boolean(inputValue.trim()) || attachedFiles.length > 0;
 
   const scrollToBottom = () => {
@@ -128,26 +98,45 @@ export default function Chat() {
   useEffect(() => {
     setMessages((prev) => {
       if (prev.length === 0 || (prev.length === 1 && prev[0].id === "intro")) {
-        return [{ id: "intro", text: t.chat.initial, sender: "ai" }];
+        return [{ id: "intro", text: "nomduchat", sender: "ai" }];
       }
       return prev;
     });
-  }, [t.chat.initial]);
+  }, []);
 
   useEffect(() => {
-    const prompt = searchParams.get("prompt");
-    if (!prompt) return;
+    if (!promptParam) return;
 
-    setInputValue(prompt);
+    setInputValue(promptParam);
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("prompt");
       return next;
     }, { replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [promptParam, setSearchParams]);
 
   useEffect(() => {
-    if (!conversationParam) return;
+    if (!newChatParam) return;
+
+    Object.values(mediaObjectUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
+    mediaObjectUrlsRef.current = {};
+    setMediaObjectUrls({});
+    setMessages([{ id: "intro", text: "nomduchat", sender: "ai" }]);
+    setInputValue("");
+    setAttachedFiles([]);
+    setConversationId(undefined);
+    setUnavailableNotice(null);
+    setIsThinking(false);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("new");
+      next.delete("conversationId");
+      return next;
+    }, { replace: true });
+  }, [newChatParam, setSearchParams]);
+
+  useEffect(() => {
+    if (!conversationParam || newChatParam) return;
 
     let active = true;
     setUnavailableNotice(null);
@@ -167,25 +156,7 @@ export default function Chat() {
     return () => {
       active = false;
     };
-  }, [conversationParam]);
-
-  useEffect(() => {
-    let active = true;
-
-    getAgents()
-      .then((response) => {
-        if (!active) return;
-        setApiAgents(response.agents);
-      })
-      .catch(() => {
-        if (!active) return;
-        setApiAgents(null);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  }, [conversationParam, newChatParam]);
 
   useEffect(() => {
     return () => {
@@ -299,19 +270,6 @@ export default function Chat() {
     setIsAuthPromptOpen(false);
   }, [isAuthenticated]);
 
-  const handleAgentSelect = (agentId: string | null) => {
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      if (agentId) {
-        next.set("agent", agentId);
-      } else {
-        next.delete("agent");
-      }
-      return next;
-    });
-    setIsModeMenuOpen(false);
-  };
-
   const handleSend = async () => {
     if (!canSend) return;
 
@@ -334,7 +292,6 @@ export default function Chat() {
       const response = await sendChatMessage({
         message: messageText,
         conversationId,
-        agentId: activeAgentId,
         language: language === "kk" ? "kz" : language,
         attachments: filesForMessage.map(toApiAttachment),
       });
@@ -377,7 +334,30 @@ export default function Chat() {
     }
   };
 
-  const handleRegenerate = async () => {
+  const handleShareMessage = (message: Message) => {
+    setSharePayload({
+      title: "Ответ nomduchat",
+      text: message.text,
+    });
+  };
+
+  const handleShareGenerationJob = (job: MediaGenerationJobApiRecord, artifactUrl?: string) => {
+    setSharePayload({
+      title: mediaTitle(job.modality, job.status),
+      text: [job.prompt, job.resultUrl ? "Файл готов:" : "Медиа из nomduchat"].filter(Boolean).join("\n"),
+      url: job.resultUrl,
+      fileUrl: artifactUrl,
+      fileName: `nomduchat-${job.modality}-${job.id.slice(0, 8)}${mediaExtension(job.resultMimeType)}`,
+      fileMimeType: job.resultMimeType,
+    });
+  };
+
+  const handleRegenerate = async (message?: Message) => {
+    if (message?.generationJob) {
+      setUnavailableNotice(t.chat.mediaRegenerateUnavailable);
+      return;
+    }
+
     if (!conversationId) {
       setUnavailableNotice(t.chat.regenerateUnavailable);
       return;
@@ -389,17 +369,11 @@ export default function Chat() {
     try {
       const response = await regenerateChatMessage({
         conversationId,
-        agentId: activeAgentId,
         language: language === "kk" ? "kz" : language,
       });
       setMessages((prev) => [...prev, toAssistantMessage(response, t.chat.regeneratedResponse)]);
-    } catch {
-      const fallbackMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: t.chat.regeneratedResponse,
-        sender: "ai",
-      };
-      setMessages((prev) => [...prev, fallbackMessage]);
+    } catch (error) {
+      setUnavailableNotice(toPublicApiError(error, t.chat.regenerateUnavailable));
     } finally {
       setIsThinking(false);
     }
@@ -436,7 +410,7 @@ export default function Chat() {
   };
 
   const handleNewChat = () => {
-    setMessages([{ id: "intro", text: t.chat.initial, sender: "ai" }]);
+    setMessages([{ id: "intro", text: "nomduchat", sender: "ai" }]);
     Object.values(mediaObjectUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
     mediaObjectUrlsRef.current = {};
     setMediaObjectUrls({});
@@ -445,6 +419,13 @@ export default function Chat() {
     setConversationId(undefined);
     setUnavailableNotice(null);
     setIsThinking(false);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("conversationId");
+      next.delete("new");
+      next.delete("prompt");
+      return next;
+    }, { replace: true });
   };
 
   const handleFileButtonClick = () => {
@@ -504,81 +485,39 @@ export default function Chat() {
     setUnavailableNotice(t.chat.voiceListening);
   };
 
-  const showSuggestions = messages.length <= 1 && !isThinking;
+  const showEmptyState = messages.length <= 1 && messages[0]?.id === "intro" && !conversationParam;
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#050505] relative">
       <AuthPromptDialog open={isAuthPromptOpen} onClose={() => setIsAuthPromptOpen(false)} />
+      <ShareSheet open={Boolean(sharePayload)} payload={sharePayload} onClose={() => setSharePayload(null)} />
 
       <header className="h-14 border-b border-white/10 flex items-center justify-between gap-3 px-4 md:px-6 shrink-0 bg-[#0A0A0A]/80 backdrop-blur-md absolute top-0 w-full z-10">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsModeMenuOpen((open) => !open)}
-            className="flex max-w-[220px] items-center gap-2 text-sm font-medium text-gray-200 transition-colors hover:text-white sm:max-w-none"
-            aria-expanded={isModeMenuOpen}
-          >
-            <span className="truncate">{modelLabel}</span>
-            <ChevronDown className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${isModeMenuOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {isModeMenuOpen ? (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute left-0 top-9 z-30 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-[#080808] shadow-2xl shadow-black/60"
-            >
-              <div className="border-b border-white/10 px-4 py-3 text-xs font-medium uppercase tracking-[0.14em] text-gray-500">
-                {t.chat.modeMenuTitle}
-              </div>
-              <div className="max-h-80 overflow-y-auto py-1 custom-scrollbar">
-                <button
-                  type="button"
-                  onClick={() => handleAgentSelect(null)}
-                  className={`w-full px-4 py-3 text-left transition-colors hover:bg-white/10 ${
-                    !selectedAgent ? "text-white" : "text-gray-400"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium">{t.chat.autoMode}</span>
-                    {!selectedAgent ? <Check className="h-4 w-4 shrink-0" strokeWidth={1.7} /> : null}
-                  </div>
-                  <p className="mt-1 text-xs leading-relaxed text-gray-600">{t.workspaceHome.hint}</p>
-                </button>
-                {agentOptions.map((agent) => (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    onClick={() => handleAgentSelect(agent.id)}
-                    className={`w-full border-t border-white/5 px-4 py-3 text-left transition-colors hover:bg-white/10 ${
-                      selectedAgent?.id === agent.id ? "text-white" : "text-gray-400"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium">{agent.title}</span>
-                      {selectedAgent?.id === agent.id ? <Check className="h-4 w-4 shrink-0" strokeWidth={1.7} /> : null}
-                    </div>
-                    <p className="mt-1 text-xs leading-relaxed text-gray-600">{agent.description}</p>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
-          ) : null}
-        </div>
+        <div className="text-sm font-medium text-gray-300">nomduchat</div>
 
         <button
           type="button"
           onClick={handleNewChat}
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-sm text-gray-400 transition-colors hover:border-white/20 hover:text-white"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-gray-400 transition-colors hover:border-white/20 hover:text-white"
+          aria-label={t.chat.newChat}
+          title={t.chat.newChat}
         >
           <MessageSquarePlus className="h-4 w-4" strokeWidth={1.7} />
-          <span className="hidden sm:inline">{t.chat.newChat}</span>
         </button>
       </header>
 
       <div className="flex-1 overflow-y-auto pt-20 pb-40 px-4 md:px-8 custom-scrollbar">
         <div className="max-w-3xl mx-auto space-y-6">
-          {messages.map((msg) => (
+          {showEmptyState ? (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex min-h-[42vh] items-center justify-center text-4xl font-medium text-white md:text-5xl"
+            >
+              nomduchat
+            </motion.div>
+          ) : null}
+          {messages.filter((msg) => !(showEmptyState && msg.id === "intro")).map((msg) => (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -599,6 +538,7 @@ export default function Chat() {
                       artifactUrl={mediaObjectUrls[msg.generationJob.id]}
                       isCancelling={cancellingGenerationIds.has(msg.generationJob.id)}
                       onCancel={() => handleCancelGeneration(msg.generationJob!)}
+                      onShare={() => handleShareGenerationJob(msg.generationJob!, mediaObjectUrls[msg.generationJob!.id])}
                     />
                   ) : (
                     msg.text
@@ -632,7 +572,15 @@ export default function Chat() {
                     </button>
                     <button
                       type="button"
-                      onClick={handleRegenerate}
+                      onClick={() => handleShareMessage(msg)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                    >
+                      <Share2 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                      Поделиться
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleRegenerate(msg)}
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
                     >
                       <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -655,47 +603,6 @@ export default function Chat() {
               </div>
             </motion.div>
           ))}
-          {showSuggestions && (
-            <>
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex flex-wrap gap-2 pt-2"
-              >
-                {t.chat.suggestions.map((suggestion) => (
-                  <button
-                    key={suggestion}
-                    type="button"
-                    onClick={() => setInputValue(suggestion)}
-                    className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.08 }}
-                className="rounded-2xl border border-white/5 bg-white/[0.02] p-4"
-              >
-                <div className="mb-3 text-xs font-medium text-gray-500">{t.chat.favoritePromptsTitle}</div>
-                <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                  {t.chat.favoritePrompts.map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => setInputValue(prompt)}
-                      className="rounded-xl border border-white/5 bg-black/20 px-3 py-2 text-left text-sm text-gray-400 transition-colors hover:border-white/15 hover:text-white"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            </>
-          )}
           {isThinking && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -805,11 +712,13 @@ function GenerationJobCard({
   artifactUrl,
   isCancelling,
   onCancel,
+  onShare,
 }: {
   job: MediaGenerationJobApiRecord;
   artifactUrl?: string;
   isCancelling?: boolean;
   onCancel?: () => void;
+  onShare?: () => void;
 }) {
   const isPending = job.status === "queued" || job.status === "running";
   const isReady = job.status === "succeeded";
@@ -830,6 +739,7 @@ function GenerationJobCard({
             <div className="mt-1 text-xs text-gray-500">{detail}</div>
           </div>
         </div>
+        <div className="flex shrink-0 items-center gap-2">
         {isPending && onCancel ? (
           <button
             type="button"
@@ -844,7 +754,18 @@ function GenerationJobCard({
             )}
             Остановить
           </button>
-        ) : artifactUrl ? (
+        ) : null}
+        {isReady && onShare ? (
+          <button
+            type="button"
+            onClick={onShare}
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white"
+          >
+            <Share2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+            Поделиться
+          </button>
+        ) : null}
+        {artifactUrl ? (
           <a
             href={artifactUrl}
             download={`nomduchat-${job.modality}-${job.id.slice(0, 8)}${mediaExtension(job.resultMimeType)}`}
@@ -854,6 +775,7 @@ function GenerationJobCard({
             Скачать
           </a>
         ) : null}
+        </div>
       </div>
 
       <div className="p-5">

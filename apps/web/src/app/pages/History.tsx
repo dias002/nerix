@@ -11,13 +11,15 @@ export default function History() {
   const [items, setItems] = useState<ChatConversationSummaryApiRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const normalizedQuery = normalizeSearchText(searchQuery);
   const filteredItems = items.filter((item) => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return true;
-    return [item.title, item.preview, item.agentId].some((value) => value.toLowerCase().includes(query));
+    if (!normalizedQuery) return true;
+    const haystack = normalizeSearchText([item.title, item.preview, item.agentId, formatHistoryDate(item.updatedAt)].join(" "));
+    return normalizedQuery.split(" ").every((word) => haystack.includes(word));
   });
-  const pinned = filteredItems.slice(0, 1);
-  const recent = filteredItems.slice(1);
+  const isSearching = Boolean(normalizedQuery);
+  const pinned = isSearching ? [] : filteredItems.slice(0, 1);
+  const recent = isSearching ? filteredItems : filteredItems.slice(1);
 
   useEffect(() => {
     let active = true;
@@ -59,9 +61,6 @@ export default function History() {
             <h3 className="truncate text-base font-medium text-white">{item.title}</h3>
             <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-500">{item.preview || "В чате пока нет сообщений."}</p>
           </div>
-          <span className="shrink-0 rounded-full border border-white/10 px-2.5 py-1 text-xs text-gray-500">
-            {item.agentId}
-          </span>
         </div>
         <div className="mt-4 text-xs text-gray-600">
           {formatHistoryDate(item.updatedAt)} · {item.messagesCount} сообщений
@@ -80,10 +79,11 @@ export default function History() {
           </div>
           <Link
             to="/workspace/chat?new=1"
-            className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-medium text-black transition-colors hover:bg-gray-200"
+            className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-gray-200"
+            aria-label={t.history.newChat}
+            title={t.history.newChat}
           >
-            <MessageSquarePlus className="h-4 w-4" strokeWidth={1.8} />
-            {t.history.newChat}
+            <MessageSquarePlus className="h-5 w-5" strokeWidth={1.8} />
           </Link>
         </div>
 
@@ -116,7 +116,7 @@ export default function History() {
 
         {recent.length > 0 ? (
           <section className="space-y-3">
-            <div className="px-1 text-sm font-medium text-gray-500">{t.history.recent}</div>
+            <div className="px-1 text-sm font-medium text-gray-500">{isSearching ? "Результаты поиска" : t.history.recent}</div>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {recent.map(renderItem)}
             </div>
@@ -131,6 +131,15 @@ export default function History() {
       </div>
     </div>
   );
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
 function formatHistoryDate(value: string) {

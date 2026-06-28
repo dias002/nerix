@@ -5,6 +5,7 @@ import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import { countrySchema, languageSchema } from "../../server/schemas.js";
 import type { AuthService } from "../auth/auth.service.js";
+import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { ChatService } from "./chat.service.js";
 
 const sendMessageSchema = z.object({
@@ -54,7 +55,12 @@ const conversationParamsSchema = z.object({
   conversationId: z.string().min(1),
 });
 
-export async function registerChatRoutes(app: FastifyInstance, chat: ChatService, auth: AuthService) {
+export async function registerChatRoutes(
+  app: FastifyInstance,
+  chat: ChatService,
+  auth: AuthService,
+  abuseGuard: AbuseGuardService
+) {
   app.get("/usage/limits", async (request, reply) => {
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
@@ -114,6 +120,9 @@ export async function registerChatRoutes(app: FastifyInstance, chat: ChatService
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
 
+    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId);
+    if (!allowed.ok) return sendResult(reply, allowed);
+
     const result = await chat.sendMessage({ ...input.data, userId: user.value.userId });
     return sendResult(reply, result as Result<unknown>);
   });
@@ -132,6 +141,9 @@ export async function registerChatRoutes(app: FastifyInstance, chat: ChatService
 
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId);
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await chat.regenerateLastAnswer({ ...input.data, userId: user.value.userId }));
   });
@@ -187,4 +199,16 @@ export async function registerChatRoutes(app: FastifyInstance, chat: ChatService
       })
     );
   });
+}
+
+async function assertFreeUserAiRequestAllowed(
+  request: Parameters<AbuseGuardService["assertFreeAiRequestAllowed"]>[0],
+  chat: ChatService,
+  abuseGuard: AbuseGuardService,
+  userId: string
+) {
+  const limits = await chat.getUsageLimits(userId);
+  if (!limits.ok || limits.value.hasActiveSubscription) return limits.ok ? { ok: true as const, value: { allowed: true } } : limits;
+
+  return abuseGuard.assertFreeAiRequestAllowed(request, userId);
 }

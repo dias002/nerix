@@ -5,16 +5,15 @@ import { DomainError, fail, ok, type Result } from "../../domain/result.js";
 import { readBearerToken, readLocalRoleOverride } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import type { AbuseGuardService } from "../security/abuse-guard.js";
 import { LOCAL_USER_PUBLIC_ID } from "../users/local-user.js";
 import type { MailingService } from "./mailing.service.js";
 
 const createAudienceSchema = z.object({
-  userId: z.string().optional(),
   name: z.string().trim().min(1).max(120),
 });
 
 const importContactsSchema = z.object({
-  userId: z.string().optional(),
   rawContacts: z.string().max(2_000_000).optional(),
   contacts: z
     .array(
@@ -29,7 +28,6 @@ const importContactsSchema = z.object({
 });
 
 const createCampaignSchema = z.object({
-  userId: z.string().optional(),
   audienceId: z.string().min(1),
   name: z.string().trim().min(1).max(140),
   fromEmail: z.string().trim().email(),
@@ -40,15 +38,13 @@ const createCampaignSchema = z.object({
   text: z.string().trim().max(400_000).optional(),
 });
 
-const userQuerySchema = z.object({
-  userId: z.string().optional(),
-});
-
-export async function registerMailingRoutes(app: FastifyInstance, mailings: MailingService, auth: AuthService) {
+export async function registerMailingRoutes(
+  app: FastifyInstance,
+  mailings: MailingService,
+  auth: AuthService,
+  abuseGuard: AbuseGuardService
+) {
   app.get("/mailings/audiences", async (request, reply) => {
-    const input = userQuerySchema.safeParse(request.query);
-    if (!input.success) return validationError(reply, "User id is invalid.");
-
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
@@ -62,16 +58,21 @@ export async function registerMailingRoutes(app: FastifyInstance, mailings: Mail
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-audience-create");
+    if (!allowed.ok) return sendResult(reply, allowed);
+
     return sendResult(reply, await mailings.createAudience({ userId: user.value.userId, name: input.data.name }));
   });
 
   app.get("/mailings/audiences/:audienceId/contacts", async (request, reply) => {
     const params = z.object({ audienceId: z.string().min(1) }).safeParse(request.params);
-    const input = userQuerySchema.safeParse(request.query);
-    if (!params.success || !input.success) return validationError(reply, "Audience id is required.");
+    if (!params.success) return validationError(reply, "Audience id is required.");
 
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-contact-import");
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(
       reply,
@@ -87,6 +88,9 @@ export async function registerMailingRoutes(app: FastifyInstance, mailings: Mail
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-campaign-create");
+    if (!allowed.ok) return sendResult(reply, allowed);
+
     return sendResult(
       reply,
       await mailings.importContacts({
@@ -99,9 +103,6 @@ export async function registerMailingRoutes(app: FastifyInstance, mailings: Mail
   });
 
   app.get("/mailings/campaigns", async (request, reply) => {
-    const input = userQuerySchema.safeParse(request.query);
-    if (!input.success) return validationError(reply, "User id is invalid.");
-
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
@@ -127,30 +128,33 @@ export async function registerMailingRoutes(app: FastifyInstance, mailings: Mail
 
   app.post("/mailings/campaigns/:campaignId/send", async (request, reply) => {
     const params = z.object({ campaignId: z.string().min(1) }).safeParse(request.params);
-    const input = userQuerySchema.safeParse(request.body);
-    if (!params.success || !input.success) return validationError(reply, "Campaign id is required.");
+    if (!params.success) return validationError(reply, "Campaign id is required.");
 
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-campaign-send");
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await mailings.sendCampaign({ userId: user.value.userId, campaignId: params.data.campaignId }));
   });
 
   app.post("/mailings/campaigns/:campaignId/sync", async (request, reply) => {
     const params = z.object({ campaignId: z.string().min(1) }).safeParse(request.params);
-    const input = userQuerySchema.safeParse(request.body);
-    if (!params.success || !input.success) return validationError(reply, "Campaign id is required.");
+    if (!params.success) return validationError(reply, "Campaign id is required.");
 
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-campaign-sync");
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await mailings.syncCampaign({ userId: user.value.userId, campaignId: params.data.campaignId }));
   });
 
   app.get("/mailings/campaigns/:campaignId/recipients", async (request, reply) => {
     const params = z.object({ campaignId: z.string().min(1) }).safeParse(request.params);
-    const input = userQuerySchema.safeParse(request.query);
-    if (!params.success || !input.success) return validationError(reply, "Campaign id is required.");
+    if (!params.success) return validationError(reply, "Campaign id is required.");
 
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);

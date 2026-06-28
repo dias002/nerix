@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router";
 import { LoaderCircle, Lock, Mail, User, X } from "lucide-react";
 import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
+import TurnstileBox, { isTurnstileEnabled } from "./TurnstileBox";
 import { useLanguage } from "../i18n";
 
 type AuthMode = "login" | "register";
@@ -20,8 +21,10 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const turnstileEnabled = isTurnstileEnabled();
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
   const authCountry = useMemo(() => {
     if (typeof window === "undefined") return "KZ";
@@ -33,6 +36,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
 
   const switchMode = (nextMode: AuthMode) => {
     setError(null);
+    setTurnstileToken(null);
     setMode(nextMode);
   };
 
@@ -49,6 +53,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
           password,
           country: authCountry,
           language: authLanguage,
+          turnstileToken: turnstileToken ?? undefined,
         });
       } else {
         await login({ email, password });
@@ -57,6 +62,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
       window.localStorage.removeItem("nomduchat-guest-chat-requests");
       onClose();
     } catch (err) {
+      setTurnstileToken(null);
       setError(toPublicApiError(err, t.auth.error));
     } finally {
       setPending(false);
@@ -192,6 +198,8 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
           </label>
         </div>
 
+        {mode === "register" ? <TurnstileBox action="register-dialog" onTokenChange={setTurnstileToken} /> : null}
+
         {error ? (
           <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
             {error}
@@ -200,7 +208,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
 
         <button
           type="submit"
-          disabled={pending || isLoading}
+          disabled={pending || isLoading || (mode === "register" && turnstileEnabled && !turnstileToken)}
           className="mt-5 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-60"
         >
           {pending ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.8} /> : null}

@@ -27,6 +27,16 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
+      - key: ABUSE_PROTECTION_ENABLED
+        value: "true"
+      - key: ABUSE_TRUST_PROXY_HEADERS
+        value: "true"
+      - key: ABUSE_HASH_SECRET
+        generateValue: true
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: TURNSTILE_REQUIRED
+        value: "false"
       - key: PAYMENT_WEBHOOK_SECRET
         generateValue: true
       - key: OPENAI_API_KEY
@@ -51,6 +61,8 @@ services:
         sync: false
       - key: YOOKASSA_SECRET_KEY
         sync: false
+      - key: YOOKASSA_RECEIPT_VAT_CODE
+        value: "1"
       - key: STORAGE_ENDPOINT
         sync: false
       - key: STORAGE_REGION
@@ -84,3 +96,5 @@ services:
           type: web
           name: nomduchat-api
           envVarKey: API_PUBLIC_URL
+      - key: VITE_TURNSTILE_SITE_KEY
+        sync: false

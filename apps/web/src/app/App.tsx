@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
 import { LanguageProvider } from "./i18n";
@@ -9,7 +10,9 @@ export default function App() {
     <LanguageProvider>
       <ThemeProvider>
         <AuthProvider>
-          <RouterProvider router={router} />
+          <Suspense fallback={<div className="min-h-screen bg-black" />}>
+            <RouterProvider router={router} />
+          </Suspense>
         </AuthProvider>
       </ThemeProvider>
     </LanguageProvider>

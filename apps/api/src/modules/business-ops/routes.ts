@@ -5,10 +5,6 @@ import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
 import type { BusinessOpsService } from "./business-ops.service.js";
 
-const userQuerySchema = z.object({
-  userId: z.string().optional(),
-});
-
 const messageRoleSchema = z.enum(["customer", "bot", "employee", "system"]);
 const channelSchema = z.enum(["telegram", "website", "manual"]);
 const ratingSchema = z.enum(["bad", "good", "excellent"]);
@@ -20,7 +16,6 @@ const customerMessageSchema = z.object({
 });
 
 const createConversationSchema = z.object({
-  userId: z.string().optional(),
   channel: channelSchema.default("manual"),
   customerName: z.string().trim().max(120).optional(),
   customerContact: z.string().trim().max(180).optional(),
@@ -30,19 +25,16 @@ const createConversationSchema = z.object({
 });
 
 const addCustomerMessageSchema = z.object({
-  userId: z.string().optional(),
   role: messageRoleSchema,
   authorName: z.string().trim().max(120).optional(),
   content: z.string().trim().min(1).max(4_000),
 });
 
 const rateConversationSchema = z.object({
-  userId: z.string().optional(),
   rating: ratingSchema,
 });
 
 const teamMessageSchema = z.object({
-  userId: z.string().optional(),
   memberId: z.string().trim().min(1).max(120).nullable().optional(),
   authorName: z.string().trim().min(1).max(120),
   roleTitle: z.string().trim().max(120).optional(),
@@ -55,17 +47,7 @@ export async function registerBusinessOpsRoutes(
   auth: AuthService
 ) {
   app.get("/business/ops", async (request, reply) => {
-    const input = userQuerySchema.safeParse(request.query);
-    if (!input.success) {
-      return reply.status(400).send({
-        error: {
-          code: "validation_failed",
-          message: "Invalid business operations query.",
-        },
-      });
-    }
-
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await businessOps.getOverview(user.value.userId));
@@ -82,7 +64,7 @@ export async function registerBusinessOpsRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await businessOps.createConversation(user.value.userId, input.data));
@@ -100,7 +82,7 @@ export async function registerBusinessOpsRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(
@@ -121,7 +103,7 @@ export async function registerBusinessOpsRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(
@@ -141,7 +123,7 @@ export async function registerBusinessOpsRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await businessOps.addTeamMessage(user.value.userId, input.data));

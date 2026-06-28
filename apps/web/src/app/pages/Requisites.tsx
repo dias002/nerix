@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { ArrowLeft, Building2, Check, Copy, FileText, Landmark, Mail, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Building2, Check, Copy, FileText, Landmark, Mail, ShieldCheck, type LucideIcon } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 
 const companyDetails = [
@@ -22,6 +22,13 @@ const serviceDetails = [
   "Business workspace для работы с заявками, сотрудниками и клиентскими данными.",
   "Генерация и обработка текстов, изображений, аудио, видео и бизнес-материалов.",
   "B2B-инструменты: Telegram-менеджер, сайты, CRM-заметки и рассылки.",
+];
+
+const legalLinks = [
+  { to: "/legal/terms", label: "Пользовательское соглашение" },
+  { to: "/legal/privacy", label: "Политика конфиденциальности" },
+  { to: "/legal/refund", label: "Условия возврата" },
+  { to: "/legal/pricing", label: "Тарифы и состав услуги" },
 ];
 
 export default function Requisites() {
@@ -136,6 +143,25 @@ export default function Requisites() {
             </div>
           </article>
         </section>
+
+        <section className="mt-5 rounded-3xl border border-white/10 bg-[#080808]/85 p-5 backdrop-blur-md md:p-6">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <FileText className="h-4 w-4" strokeWidth={1.7} />
+            Документы
+          </div>
+          <h2 className="mt-3 text-2xl font-medium">Правовая информация</h2>
+          <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {legalLinks.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </section>
       </main>
     </div>
   );
@@ -146,7 +172,7 @@ function DetailsCard({
   title,
   items,
 }: {
-  icon: typeof FileText;
+  icon: LucideIcon;
   title: string;
   items: Array<{ label: string; value: string }>;
 }) {

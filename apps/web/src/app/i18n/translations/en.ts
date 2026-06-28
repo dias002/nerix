@@ -58,7 +58,7 @@ export const en = {
       error: "Could not complete the action.",
     },
     home: {
-      eyebrow: "40+ AI models and agents for everyday tasks",
+      eyebrow: "40+ AI models behind one simple chat",
       welcome: "nomduchat makes AI easy to use without complex choices",
       subtitle: "A platform for everyday tasks: write text, understand a topic, generate ideas, solve code questions, or work with documents. Describe the goal, and nomduchat picks the right mode.",
       enter: "Open chat",
@@ -68,7 +68,7 @@ export const en = {
       explainTitle: "You do not need to understand dozens of models",
       explainText: "nomduchat chooses the format for your task: quick answer, study explanation, text, code, document, plan, or idea. The user works in one clear chat while model selection stays inside the system.",
       metrics: [
-        { value: "40+", label: "AI models and agents" },
+        { value: "40+", label: "AI models inside the system" },
         { value: "24/7", label: "personal AI workspace" },
         { value: "1", label: "clear chat for tasks" },
       ],
@@ -88,12 +88,12 @@ export const en = {
     workspaceHome: {
       question: "How can I help?",
       startChat: "Start chat",
-      hint: "Describe the task, and nomduchat will suggest the right agent format.",
+      hint: "Describe the task, and nomduchat will choose the right format.",
       servicesTitle: "Popular scenarios",
       services: [
         { title: "Work", text: "Plans, emails, documents, analytics, and daily tasks." },
         { title: "Study", text: "Explanations, notes, quizzes, and lesson preparation." },
-        { title: "Business", text: "Sales, support, knowledge base, and a custom AI agent." },
+        { title: "Business", text: "Sales, support, knowledge base, and company context." },
       ],
     },
     chat: {
@@ -126,6 +126,7 @@ export const en = {
       fileUploadUnavailable: "File upload will be enabled after the storage/API module is connected.",
       voiceUnavailable: "Voice input is not connected yet.",
       regenerateUnavailable: "Regeneration will be available after message history is stored.",
+      mediaRegenerateUnavailable: "For media, create a new request or stop the current generation. Text regeneration does not apply here.",
       feedbackUnavailable: "Could not save the answer choice. Try again.",
       suggestions: ["Create a project plan", "Explain in simple words", "Help me write text"],
       favoritePrompts: [
@@ -188,11 +189,11 @@ export const en = {
         { name: "Easy Start", amount: "For steady everyday work", price: "≈ 990 ₽", note: "Good for personal tasks, study, and regular chat." },
         { name: "Active Work", amount: "For more active work", price: "≈ 1,990 ₽", note: "For frequent requests, documents, code, and busy workdays." },
         { name: "Team Mode", amount: "For teams and larger tasks", price: "≈ 19,990 ₽", note: "For business, teams, and higher workload scenarios." },
-        { name: "Business", amount: "Workspace for up to 5 employees", price: "≈ 49,990 ₽", note: "Roles, CRM, analytics, customer notes, and a company AI agent with business context." },
+        { name: "Business", amount: "Workspace for up to 5 employees", price: "≈ 49,990 ₽", note: "Roles, CRM, analytics, customer notes, and company AI context." },
       ],
       activity: [
         { label: "Balance top-up", value: "+80,000", date: "Today" },
-        { label: "Code agent chat", value: "-1,240", date: "Today" },
+        { label: "Code work", value: "-1,240", date: "Today" },
         { label: "Document analysis", value: "-3,800", date: "Yesterday" },
       ],
     },
@@ -249,7 +250,7 @@ export const en = {
       openApp: "Open app",
       businessLink: "Business solutions",
       metrics: [
-        { value: "40+", label: "AI models and agents" },
+        { value: "40+", label: "AI models inside the system" },
         { value: "24/7", label: "personal AI workspace" },
         { value: "1", label: "chat for many tasks" },
       ],
@@ -271,7 +272,7 @@ export const en = {
       ],
       sections: [
         { title: "No blind choice", text: "nomduchat explains which mode fits a specific task and why." },
-        { title: "Everything in one place", text: "Chat, agents, files, memory, history, and balance are connected in one environment." },
+        { title: "Everything in one place", text: "Chat, files, memory, history, and balance are connected in one environment." },
         { title: "Built for familiar tasks", text: "Texts, study, ideas, code, and documents are available without a technical barrier." },
       ],
     },

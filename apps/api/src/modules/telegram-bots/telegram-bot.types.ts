@@ -75,7 +75,17 @@ export type TelegramBotOrderRecord = {
   updatedAt: string;
 };
 
+export type TelegramBotTestReply = {
+  orderId: string;
+  customerMessage: string;
+  reply: string;
+  shouldEscalate: boolean;
+  escalationContact: string;
+  matchedKnowledge: string[];
+};
+
 export type TelegramMiniAppDraftInput = {
+  userId?: string;
   country: TelegramBotCountry;
   companyName: string;
   businessCategory: string;
@@ -85,6 +95,7 @@ export type TelegramMiniAppDraftInput = {
   mainOffer: string;
   priceInfo?: string;
   audience?: string;
+  knowledgeContext?: string;
   goals: string[];
   language?: "ru" | "kk" | "en";
   telegramInitData?: string;

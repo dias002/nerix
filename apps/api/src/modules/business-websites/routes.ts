@@ -3,6 +3,8 @@ import { z } from "zod";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import type { BusinessJobService } from "../business-jobs/business-job.service.js";
+import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { BusinessWebsiteService } from "./business-website.service.js";
 import type { BusinessWebsiteContent } from "./business-website.types.js";
 
@@ -12,7 +14,6 @@ const siteTypeSchema = z.enum(["landing", "services", "catalog"]);
 const sectionTypeSchema = z.enum(["hero", "services", "benefits", "pricing", "faq", "contacts", "cta"]);
 
 const createDraftSchema = z.object({
-  userId: z.string().optional(),
   country: countrySchema.default("KZ"),
   prompt: z.string().trim().min(20).max(5_000),
   companyName: z.string().trim().max(120).optional(),
@@ -65,33 +66,20 @@ const websiteContentSchema = z.object({
 });
 
 const updateWebsiteSchema = z.object({
-  userId: z.string().optional(),
   title: z.string().trim().min(1).max(120).optional(),
   slug: z.string().trim().min(2).max(80).optional(),
   content: websiteContentSchema.optional(),
 });
 
-const userQuerySchema = z.object({
-  userId: z.string().optional(),
-});
-
 export async function registerBusinessWebsiteRoutes(
   app: FastifyInstance,
   websites: BusinessWebsiteService,
-  auth: AuthService
+  businessJobs: BusinessJobService,
+  auth: AuthService,
+  abuseGuard: AbuseGuardService
 ) {
   app.get("/business/websites", async (request, reply) => {
-    const input = userQuerySchema.safeParse(request.query);
-    if (!input.success) {
-      return reply.status(400).send({
-        error: {
-          code: "validation_failed",
-          message: "Invalid business websites query.",
-        },
-      });
-    }
-
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await websites.listWebsites(user.value.userId));
@@ -108,16 +96,18 @@ export async function registerBusinessWebsiteRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
-    return sendResult(reply, await websites.createDraft({ ...input.data, userId: user.value.userId }));
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "website-draft");
+    if (!allowed.ok) return sendResult(reply, allowed);
+
+    return sendResult(reply, await businessJobs.createWebsiteDraftJob(user.value.userId, input.data));
   });
 
   app.get("/business/websites/:siteId", async (request, reply) => {
     const params = z.object({ siteId: z.string().min(1) }).safeParse(request.params);
-    const input = userQuerySchema.safeParse(request.query);
-    if (!params.success || !input.success) {
+    if (!params.success) {
       return reply.status(400).send({
         error: {
           code: "validation_failed",
@@ -126,7 +116,7 @@ export async function registerBusinessWebsiteRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await websites.getWebsite(user.value.userId, params.data.siteId));
@@ -144,7 +134,7 @@ export async function registerBusinessWebsiteRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(
@@ -159,8 +149,7 @@ export async function registerBusinessWebsiteRoutes(
 
   app.post("/business/websites/:siteId/publish", async (request, reply) => {
     const params = z.object({ siteId: z.string().min(1) }).safeParse(request.params);
-    const input = userQuerySchema.safeParse(request.body ?? {});
-    if (!params.success || !input.success) {
+    if (!params.success) {
       return reply.status(400).send({
         error: {
           code: "validation_failed",
@@ -169,7 +158,7 @@ export async function registerBusinessWebsiteRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await websites.publishWebsite(user.value.userId, params.data.siteId));

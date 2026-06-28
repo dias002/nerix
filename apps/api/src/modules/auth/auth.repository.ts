@@ -179,6 +179,7 @@ export class PostgresAuthRepository implements AuthRepository {
   }
 
   async findByEmail(email: string) {
+    const normalizedEmail = normalizeEmail(email);
     const result = await this.database.query<AuthUserRow>(
       `
         select
@@ -212,11 +213,14 @@ export class PostgresAuthRepository implements AuthRepository {
         where u.email = $1 and u.password_hash is not null
         limit 1
       `,
-      [normalizeEmail(email)]
+      [normalizedEmail]
     );
 
     const row = result.rows[0];
-    return row ? mapRow(row) : null;
+    if (!row) return null;
+
+    await this.linkPendingBusinessInvites(row.id, normalizedEmail);
+    return mapRow((await this.findAuthRowByDatabaseId(row.id)) ?? row);
   }
 
   async findById(userId: string) {
@@ -300,7 +304,12 @@ export class PostgresAuthRepository implements AuthRepository {
       );
 
       if (linkedUser.rows[0]) {
-        return publicUser(mapRow(linkedUser.rows[0]));
+        const row = linkedUser.rows[0];
+        const normalizedEmail = row.email ? normalizeEmail(row.email) : null;
+        if (normalizedEmail) {
+          await this.linkPendingBusinessInvites(row.id, normalizedEmail, client);
+        }
+        return publicUser(mapRow((await this.findAuthRowByDatabaseId(row.id, client)) ?? row));
       }
 
       const normalizedEmail = input.email ? normalizeEmail(input.email) : null;
@@ -373,16 +382,7 @@ export class PostgresAuthRepository implements AuthRepository {
       }
 
       if (normalizedEmail) {
-        await client.query(
-          `
-            update business_members
-            set user_id = $1,
-                updated_at = now()
-            where user_id is null
-              and lower(invited_email) = $2
-          `,
-          [userRow.id, normalizedEmail]
-        );
+        await this.linkPendingBusinessInvites(userRow.id, normalizedEmail, client);
       }
 
       await client.query(
@@ -406,7 +406,7 @@ export class PostgresAuthRepository implements AuthRepository {
         ]
       );
 
-      return publicUser(mapRow(userRow));
+      return publicUser(mapRow((await this.findAuthRowByDatabaseId(userRow.id, client)) ?? userRow));
     });
   }
 
@@ -418,8 +418,12 @@ export class PostgresAuthRepository implements AuthRepository {
     return this.database.transaction(callback);
   }
 
-  private async linkPendingBusinessInvites(userId: string, email: string) {
-    await this.database.query(
+  private async linkPendingBusinessInvites(
+    userId: string,
+    email: string,
+    client: DatabaseClient = this.database
+  ) {
+    await client.query(
       `
         update business_members
         set user_id = $1,
@@ -429,6 +433,46 @@ export class PostgresAuthRepository implements AuthRepository {
       `,
       [userId, email]
     );
+  }
+
+  private async findAuthRowByDatabaseId(userId: string, client: DatabaseClient = this.database) {
+    const result = await client.query<AuthUserRow>(
+      `
+        select
+          u.id,
+          u.display_name,
+          u.email,
+          u.phone,
+          u.country_code,
+          u.language,
+          u.system_role,
+          (
+            select s.plan_slug
+            from subscriptions s
+            where s.user_id = u.id and s.status = 'active'
+            order by s.created_at desc
+            limit 1
+          ) as active_plan_id,
+          coalesce(owner_ws.id, employee_ws.id)::text as business_workspace_id,
+          coalesce(owner_ws.name, employee_ws.name) as business_workspace_name,
+          bm.id::text as business_member_id,
+          bm.role_key as business_member_role_key,
+          bg.id::text as business_group_id,
+          bg.name as business_group_name,
+          u.password_hash
+        from users u
+        left join business_workspaces owner_ws on owner_ws.user_id = u.id
+        left join business_members bm on bm.user_id = u.id
+        left join business_workspaces employee_ws on employee_ws.id = bm.workspace_id
+        left join business_group_members bgm on bgm.member_id = bm.id
+        left join business_groups bg on bg.id = bgm.group_id
+        where u.id = $1
+        limit 1
+      `,
+      [userId]
+    );
+
+    return result.rows[0] ?? null;
   }
 }
 

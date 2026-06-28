@@ -3,10 +3,11 @@ import { z } from "zod";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import type { BusinessJobService } from "../business-jobs/business-job.service.js";
+import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { TelegramBotOrderService } from "./telegram-bot.service.js";
 
 const orderSchema = z.object({
-  userId: z.string().optional(),
   country: z.enum(["KZ", "RU"]).default("KZ"),
   companyName: z.string().trim().min(2).max(120),
   ownerName: z.string().trim().max(120).optional(),
@@ -39,10 +40,16 @@ const miniAppDraftSchema = z.object({
   telegramInitData: z.string().max(8_000).optional(),
 });
 
+const testMessageSchema = z.object({
+  message: z.string().trim().min(1).max(2_000),
+});
+
 export async function registerTelegramBotRoutes(
   app: FastifyInstance,
   telegramBots: TelegramBotOrderService,
-  auth: AuthService
+  businessJobs: BusinessJobService,
+  auth: AuthService,
+  abuseGuard: AbuseGuardService
 ) {
   app.get("/telegram-bots/product", async (_request, reply) => sendResult(reply, telegramBots.getProduct()));
 
@@ -57,11 +64,17 @@ export async function registerTelegramBotRoutes(
       });
     }
 
-    return sendResult(reply, telegramBots.createMiniAppDraft(input.data));
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "telegram-miniapp-draft");
+    if (!allowed.ok) return sendResult(reply, allowed);
+
+    return sendResult(reply, await businessJobs.createTelegramMiniAppDraftJob(user.value.userId, input.data));
   });
 
   app.get("/telegram-bots/orders", async (request, reply) => {
-    const user = await resolveRequestUserId(request, auth, "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await telegramBots.listOrders(user.value.userId));
@@ -78,9 +91,39 @@ export async function registerTelegramBotRoutes(
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "telegram-order");
+    if (!allowed.ok) return sendResult(reply, allowed);
+
     return sendResult(reply, await telegramBots.createOrder({ ...input.data, userId: user.value.userId }));
+  });
+
+  app.post("/telegram-bots/orders/:orderId/test-message", async (request, reply) => {
+    const params = z.object({ orderId: z.string().min(1) }).safeParse(request.params);
+    const input = testMessageSchema.safeParse(request.body);
+    if (!params.success || !input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Test message is required.",
+        },
+      });
+    }
+
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "telegram-test-message");
+    if (!allowed.ok) return sendResult(reply, allowed);
+
+    return sendResult(
+      reply,
+      await telegramBots.testOrderReply(user.value.userId, {
+        orderId: params.data.orderId,
+        message: input.data.message,
+      })
+    );
   });
 }

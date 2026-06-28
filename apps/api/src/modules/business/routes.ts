@@ -10,12 +10,7 @@ const businessRoleKeySchema = z.enum(["owner", "sales", "support", "marketing", 
 const businessMemberStatusSchema = z.enum(["online", "away", "offline"]);
 const businessIdeaStatusSchema = z.enum(["suggested", "planned", "in_progress", "done"]);
 
-const workspaceQuerySchema = z.object({
-  userId: z.string().optional(),
-});
-
 const addMemberSchema = z.object({
-  userId: z.string().optional(),
   name: z.string().trim().min(1).max(80),
   roleKey: businessRoleKeySchema,
   invitedEmail: z.string().trim().email().optional(),
@@ -25,28 +20,16 @@ const addMemberSchema = z.object({
 });
 
 const addDealNoteSchema = z.object({
-  userId: z.string().optional(),
   text: z.string().trim().min(1).max(1_000),
 });
 
 const updateIdeaStatusSchema = z.object({
-  userId: z.string().optional(),
   status: businessIdeaStatusSchema,
 });
 
 export async function registerBusinessRoutes(app: FastifyInstance, business: BusinessService, auth: AuthService) {
   app.get("/business/workspace", async (request, reply) => {
-    const input = workspaceQuerySchema.safeParse(request.query);
-    if (!input.success) {
-      return reply.status(400).send({
-        error: {
-          code: "validation_failed",
-          message: "Invalid business workspace query.",
-        },
-      });
-    }
-
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await business.getWorkspace(user.value.userId));
@@ -63,7 +46,7 @@ export async function registerBusinessRoutes(app: FastifyInstance, business: Bus
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     const permission = await ensureCanManageBusinessMembers(request.headers.authorization, auth);
@@ -84,7 +67,7 @@ export async function registerBusinessRoutes(app: FastifyInstance, business: Bus
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await business.addDealNote(user.value.userId, params.data.dealId, input.data.text));
@@ -102,7 +85,7 @@ export async function registerBusinessRoutes(app: FastifyInstance, business: Bus
       });
     }
 
-    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
     return sendResult(reply, await business.updateIdeaStatus(user.value.userId, params.data.ideaId, input.data.status));

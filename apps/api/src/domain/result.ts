@@ -12,6 +12,8 @@ export type DomainErrorCode =
   | "not_found"
   | "validation_failed"
   | "unauthorized"
+  | "rate_limit_exceeded"
+  | "bot_challenge_required"
   | "insufficient_credits"
   | "subscription_required"
   | "daily_text_limit_exceeded"

@@ -58,11 +58,13 @@ export type BusinessWebsiteContent = {
 
 export type CreateBusinessWebsiteDraftInput = {
   userId: string;
+  workspaceId?: string | null;
   country: BusinessWebsiteCountry;
   prompt: string;
   companyName?: string;
   city?: string;
   contact?: string;
+  knowledgeContext?: string;
   style: BusinessWebsiteStyle;
   siteType: BusinessWebsiteType;
 };

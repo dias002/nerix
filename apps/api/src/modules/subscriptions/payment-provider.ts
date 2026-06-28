@@ -4,6 +4,7 @@ import type { PaymentProviderCode, PlanPrice, SubscriptionPlan } from "./subscri
 
 export type CreateCheckoutInput = {
   userId: string;
+  customerEmail?: string | null;
   plan: SubscriptionPlan;
   price: PlanPrice;
 };
@@ -76,6 +77,10 @@ export class YooKassaSubscriptionPaymentProvider implements SubscriptionPaymentP
       return new MockSubscriptionPaymentProvider(this.code).createCheckout(input);
     }
 
+    if (!input.customerEmail) {
+      throw new Error("customerEmail is required for YooKassa receipt.");
+    }
+
     const idempotenceKey = randomUUID();
     const response = await fetch("https://api.yookassa.ru/v3/payments", {
       method: "POST",
@@ -95,6 +100,7 @@ export class YooKassaSubscriptionPaymentProvider implements SubscriptionPaymentP
           return_url: config.YOOKASSA_RETURN_URL,
         },
         description: `nomduchat ${input.plan.name} subscription`,
+        receipt: buildYooKassaReceipt(input),
         metadata: {
           userId: input.userId,
           planId: input.plan.id,
@@ -124,4 +130,30 @@ export function createSubscriptionPaymentProvider(provider: PaymentProviderCode)
 
 function formatMinorAmount(amountMinor: number) {
   return (amountMinor / 100).toFixed(2);
+}
+
+function buildYooKassaReceipt(input: CreateCheckoutInput) {
+  const receipt: Record<string, unknown> = {
+    items: [
+      {
+        description: `Доступ к сервису nomduchat: ${input.plan.name}`.slice(0, 128),
+        quantity: "1.00",
+        amount: {
+          value: formatMinorAmount(input.price.amountMinor),
+          currency: input.price.currency,
+        },
+        vat_code: config.YOOKASSA_RECEIPT_VAT_CODE,
+        payment_subject: "service",
+        payment_mode: "full_payment",
+      },
+    ],
+  };
+
+  if (input.customerEmail) {
+    receipt.customer = {
+      email: input.customerEmail,
+    };
+  }
+
+  return receipt;
 }

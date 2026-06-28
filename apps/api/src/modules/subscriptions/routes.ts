@@ -18,6 +18,7 @@ const countryQuerySchema = z.object({
 const checkoutSchema = z.object({
   userId: z.string().optional(),
   planId: z.string().min(1),
+  customerEmail: z.string().trim().email().optional(),
   country: z
     .string()
     .trim()
@@ -87,7 +88,14 @@ export async function registerSubscriptionRoutes(
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
 
-    return sendResult(reply, await subscriptions.createCheckout({ ...input.data, userId: user.value.userId }));
+    return sendResult(
+      reply,
+      await subscriptions.createCheckout({
+        ...input.data,
+        userId: user.value.userId,
+        customerEmail: user.value.email ?? input.data.customerEmail,
+      })
+    );
   });
 
   app.post("/subscriptions/mock/complete", async (request, reply) => {
@@ -126,6 +134,13 @@ export async function registerSubscriptionRoutes(
     return sendResult(reply, await subscriptions.currentSubscription(user.value.userId));
   });
 
+  app.get("/subscriptions/checkouts", async (request, reply) => {
+    const user = await resolveRequestUserId(request, auth);
+    if (!user.ok) return sendResult(reply, user);
+
+    return sendResult(reply, await subscriptions.listCheckouts(user.value.userId));
+  });
+
   app.post("/subscriptions/cancel", async (request, reply) => {
     const input = userSchema.safeParse(request.body);
 
@@ -145,7 +160,7 @@ export async function registerSubscriptionRoutes(
   });
 
   app.post("/subscriptions/webhooks/yookassa", async (request, reply) => {
-    if (!verifyWebhookSecret(request.headers["x-nomduchat-webhook-secret"])) {
+    if (!verifyWebhookSecret(request.headers["x-nomduchat-webhook-secret"], request.query)) {
       return reply.status(401).send({
         error: {
           code: "unauthorized",
@@ -179,7 +194,7 @@ export async function registerSubscriptionRoutes(
   });
 
   app.post("/subscriptions/webhooks/kaspi", async (request, reply) => {
-    if (!verifyWebhookSecret(request.headers["x-nomduchat-webhook-secret"])) {
+    if (!verifyWebhookSecret(request.headers["x-nomduchat-webhook-secret"], request.query)) {
       return reply.status(401).send({
         error: {
           code: "unauthorized",
@@ -224,14 +239,20 @@ export async function registerSubscriptionRoutes(
   });
 }
 
-function verifyWebhookSecret(header: string | string[] | undefined) {
+function verifyWebhookSecret(header: string | string[] | undefined, query?: unknown) {
   if (!config.PAYMENT_WEBHOOK_SECRET) return true;
-  const value = Array.isArray(header) ? header[0] : header;
+  const value = Array.isArray(header) ? header[0] : header ?? readWebhookSecretFromQuery(query);
   if (!value) return false;
 
   const actual = Buffer.from(value);
   const expected = Buffer.from(config.PAYMENT_WEBHOOK_SECRET);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function readWebhookSecretFromQuery(query: unknown) {
+  if (!query || typeof query !== "object") return undefined;
+  const value = (query as { secret?: unknown; webhookSecret?: unknown }).secret ?? (query as { webhookSecret?: unknown }).webhookSecret;
+  return typeof value === "string" ? value : undefined;
 }
 
 function yooKassaPaymentStatus(event: string, status?: string) {

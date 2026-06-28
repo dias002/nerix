@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Home, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { getCurrentSubscription, getPlans, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
@@ -57,48 +57,46 @@ export default function WorkspaceLayout() {
             adminTab !== "ai-budget",
         },
         {
-          path: "/workspace/admin?tab=control",
+          path: "/workspace/admin/control",
           icon: SlidersHorizontal,
           label: t.nav.control,
           visible: true,
-          active: () => location.pathname === "/workspace/admin" && adminTab === "control",
+          active: () => location.pathname === "/workspace/admin/control" || (location.pathname === "/workspace/admin" && adminTab === "control"),
         },
         {
-          path: "/workspace/admin?tab=ai-budget",
+          path: "/workspace/admin/ai-budget",
           icon: Zap,
           label: t.nav.aiBudget,
           visible: true,
-          active: () => location.pathname === "/workspace/admin" && adminTab === "ai-budget",
+          active: () => location.pathname === "/workspace/admin/ai-budget" || (location.pathname === "/workspace/admin" && adminTab === "ai-budget"),
         },
         {
-          path: "/workspace/admin?tab=users",
+          path: "/workspace/admin/users",
           icon: Users,
           label: t.nav.users,
           visible: true,
-          active: () => location.pathname === "/workspace/admin" && adminTab === "users",
+          active: () => location.pathname === "/workspace/admin/users" || (location.pathname === "/workspace/admin" && adminTab === "users"),
         },
         {
-          path: "/workspace/admin?tab=memory",
+          path: "/workspace/admin/memory",
           icon: Brain,
           label: t.nav.memory,
           visible: true,
-          active: () => location.pathname === "/workspace/admin" && adminTab === "memory",
+          active: () => location.pathname === "/workspace/admin/memory" || (location.pathname === "/workspace/admin" && adminTab === "memory"),
         },
         {
-          path: "/workspace/admin?tab=pricing",
+          path: "/workspace/admin/pricing",
           icon: CreditCard,
           label: t.nav.price,
           visible: true,
-          active: () => location.pathname === "/workspace/admin" && adminTab === "pricing",
+          active: () => location.pathname === "/workspace/admin/pricing" || (location.pathname === "/workspace/admin" && adminTab === "pricing"),
         },
         { path: "/workspace/mailings", icon: Mail, label: t.nav.mailings, visible: Boolean(permissions?.mailings) },
         { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: true },
       ]
     : [
-        { path: "/workspace", icon: Home, label: t.nav.home, visible: true },
         { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: true },
         { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: true },
-        { path: "/workspace/agents", icon: Users, label: t.nav.agents, visible: true },
         { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: true },
         { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: true },
         {
@@ -177,7 +175,7 @@ export default function WorkspaceLayout() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed left-0 top-0 bottom-0 z-30 flex flex-col transition-[width,transform] duration-300
+          custom-scrollbar fixed left-0 top-0 bottom-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden transition-[width,transform] duration-300
           ${sidebarCollapsed ? "w-16" : "w-20 md:w-64"}
         `}
         style={{
@@ -479,7 +477,8 @@ function UsageLimitPanel({
 
   if (usage.hasActiveSubscription) {
     const plan = plans.find((item) => item.id === subscription?.subscription?.planId) ?? plans.find((item) => item.id === usage.planId);
-    const availableCredits = wallet?.availableCredits ?? 0;
+    const rawAvailableCredits = wallet?.availableCredits ?? 0;
+    const availableCredits = plan ? Math.min(rawAvailableCredits, plan.monthlyCredits) : rawAvailableCredits;
     const monthlyCredits = plan?.monthlyCredits ?? Math.max(availableCredits, 1);
     const remainingPercent =
       monthlyCredits > 0 ? Math.min(100, Math.max(0, (availableCredits / monthlyCredits) * 100)) : 0;

@@ -12,34 +12,31 @@ import {
   Loader2,
   MessageSquare,
   Send,
+  Share2,
   ShieldCheck,
   Sparkles,
   UserRound,
 } from "lucide-react";
+import ShareSheet, { type SharePayload } from "../components/ShareSheet";
 import { useAuth } from "../auth";
 import {
   createTelegramBotOrder,
   getTelegramBotOrders,
   getTelegramBotProduct,
+  testTelegramBotOrder,
   toPublicApiError,
   type CreateTelegramBotOrderInput,
   type TelegramBotCountry,
   type TelegramBotOrderApiRecord,
   type TelegramBotPriceApiRecord,
+  type TelegramBotTestReplyApiRecord,
   type TelegramBotTone,
 } from "../api";
 
 type FormState = CreateTelegramBotOrderInput;
-type PaymentState = {
-  cardNumber: string;
-  cardHolder: string;
-  expiry: string;
-  cvv: string;
-  receiptContact: string;
-};
 
 type WizardStep = {
-  key: "company" | "offer" | "rules" | "handoff" | "payment";
+  key: "company" | "offer" | "rules" | "handoff" | "review";
   title: string;
   text: string;
   fields: Array<keyof FormState>;
@@ -83,9 +80,9 @@ const wizardSteps: WizardStep[] = [
     fields: ["escalationContact"],
   },
   {
-    key: "payment",
-    title: "Оплата запуска",
-    text: "Цена появляется только здесь и берется по стране, указанной в аккаунте.",
+    key: "review",
+    title: "Проверка заявки",
+    text: "Проверьте контакт, правила и следующий шаг. Заявка создается без ввода данных карты.",
     fields: [],
   },
 ];
@@ -96,8 +93,6 @@ export default function BusinessTelegramBot() {
   const [started, setStarted] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<FormState>(() => createInitialForm(accountCountry));
-  const [payment, setPayment] = useState<PaymentState>(() => createEmptyPayment());
-  const [paymentTouched, setPaymentTouched] = useState(false);
   const [prices, setPrices] = useState<TelegramBotPriceApiRecord[]>(fallbackPrices);
   const [orders, setOrders] = useState<TelegramBotOrderApiRecord[]>([]);
   const [createdOrder, setCreatedOrder] = useState<TelegramBotOrderApiRecord | null>(null);
@@ -105,6 +100,10 @@ export default function BusinessTelegramBot() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
+  const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
+  const [testMessage, setTestMessage] = useState("Здравствуйте, сколько стоит и как оплатить?");
+  const [testReply, setTestReply] = useState<TelegramBotTestReplyApiRecord | null>(null);
+  const [testingReply, setTestingReply] = useState(false);
 
   useEffect(() => {
     setForm((current) => (current.country === accountCountry ? current : { ...current, country: accountCountry }));
@@ -144,7 +143,6 @@ export default function BusinessTelegramBot() {
   );
   const latestOrder = createdOrder ?? orders[0] ?? null;
   const stepReady = currentStep.fields.every((field) => String(form[field] ?? "").trim().length > 0);
-  const paymentReady = isPaymentReady(payment);
   const canSubmit = wizardSteps.every((step) => step.fields.every((field) => String(form[field] ?? "").trim().length > 0));
   const progress = Math.round(((stepIndex + 1) / wizardSteps.length) * 100);
 
@@ -163,10 +161,6 @@ export default function BusinessTelegramBot() {
 
   const submitOrder = async () => {
     if (!canSubmit || submitting) return;
-    if (!paymentReady) {
-      setPaymentTouched(true);
-      return;
-    }
 
     setSubmitting(true);
     setError(null);
@@ -175,8 +169,6 @@ export default function BusinessTelegramBot() {
       setCreatedOrder(response.order);
       setOrders((current) => [response.order, ...current.filter((order) => order.id !== response.order.id)]);
       setForm(createInitialForm(accountCountry));
-      setPayment(createEmptyPayment());
-      setPaymentTouched(false);
       setStepIndex(0);
       setStarted(false);
     } catch (submitError) {
@@ -197,8 +189,40 @@ export default function BusinessTelegramBot() {
     }
   };
 
+  const shareSystemPrompt = () => {
+    if (!latestOrder?.systemPrompt) return;
+    setSharePayload({
+      title: `Telegram prompt: ${latestOrder.companyName}`,
+      text: latestOrder.systemPrompt,
+    });
+  };
+
+  const testLatestOrder = async () => {
+    if (!latestOrder || testingReply || !testMessage.trim()) return;
+
+    setTestingReply(true);
+    setError(null);
+    try {
+      const reply = await testTelegramBotOrder({
+        orderId: latestOrder.id,
+        message: testMessage,
+      });
+      setTestReply(reply);
+    } catch (testError) {
+      setError(toPublicApiError(testError, "Не удалось проверить ответ Telegram-менеджера."));
+    } finally {
+      setTestingReply(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-5 text-white md:p-10">
+      <ShareSheet
+        open={Boolean(sharePayload)}
+        payload={sharePayload}
+        onClose={() => setSharePayload(null)}
+        onShared={setCopyMessage}
+      />
       <div className="mx-auto max-w-7xl space-y-6">
         <Link
           to="/workspace/business"
@@ -212,13 +236,13 @@ export default function BusinessTelegramBot() {
           <article className="rounded-3xl border border-white/10 bg-[#0A0A0A] p-6 md:p-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-gray-300">
               <Bot className="h-4 w-4" strokeWidth={1.7} />
-              Для заявок, консультаций и первого контакта
+              Для заявки на запуск, правил ответа и первого контакта
             </div>
             <h1 className="mt-5 max-w-4xl text-4xl font-medium tracking-normal md:text-6xl">
-              ИИ-менеджер в Telegram, который не теряет клиентов
+              Запуск Telegram-менеджера с готовыми правилами ответа
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-relaxed text-gray-400 md:text-lg">
-              Клиент пишет в Telegram, менеджер задает пару уточняющих вопросов, фиксирует контакт и передает готовую заявку человеку. Владелец отвечает на короткий опрос, а nomduchat собирает правила ответа и заявку на подключение.
+              Этот экран пока не поднимает живого Telegram-бота автоматически. Он собирает бизнес-данные, правила ответа, контакт и техническую заявку на подключение менеджера.
             </p>
             {!started ? (
               <button
@@ -229,7 +253,7 @@ export default function BusinessTelegramBot() {
                 }}
                 className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
               >
-                Создать своего ИИ-менеджера в Telegram
+                Оформить заявку на Telegram-менеджера
                 <ChevronRight className="h-4 w-4" strokeWidth={1.8} />
               </button>
             ) : null}
@@ -242,9 +266,9 @@ export default function BusinessTelegramBot() {
             </div>
             <div className="mt-5 space-y-3">
               {[
-                "Менеджер отвечает одинаково и по правилам компании.",
-                "Заявка приходит с контактом, задачей и следующим шагом.",
-                "Владельцу не нужно разбираться в BotFather и webhook на первом этапе.",
+                "Собирается единый prompt и правила ответа по компании.",
+                "Заявка фиксируется с контактом, задачей и следующим шагом.",
+                "Подключение живого бота и Telegram-интеграции остаётся отдельным этапом.",
               ].map((item) => (
                 <div key={item} className="flex items-start gap-3 text-sm leading-relaxed text-gray-300">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" strokeWidth={1.8} />
@@ -272,7 +296,7 @@ export default function BusinessTelegramBot() {
                   </div>
                   <h2 className="mt-3 text-2xl font-medium md:text-3xl">Опрос для ИИ-менеджера</h2>
                   <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
-                    Заполните короткие шаги. На каждом шаге мы спрашиваем только то, без чего менеджер не сможет нормально принять первую заявку.
+                    Заполните короткие шаги. На выходе получится заявка на запуск, prompt и набор правил для будущего Telegram-менеджера.
                   </p>
                 </div>
                 <button
@@ -290,7 +314,7 @@ export default function BusinessTelegramBot() {
                   className="rounded-3xl border border-white/10 bg-[#0A0A0A] p-5 md:p-6"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    if (currentStep.key === "payment") {
+                    if (currentStep.key === "review") {
                       void submitOrder();
                     } else {
                       nextStep();
@@ -327,14 +351,14 @@ export default function BusinessTelegramBot() {
                       Назад
                     </button>
 
-                    {currentStep.key === "payment" ? (
+                    {currentStep.key === "review" ? (
                       <button
                         type="submit"
                         disabled={!canSubmit || submitting}
                         className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" strokeWidth={1.8} />}
-                        Подтвердить оплату и создать заявку
+                        Создать заявку на подключение
                       </button>
                     ) : (
                       <button
@@ -379,7 +403,7 @@ export default function BusinessTelegramBot() {
                       После заявки
                     </div>
                     <p className="mt-3 text-sm leading-relaxed text-gray-500">
-                      Мы получим описание бизнеса, правила ответов и контакт. После этого можно подключать менеджера в Telegram и проверять первые диалоги.
+                      Мы получим описание бизнеса, правила ответов и контакт. После этого можно отдельно подключать Telegram-бота, токен, webhook и проверять первые диалоги.
                     </p>
                   </section>
                 </aside>
@@ -392,9 +416,9 @@ export default function BusinessTelegramBot() {
         {!started ? (
           <section className="grid grid-cols-1 gap-5 lg:grid-cols-3">
             {[
-              { title: "Не отвечает вместо владельца", text: "Он собирает данные и ведет клиента до понятной заявки." },
+              { title: "Не магическая автосборка", text: "Сначала собирается заявка и логика ответа, а не полностью живой бот." },
               { title: "Работает по правилам", text: "Можно сразу указать, что обещать нельзя и когда нужен человек." },
-              { title: "Запуск без сложной настройки", text: "Опрос короче, чем обычное ТЗ для подрядчика." },
+              { title: "Нормальное ТЗ на выходе", text: "Опрос короче, чем обычное ТЗ, но уже даёт основу для подключения." },
             ].map((item) => (
               <article key={item.title} className="rounded-3xl border border-white/10 bg-[#0A0A0A] p-5">
                 <h2 className="text-xl font-medium">{item.title}</h2>
@@ -420,16 +444,70 @@ export default function BusinessTelegramBot() {
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-relaxed text-gray-300 whitespace-pre-wrap">
                 {latestOrder.setupSummary}
               </div>
-              <button
-                type="button"
-                onClick={() => void copySystemPrompt()}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-              >
-                <Copy className="h-4 w-4" strokeWidth={1.7} />
-                Скопировать prompt
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={shareSystemPrompt}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                >
+                  <Share2 className="h-4 w-4" strokeWidth={1.7} />
+                  Поделиться
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void copySystemPrompt()}
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                >
+                  <Copy className="h-4 w-4" strokeWidth={1.7} />
+                  Скопировать prompt
+                </button>
+              </div>
             </div>
             {copyMessage ? <div className="mt-3 text-sm text-gray-500">{copyMessage}</div> : null}
+            <div className="mt-5 grid grid-cols-1 gap-4 border-t border-white/10 pt-5 lg:grid-cols-[0.9fr_1.1fr]">
+              <div>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <MessageSquare className="h-4 w-4" strokeWidth={1.7} />
+                  Проверка до запуска
+                </div>
+                <textarea
+                  value={testMessage}
+                  onChange={(event) => setTestMessage(event.target.value)}
+                  placeholder="Напишите пример сообщения клиента"
+                  className="mt-3 min-h-28 w-full resize-none rounded-2xl border border-white/10 bg-[#050505] px-4 py-3 text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+                />
+                <button
+                  type="button"
+                  onClick={() => void testLatestOrder()}
+                  disabled={testingReply || !testMessage.trim()}
+                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-50"
+                >
+                  {testingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" strokeWidth={1.7} />}
+                  Проверить ответ
+                </button>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="text-sm font-medium text-white">Ответ менеджера</div>
+                {testReply ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">{testReply.reply}</div>
+                    <div className={`rounded-xl border px-3 py-2 text-xs ${
+                      testReply.shouldEscalate
+                        ? "border-amber-300/20 bg-amber-300/10 text-amber-100/80"
+                        : "border-emerald-300/20 bg-emerald-300/10 text-emerald-100/80"
+                    }`}>
+                      {testReply.shouldEscalate
+                        ? "Бот передаст диалог человеку по правилам заявки."
+                        : "Бот может ответить сам и собрать заявку."}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm leading-relaxed text-gray-500">
+                    Отправьте пример сообщения клиента, чтобы проверить стиль ответа и передачу человеку.
+                  </p>
+                )}
+              </div>
+            </div>
           </section>
         ) : loading ? (
           <div className="rounded-3xl border border-white/10 bg-[#0A0A0A] p-5 text-sm text-gray-500">
@@ -582,22 +660,38 @@ export default function BusinessTelegramBot() {
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <CreditCard className="h-4 w-4" strokeWidth={1.7} />
-            Запуск по стране аккаунта
+            Условия запуска
           </div>
           <div className="mt-4 text-5xl font-medium">{formatPlainAmount(selectedPrice.amountMinor)}</div>
           <p className="mt-3 text-sm leading-relaxed text-gray-500">
             Страна аккаунта: {form.country === "KZ" ? "Казахстан" : "Россия"}. Токены для ответов оплачиваются отдельно по фактическому расходу.
           </p>
           <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-xs leading-relaxed text-gray-500">
-            Это тестовый checkout для проверки сценария. Реальное списание нужно подключить через платежного провайдера, чтобы данные карты не хранились в nomduchat.
+            Данные карты здесь не вводятся. После заявки менеджер получает ТЗ, контакт и выбранную страну. Оплата и чеки подключаются отдельным платежным сценарием.
           </p>
         </div>
-        <PaymentForm
-          country={form.country}
-          payment={payment}
-          touched={paymentTouched}
-          onChange={setPayment}
-        />
+        <div className="rounded-3xl border border-white/10 bg-[#050505] p-5">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <MessageSquare className="h-4 w-4" strokeWidth={1.7} />
+            Что попадет в заявку
+          </div>
+          <div className="mt-4 space-y-3">
+            {[
+              ["Компания", form.companyName],
+              ["Контакт", form.contact],
+              ["Цель бота", form.botPurpose],
+              ["Передача человеку", form.escalationContact],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+                <div className="text-xs text-gray-600">{label}</div>
+                <div className="mt-1 line-clamp-3 text-sm leading-relaxed text-gray-300">{value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm leading-relaxed text-emerald-100/80">
+            После создания заявки появится prompt. Его можно скопировать или отправить ответственному через системное меню поделиться.
+          </div>
+        </div>
       </div>
     );
   }
@@ -620,16 +714,6 @@ function createInitialForm(country: TelegramBotCountry): FormState {
     sourceLinks: "",
     botUsername: "",
     botToken: "",
-  };
-}
-
-function createEmptyPayment(): PaymentState {
-  return {
-    cardNumber: "",
-    cardHolder: "",
-    expiry: "",
-    cvv: "",
-    receiptContact: "",
   };
 }
 
@@ -698,84 +782,6 @@ function TextArea({
   );
 }
 
-function PaymentForm({
-  country,
-  payment,
-  touched,
-  onChange,
-}: {
-  country: TelegramBotCountry;
-  payment: PaymentState;
-  touched: boolean;
-  onChange: (payment: PaymentState) => void;
-}) {
-  const update = (field: keyof PaymentState, value: string) => onChange({ ...payment, [field]: value });
-  const receiptLabel = country === "KZ" ? "Телефон для чека" : "Email для чека";
-  const ready = isPaymentReady(payment);
-
-  return (
-    <div className="rounded-3xl border border-white/10 bg-[#050505] p-5">
-      <div className="flex items-center gap-2 text-sm text-gray-500">
-        <CreditCard className="h-4 w-4" strokeWidth={1.7} />
-        Данные карты
-      </div>
-      <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Field
-          label="Номер карты"
-          value={payment.cardNumber}
-          onChange={(value) => update("cardNumber", value)}
-          placeholder="0000 0000 0000 0000"
-          required
-        />
-        <Field
-          label="Имя на карте"
-          value={payment.cardHolder}
-          onChange={(value) => update("cardHolder", value)}
-          placeholder="IVAN IVANOV"
-          required
-        />
-        <Field
-          label="Срок"
-          value={payment.expiry}
-          onChange={(value) => update("expiry", value)}
-          placeholder="MM/YY"
-          required
-        />
-        <Field
-          label="CVV"
-          value={payment.cvv}
-          onChange={(value) => update("cvv", value)}
-          placeholder="000"
-          type="password"
-          required
-        />
-      </div>
-      <Field
-        label={receiptLabel}
-        value={payment.receiptContact}
-        onChange={(value) => update("receiptContact", value)}
-        placeholder={country === "KZ" ? "+7..." : "mail@example.com"}
-        required
-      />
-      {touched && !ready ? (
-        <div className="mt-4 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          Заполните данные карты и контакт для чека.
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function isPaymentReady(payment: PaymentState) {
-  return (
-    payment.cardNumber.replace(/\D/g, "").length >= 12 &&
-    payment.cardHolder.trim().length >= 3 &&
-    payment.expiry.trim().length >= 4 &&
-    payment.cvv.replace(/\D/g, "").length >= 3 &&
-    payment.receiptContact.trim().length >= 5
-  );
-}
-
 function formatPlainAmount(amountMinor: number) {
   return new Intl.NumberFormat("ru-RU", {
     maximumFractionDigits: 0,
@@ -785,7 +791,7 @@ function formatPlainAmount(amountMinor: number) {
 function formatStatus(status: string) {
   const labels: Record<string, string> = {
     draft: "Черновик",
-    ready_for_payment: "Готово к оплате",
+    ready_for_payment: "Заявка создана",
     paid: "Оплачено",
     in_setup: "В подключении",
     connected: "Подключено",

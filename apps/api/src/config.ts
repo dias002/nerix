@@ -50,6 +50,20 @@ const envSchema = z.object({
   JWT_SECRET: z.string().default("change-me-locally"),
   ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(60 * 60 * 24 * 7),
   CORS_ORIGINS: z.string().default(defaultCorsOrigins),
+  ABUSE_PROTECTION_ENABLED: z
+    .enum(["true", "false"])
+    .default(defaultNodeEnv === "test" ? "false" : "true")
+    .transform(parseBooleanFlag),
+  ABUSE_TRUST_PROXY_HEADERS: z
+    .enum(["true", "false"])
+    .default(defaultNodeEnv === "production" ? "true" : "false")
+    .transform(parseBooleanFlag),
+  ABUSE_HASH_SECRET: z.string().optional(),
+  TURNSTILE_SECRET_KEY: z.string().optional(),
+  TURNSTILE_REQUIRED: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform(parseBooleanFlag),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_TEXT_MODEL: z.string().default("gpt-5.2"),
   OPENAI_CODE_MODEL: z.string().default("gpt-5.2"),
@@ -85,6 +99,7 @@ const envSchema = z.object({
   PAYMENT_WEBHOOK_SECRET: z.string().optional(),
   YOOKASSA_SHOP_ID: z.string().optional(),
   YOOKASSA_SECRET_KEY: z.string().optional(),
+  YOOKASSA_RECEIPT_VAT_CODE: z.coerce.number().int().min(1).max(6).default(1),
   YOOKASSA_RETURN_URL: z.string().default("http://127.0.0.1:5173/workspace/balance"),
   API_PUBLIC_URL: z.string().default("http://127.0.0.1:4000"),
   WEB_APP_URL: z.string().default("http://127.0.0.1:5173"),
@@ -139,6 +154,7 @@ if (
 
 export const config = {
   ...rawConfig,
+  ABUSE_HASH_SECRET: rawConfig.ABUSE_HASH_SECRET ?? rawConfig.JWT_SECRET,
   CORS_ORIGINS: parseCsv(rawConfig.CORS_ORIGINS),
 };
 

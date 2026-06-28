@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { CreditCard, TrendingDown, Wallet, Zap } from "lucide-react";
+import { AlertCircle, CreditCard, ExternalLink, FileText, Mail, TrendingDown, Wallet, Zap } from "lucide-react";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 import {
@@ -9,11 +9,14 @@ import {
   getCurrentSubscription,
   getLedger,
   getPlans,
+  getSubscriptionCheckouts,
   getWallet,
+  toPublicApiError,
   type CurrentSubscriptionApiResponse,
   type LedgerApiEntry,
   type PlanId,
   type PlanApiRecord,
+  type SubscriptionCheckoutApiRecord,
 } from "../api";
 
 export default function Balance() {
@@ -28,6 +31,7 @@ export default function Balance() {
   }, [user?.country]);
   const [wallet, setWallet] = useState<{ availableCredits: number; reservedCredits: number } | null>(null);
   const [ledger, setLedger] = useState<LedgerApiEntry[] | null>(null);
+  const [checkouts, setCheckouts] = useState<SubscriptionCheckoutApiRecord[] | null>(null);
   const [plans, setPlans] = useState<PlanApiRecord[] | null>(null);
   const [currentSubscription, setCurrentSubscription] =
     useState<CurrentSubscriptionApiResponse["subscription"]>(null);
@@ -38,18 +42,20 @@ export default function Balance() {
   useEffect(() => {
     let active = true;
 
-    Promise.allSettled([getWallet(), getLedger(), getPlans(country), getCurrentSubscription()]).then((results) => {
+    Promise.allSettled([getWallet(), getLedger(), getPlans(country), getCurrentSubscription(), getSubscriptionCheckouts()]).then((results) => {
       if (!active) return;
 
       const walletResult = results[0];
       const ledgerResult = results[1];
       const plansResult = results[2];
       const subscriptionResult = results[3];
+      const checkoutsResult = results[4];
 
       setWallet(walletResult.status === "fulfilled" ? walletResult.value : null);
       setLedger(ledgerResult.status === "fulfilled" ? ledgerResult.value.entries : null);
       setPlans(plansResult.status === "fulfilled" ? plansResult.value.plans : null);
       setCurrentSubscription(subscriptionResult.status === "fulfilled" ? subscriptionResult.value.subscription : null);
+      setCheckouts(checkoutsResult.status === "fulfilled" ? checkoutsResult.value.checkouts : null);
     });
 
     return () => {
@@ -63,9 +69,12 @@ export default function Balance() {
   );
   const usageCredits = capturedEntries.reduce((total, entry) => total + Math.abs(entry.amountCredits), 0);
   const avgCost = capturedEntries.length > 0 ? Math.round(usageCredits / capturedEntries.length) : 0;
+  const activePlan = plans?.find((plan) => plan.id === currentSubscription?.planId) ?? null;
+  const displayAvailableCredits =
+    wallet && activePlan ? Math.min(wallet.availableCredits, activePlan.monthlyCredits) : wallet?.availableCredits;
 
   const stats = [
-    { label: t.balance.currentBalance, value: wallet ? formatCredits(wallet.availableCredits) : "—", icon: Wallet },
+    { label: t.balance.currentBalance, value: displayAvailableCredits !== undefined ? formatCredits(displayAvailableCredits) : "—", icon: Wallet },
     { label: t.balance.usage, value: ledger ? formatCredits(usageCredits) : "—", icon: TrendingDown },
     { label: t.balance.avgCost, value: ledger ? formatCredits(capturedEntries.length > 0 ? avgCost : 0) : "—", icon: Zap },
   ];
@@ -99,10 +108,17 @@ export default function Balance() {
     setPendingPlanId(planId);
     setCheckoutError(null);
 
+    if (country === "RU" && !user?.email) {
+      setPendingPlanId(null);
+      setCheckoutError("Для оплаты через YooKassa нужен email в профиле. Добавьте email или войдите в аккаунт с email.");
+      return;
+    }
+
     try {
       const checkout = await createSubscriptionCheckout({
         planId,
         country,
+        customerEmail: user?.email ?? undefined,
       });
 
       if (!checkout.checkout.checkoutUrl.startsWith("nomduchat://mock-checkout")) {
@@ -114,10 +130,12 @@ export default function Balance() {
       setWallet(completed.wallet);
       setCurrentSubscription(completed.subscription);
       setCheckoutNoticePlanId(null);
+      const latestCheckouts = await getSubscriptionCheckouts().catch(() => null);
+      if (latestCheckouts) setCheckouts(latestCheckouts.checkouts);
       await refreshUser();
-    } catch {
+    } catch (error) {
       setCurrentSubscription(null);
-      setCheckoutError("Оплата картой временно недоступна. Попробуйте позже.");
+      setCheckoutError(formatCheckoutError(error));
     } finally {
       setPendingPlanId(null);
     }
@@ -203,6 +221,84 @@ export default function Balance() {
         </section>
 
         <section className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-white">Платежи и чеки</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Здесь видны созданные оплаты, их статус и данные для поддержки.
+              </p>
+            </div>
+            <a
+              href="mailto:admin@nomduchat.com?subject=Вопрос%20по%20оплате%20nomduchat"
+              className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+            >
+              <Mail className="h-4 w-4" strokeWidth={1.7} />
+              Поддержка
+            </a>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0A]">
+            {checkouts && checkouts.length > 0 ? checkouts.slice(0, 6).map((checkout, index) => (
+              <div
+                key={checkout.id}
+                className={`grid grid-cols-1 gap-4 p-4 md:grid-cols-[1fr_auto] md:items-center ${
+                  index !== Math.min(checkouts.length, 6) - 1 ? "border-b border-white/5" : ""
+                }`}
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-white">{planLabel(checkout.planId)}</span>
+                    <span className={`rounded-full border px-2.5 py-1 text-xs ${checkoutStatusClass(checkout.status)}`}>
+                      {checkoutStatusLabel(checkout.status)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+                    <span>{formatPrice(checkout.amountMinor, checkout.currency)}</span>
+                    <span>{providerLabel(checkout.provider)}</span>
+                    <span>{formatCheckoutDate(checkout.createdAt)}</span>
+                    <span className="max-w-full truncate">ID: {checkout.providerCheckoutId}</span>
+                  </div>
+                  {checkout.status === "completed" ? (
+                    <div className="mt-3 inline-flex items-start gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-gray-400">
+                      <FileText className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.7} />
+                      Чек формирует платежный провайдер и отправляет на контакт покупателя.
+                    </div>
+                  ) : checkout.status === "failed" || checkout.status === "cancelled" ? (
+                    <div className="mt-3 inline-flex items-start gap-2 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs leading-relaxed text-red-100/80">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.7} />
+                      Оплата не завершена. Можно создать новый платеж или написать в поддержку с ID операции.
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap gap-2 md:justify-end">
+                  {checkout.status === "pending" && !checkout.checkoutUrl.startsWith("nomduchat://mock-checkout") ? (
+                    <a
+                      href={checkout.checkoutUrl}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200"
+                    >
+                      Продолжить оплату
+                      <ExternalLink className="h-4 w-4" strokeWidth={1.7} />
+                    </a>
+                  ) : null}
+                  <a
+                    href={`mailto:admin@nomduchat.com?subject=${encodeURIComponent(`Платеж ${checkout.providerCheckoutId}`)}&body=${encodeURIComponent(
+                      `Здравствуйте. Нужна помощь по платежу ${checkout.providerCheckoutId}. Тариф: ${checkout.planId}. Статус: ${checkout.status}.`
+                    )}`}
+                    className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                  >
+                    <Mail className="h-4 w-4" strokeWidth={1.7} />
+                    Написать
+                  </a>
+                </div>
+              </div>
+            )) : checkouts === null ? (
+              <div className="p-4 text-sm text-gray-500">История платежей пока не загружена.</div>
+            ) : (
+              <div className="p-4 text-sm text-gray-500">Платежей пока нет.</div>
+            )}
+          </div>
+        </section>
+
+        <section className="space-y-4">
           <h3 className="text-lg font-medium text-white">{t.balance.activityTitle}</h3>
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0A]">
             {activity.length > 0 ? activity.map((item, index) => (
@@ -254,6 +350,54 @@ function ledgerLabel(type: string) {
     default:
       return "Операция";
   }
+}
+
+function planLabel(planId: PlanId) {
+  const labels: Record<PlanId, string> = {
+    base: "Easy Start",
+    ultra: "Active Work",
+    pro: "Team Mode",
+    business: "Business Cabinet",
+  };
+  return labels[planId] ?? planId;
+}
+
+function providerLabel(provider: "kaspi" | "yookassa") {
+  return provider === "kaspi" ? "Kaspi" : "YooKassa";
+}
+
+function checkoutStatusLabel(status: SubscriptionCheckoutApiRecord["status"]) {
+  const labels: Record<SubscriptionCheckoutApiRecord["status"], string> = {
+    pending: "Ожидает оплаты",
+    completed: "Оплачено",
+    cancelled: "Отменено",
+    failed: "Ошибка",
+  };
+  return labels[status];
+}
+
+function checkoutStatusClass(status: SubscriptionCheckoutApiRecord["status"]) {
+  if (status === "completed") return "border-emerald-400/25 bg-emerald-400/10 text-emerald-100";
+  if (status === "pending") return "border-white/10 bg-white/[0.05] text-gray-300";
+  return "border-red-400/25 bg-red-400/10 text-red-100";
+}
+
+function formatCheckoutDate(value: string) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatCheckoutError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (/email|required for YooKassa receipt/i.test(message)) {
+    return "Для оплаты через YooKassa нужен email в профиле. Добавьте email или войдите в аккаунт с email.";
+  }
+
+  return toPublicApiError(error, "Оплата картой временно недоступна. Попробуйте позже.");
 }
 
 function formatPrice(amountMinor: number, currency: "KZT" | "RUB") {

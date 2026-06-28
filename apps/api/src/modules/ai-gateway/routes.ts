@@ -3,20 +3,38 @@ import { z } from "zod";
 import { sendResult } from "../../server/response.js";
 import { countrySchema, languageSchema } from "../../server/schemas.js";
 import { ok } from "../../domain/result.js";
+import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { AiGatewayService } from "./ai-gateway.service.js";
 import { getConfiguredProviders, getProviderPolicyMode } from "./provider-registry.js";
 
 const routeSchema = z.object({
-  userId: z.string().default("local-user"),
   country: countrySchema.default("KZ"),
   language: languageSchema.default("ru"),
   agentId: z.string().optional(),
+  taskType: z
+    .enum([
+      "chat_reply",
+      "customer_support",
+      "deal_summary",
+      "website_copy",
+      "campaign_copy",
+      "bot_policy",
+      "knowledge_search",
+      "internal_analysis",
+      "code_generation",
+      "media_generation",
+    ])
+    .optional(),
   modality: z.enum(["text", "code", "image", "video", "music", "voice", "file"]).optional(),
   prompt: z.string().min(1),
   attachmentIds: z.array(z.string()).optional(),
 });
 
-export async function registerAiGatewayRoutes(app: FastifyInstance, aiGateway: AiGatewayService) {
+export async function registerAiGatewayRoutes(
+  app: FastifyInstance,
+  aiGateway: AiGatewayService,
+  abuseGuard: AbuseGuardService
+) {
   app.get("/ai/providers", async (_request, reply) => {
     return sendResult(
       reply,
@@ -44,6 +62,9 @@ export async function registerAiGatewayRoutes(app: FastifyInstance, aiGateway: A
         },
       });
     }
+
+    const allowed = await abuseGuard.assertPublicAiRouteAllowed(request);
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await aiGateway.route(input.data));
   });

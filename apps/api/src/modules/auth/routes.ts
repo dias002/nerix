@@ -4,6 +4,7 @@ import { config } from "../../config.js";
 import { readBearerToken } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import { countrySchema, languageSchema } from "../../server/schemas.js";
+import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { AuthService } from "./auth.service.js";
 
 const registerSchema = z.object({
@@ -12,6 +13,7 @@ const registerSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   country: countrySchema.default("KZ"),
   language: languageSchema.default("ru"),
+  turnstileToken: z.string().trim().min(1).max(4096).optional(),
 });
 
 const loginSchema = z.object({
@@ -29,7 +31,7 @@ const oauthCallbackSchema = z.object({
   format: z.enum(["json"]).optional(),
 });
 
-export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService) {
+export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService, abuseGuard: AbuseGuardService) {
   app.post("/auth/register", async (request, reply) => {
     const input = registerSchema.safeParse(request.body);
 
@@ -41,6 +43,12 @@ export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService
         },
       });
     }
+
+    const allowed = await abuseGuard.assertRegisterAllowed(request, {
+      email: input.data.email,
+      turnstileToken: input.data.turnstileToken,
+    });
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await auth.register(input.data));
   });
@@ -56,6 +64,9 @@ export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService
         },
       });
     }
+
+    const allowed = await abuseGuard.assertLoginAllowed(request, { email: input.data.email });
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await auth.login(input.data));
   });
@@ -76,6 +87,9 @@ export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService
         },
       });
     }
+
+    const allowed = await abuseGuard.assertOAuthStartAllowed(request, params.data.provider);
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(reply, await auth.startOAuth({ provider: params.data.provider, returnTo: query.data.returnTo }));
   });
