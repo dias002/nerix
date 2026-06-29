@@ -108,7 +108,16 @@ export default function WorkspaceLayout() {
           active: () => location.pathname.startsWith("/workspace/settings") || location.pathname === "/workspace/memory",
         },
       ];
-  const navItems = isAdminNavigation ? adminNavItems : access.isOwner ? [...workspaceNavItems, ...adminNavItems] : workspaceNavItems;
+  const navItems = isAdminNavigation
+    ? adminNavItems
+    : access.isOwner
+      ? [
+          ...workspaceNavItems,
+          ...adminNavItems.filter(
+            (adminItem) => !workspaceNavItems.some((workspaceItem) => workspaceItem.path === adminItem.path),
+          ),
+        ]
+      : workspaceNavItems;
 
   const refreshUsageLimits = useCallback(() => {
     if (isAdminNavigation || access.isGuest) {
