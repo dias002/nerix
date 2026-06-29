@@ -10,7 +10,7 @@ export default function Home() {
   const { t } = useLanguage();
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden bg-black text-white">
+    <div className="relative min-h-dvh overflow-x-hidden bg-black text-white">
       <StarsBackground />
 
       {/* Header */}
