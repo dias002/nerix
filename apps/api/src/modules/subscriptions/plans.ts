@@ -1,5 +1,7 @@
 import type { PaymentProviderCode, PlanId, SubscriptionCountry, SubscriptionPlan } from "./subscription.types.js";
 
+const rubPerKzt = 1 / 6;
+
 export const subscriptionPlans: SubscriptionPlan[] = [
   {
     id: "base",
@@ -8,10 +10,7 @@ export const subscriptionPlans: SubscriptionPlan[] = [
     contextTokens: 8_000,
     description: "For steady everyday work.",
     enabled: true,
-    prices: [
-      price("RU", "yookassa", "RUB", 990_00),
-      price("KZ", "kaspi", "KZT", 5_990_00),
-    ],
+    prices: pricesFromKzt(5_990_00),
   },
   {
     id: "ultra",
@@ -20,10 +19,7 @@ export const subscriptionPlans: SubscriptionPlan[] = [
     contextTokens: 32_000,
     description: "For more active work across chat, documents, and code.",
     enabled: true,
-    prices: [
-      price("RU", "yookassa", "RUB", 1_990_00),
-      price("KZ", "kaspi", "KZT", 11_990_00),
-    ],
+    prices: pricesFromKzt(11_990_00),
   },
   {
     id: "pro",
@@ -32,10 +28,7 @@ export const subscriptionPlans: SubscriptionPlan[] = [
     contextTokens: 64_000,
     description: "For teams and larger business tasks.",
     enabled: true,
-    prices: [
-      price("RU", "yookassa", "RUB", 19_990_00),
-      price("KZ", "kaspi", "KZT", 119_990_00),
-    ],
+    prices: pricesFromKzt(119_990_00),
   },
   {
     id: "business",
@@ -44,10 +37,7 @@ export const subscriptionPlans: SubscriptionPlan[] = [
     contextTokens: 128_000,
     description: "Business workspace with up to 5 employees, roles, CRM analytics, and a company assistant.",
     enabled: true,
-    prices: [
-      price("RU", "yookassa", "RUB", 49_990_00),
-      price("KZ", "kaspi", "KZT", 249_990_00),
-    ],
+    prices: pricesFromKzt(249_990_00),
   },
 ];
 
@@ -61,6 +51,24 @@ export function findPlanPrice(plan: SubscriptionPlan, country: SubscriptionCount
 
 export function providerForCountry(country: SubscriptionCountry): PaymentProviderCode {
   return country === "KZ" ? "kaspi" : "yookassa";
+}
+
+function pricesFromKzt(amountMinor: number) {
+  return [
+    price("KZ", "kaspi", "KZT", amountMinor),
+    price("RU", "yookassa", "RUB", toRubMinor(amountMinor)),
+  ];
+}
+
+function toRubMinor(kztAmountMinor: number) {
+  const convertedMinor = kztAmountMinor * rubPerKzt;
+  return roundRubPriceMinor(convertedMinor);
+}
+
+function roundRubPriceMinor(amountMinor: number) {
+  const amountMajor = amountMinor / 100;
+  const roundedMajor = Math.max(90, Math.floor(amountMajor / 100) * 100 + 90);
+  return roundedMajor * 100;
 }
 
 function price(

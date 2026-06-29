@@ -1,12 +1,13 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
-import { ArrowLeft, LoaderCircle, Lock, Mail, User } from "lucide-react";
+import { ArrowLeft, Globe, LoaderCircle, Lock, Mail, User } from "lucide-react";
 import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
 import TurnstileBox, { isTurnstileEnabled } from "../components/TurnstileBox";
 import { useLanguage } from "../i18n";
 
 type AuthMode = "login" | "register";
+type BillingCountry = "KZ" | "RU";
 
 export default function AuthPage() {
   const { language, t } = useLanguage();
@@ -24,15 +25,12 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState("");
+  const [authCountry, setAuthCountry] = useState<BillingCountry>(() => readStoredBillingCountry());
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const turnstileEnabled = isTurnstileEnabled();
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
-  const authCountry = useMemo(() => {
-    if (typeof window === "undefined") return "KZ";
-    return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
-  }, []);
 
   if (!isLoading && isAuthenticated) {
     return <Navigate to={from} replace />;
@@ -57,6 +55,7 @@ export default function AuthPage() {
 
     try {
       if (mode === "register") {
+        window.localStorage.setItem("nomduchat-country", authCountry);
         await register({
           name: name.trim() || undefined,
           email,
@@ -178,6 +177,29 @@ export default function AuthPage() {
                 </label>
               ) : null}
 
+              {mode === "register" ? (
+                <label className="block">
+                  <span className="mb-1.5 block text-xs text-gray-500">{t.auth.country}</span>
+                  <span className="flex items-center gap-2 rounded-xl border border-white/10 bg-black px-3 focus-within:border-white/25">
+                    <Globe className="h-4 w-4 text-gray-500" strokeWidth={1.7} />
+                    <select
+                      value={authCountry}
+                      onChange={(event) => setAuthCountry(event.target.value === "RU" ? "RU" : "KZ")}
+                      required
+                      className="h-11 min-w-0 flex-1 appearance-none bg-transparent text-sm text-white outline-none"
+                    >
+                      <option className="bg-black text-white" value="KZ">
+                        {t.auth.countryKazakhstan}
+                      </option>
+                      <option className="bg-black text-white" value="RU">
+                        {t.auth.countryRussia}
+                      </option>
+                    </select>
+                  </span>
+                  <span className="mt-1.5 block text-xs text-gray-600">{t.auth.countryHint}</span>
+                </label>
+              ) : null}
+
               <label className="block">
                 <span className="mb-1.5 block text-xs text-gray-500">{t.auth.email}</span>
                 <span className="flex items-center gap-2 rounded-xl border border-white/10 bg-black px-3 focus-within:border-white/25">
@@ -242,4 +264,9 @@ export default function AuthPage() {
       </div>
     </div>
   );
+}
+
+function readStoredBillingCountry(): BillingCountry {
+  if (typeof window === "undefined") return "KZ";
+  return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
 }
