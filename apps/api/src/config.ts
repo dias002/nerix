@@ -140,6 +140,9 @@ const envSchema = z.object({
     .enum(["true", "false"])
     .default("true")
     .transform(parseBooleanFlag),
+  PASSWORD_RESET_FROM_EMAIL: z.string().email().optional(),
+  PASSWORD_RESET_FROM_NAME: z.string().default("nomduchat"),
+  PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   MAILINGS_API_TOKEN: z.string().optional(),
   MAILINGS_API_USER_ID: z.string().default("local-user"),
   TELEGRAM_MANAGER_BOT_USERNAME: z.string().optional(),

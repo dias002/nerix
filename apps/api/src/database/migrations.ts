@@ -440,6 +440,28 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    create table if not exists password_reset_tokens (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid not null references users(id),
+      token_hash text not null unique,
+      expires_at timestamptz not null,
+      used_at timestamptz,
+      created_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create index if not exists password_reset_tokens_user_created_idx
+      on password_reset_tokens(user_id, created_at desc)
+  `);
+
+  await database.query(`
+    create index if not exists password_reset_tokens_active_idx
+      on password_reset_tokens(token_hash, expires_at)
+      where used_at is null
+  `);
+
+  await database.query(`
     create table if not exists subscription_events (
       id uuid primary key default uuid_generate_v4(),
       subscription_id uuid references subscriptions(id),

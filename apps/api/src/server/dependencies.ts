@@ -5,6 +5,7 @@ import { AgentService } from "../modules/agents/agent.service.js";
 import { AiGatewayService } from "../modules/ai-gateway/ai-gateway.service.js";
 import { createCompletionProvider } from "../modules/ai-gateway/completion-provider.js";
 import { InMemoryAuthRepository, PostgresAuthRepository } from "../modules/auth/auth.repository.js";
+import { MailingPasswordResetMailer, type PasswordResetMailer } from "../modules/auth/password-reset-mailer.js";
 import { AuthService } from "../modules/auth/auth.service.js";
 import { InMemoryWalletRepository, PostgresWalletRepository } from "../modules/billing/wallet.repository.js";
 import { BillingService } from "../modules/billing/billing.service.js";
@@ -81,6 +82,7 @@ export type CreateDependenciesOptions = {
   database?: DatabaseClient;
   persistence?: "memory" | "postgres";
   mailingTransport?: MailingTransport;
+  passwordResetMailer?: PasswordResetMailer;
   abuseRateLimitRepository?: AbuseRateLimitRepository;
   abuseGuard?: AbuseGuardService;
 };
@@ -126,7 +128,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     options.abuseRateLimitRepository ?? createAbuseRateLimitRepository(database, persistence);
 
   const users = new UserService(userRepository);
-  const auth = new AuthService(authRepository);
+  const auth = new AuthService(authRepository, options.passwordResetMailer ?? new MailingPasswordResetMailer());
   const agents = new AgentService(agentRepository);
   const billing = new BillingService(walletRepository, agents);
   const aiGateway = new AiGatewayService(agents, billing, createCompletionProvider());

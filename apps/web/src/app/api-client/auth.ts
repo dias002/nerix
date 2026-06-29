@@ -23,6 +23,20 @@ export async function loginUser(input: { email: string; password: string }) {
   });
 }
 
+export async function requestPasswordReset(input: { email: string }) {
+  return request<{ accepted: true; resetUrl?: string }>("/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function confirmPasswordReset(input: { token: string; password: string }) {
+  return request<AuthApiResponse>("/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function getCurrentUser() {
   return request<{ user: UserApiRecord }>("/auth/me");
 }

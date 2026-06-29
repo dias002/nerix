@@ -21,6 +21,12 @@ export type OAuthUserProfile = {
   rawProfile?: Record<string, unknown>;
 };
 
+export type PasswordResetTokenTarget = {
+  userId: string;
+  email: string;
+  name: string;
+};
+
 export interface AuthRepository {
   createUser(input: {
     email: string;
@@ -32,12 +38,25 @@ export interface AuthRepository {
   findByEmail(email: string): Promise<AuthUserRecord | null>;
   findById(userId: string): Promise<UserRecord | null>;
   findOrCreateOAuthUser(input: OAuthUserProfile): Promise<UserRecord>;
+  createPasswordResetToken(input: {
+    email: string;
+    tokenHash: string;
+    expiresAt: string;
+  }): Promise<PasswordResetTokenTarget | null>;
+  resetPasswordWithToken(input: {
+    tokenHash: string;
+    passwordHash: string;
+  }): Promise<UserRecord | null>;
 }
 
 export class InMemoryAuthRepository implements AuthRepository {
   private readonly users = new Map<string, AuthUserRecord>();
   private readonly emailIndex = new Map<string, string>();
   private readonly oauthIndex = new Map<string, string>();
+  private readonly passwordResetTokens = new Map<
+    string,
+    { userId: string; expiresAt: string; usedAt: string | null }
+  >();
 
   async createUser(input: {
     email: string;
@@ -114,6 +133,43 @@ export class InMemoryAuthRepository implements AuthRepository {
     this.users.set(user.id, user);
     if (email) this.emailIndex.set(email, user.id);
     this.oauthIndex.set(oauthKey, user.id);
+    return publicUser(user);
+  }
+
+  async createPasswordResetToken(input: { email: string; tokenHash: string; expiresAt: string }) {
+    const userId = this.emailIndex.get(normalizeEmail(input.email));
+    const user = userId ? this.users.get(userId) : null;
+    if (!user || !user.email) return null;
+
+    for (const token of this.passwordResetTokens.values()) {
+      if (token.userId === user.id && !token.usedAt) {
+        token.usedAt = new Date().toISOString();
+      }
+    }
+
+    this.passwordResetTokens.set(input.tokenHash, {
+      userId: user.id,
+      expiresAt: input.expiresAt,
+      usedAt: null,
+    });
+
+    return {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+    };
+  }
+
+  async resetPasswordWithToken(input: { tokenHash: string; passwordHash: string }) {
+    const token = this.passwordResetTokens.get(input.tokenHash);
+    if (!token || token.usedAt || new Date(token.expiresAt).getTime() < Date.now()) return null;
+
+    const user = this.users.get(token.userId);
+    if (!user) return null;
+
+    token.usedAt = new Date().toISOString();
+    user.passwordHash = input.passwordHash;
+    this.users.set(user.id, user);
     return publicUser(user);
   }
 }
@@ -266,6 +322,94 @@ export class PostgresAuthRepository implements AuthRepository {
 
     await ensureOwnerAccountEntitlements(this.database, row.id);
     return publicUser(mapRow((await this.findAuthRowByDatabaseId(row.id)) ?? row));
+  }
+
+  async createPasswordResetToken(input: { email: string; tokenHash: string; expiresAt: string }) {
+    const normalizedEmail = normalizeEmail(input.email);
+    const result = await this.database.query<{
+      id: string;
+      email: string | null;
+      display_name: string | null;
+    }>(
+      `
+        select id, email, display_name
+        from users
+        where email = $1
+        limit 1
+      `,
+      [normalizedEmail]
+    );
+
+    const user = result.rows[0];
+    if (!user?.email) return null;
+
+    await this.database.query(
+      `
+        update password_reset_tokens
+        set used_at = now()
+        where user_id = $1 and used_at is null
+      `,
+      [user.id]
+    );
+
+    await this.database.query(
+      `
+        insert into password_reset_tokens (user_id, token_hash, expires_at)
+        values ($1, $2, $3)
+      `,
+      [user.id, input.tokenHash, input.expiresAt]
+    );
+
+    return {
+      userId: toPublicUserId(user.id),
+      email: user.email,
+      name: user.display_name ?? "nomduchat User",
+    };
+  }
+
+  async resetPasswordWithToken(input: { tokenHash: string; passwordHash: string }) {
+    return this.transaction(async (client) => {
+      const tokenResult = await client.query<{ id: string; user_id: string }>(
+        `
+          select id, user_id
+          from password_reset_tokens
+          where token_hash = $1
+            and used_at is null
+            and expires_at > now()
+          limit 1
+          for update
+        `,
+        [input.tokenHash]
+      );
+
+      const token = tokenResult.rows[0];
+      if (!token) return null;
+
+      await client.query(
+        `
+          update users
+          set password_hash = $1,
+              updated_at = now()
+          where id = $2
+        `,
+        [input.passwordHash, token.user_id]
+      );
+
+      await client.query(
+        `
+          update password_reset_tokens
+          set used_at = now()
+          where id = $1
+        `,
+        [token.id]
+      );
+
+      const row = await this.findAuthRowByDatabaseId(token.user_id, client);
+      if (!row) return null;
+
+      await ensureOwnerAccountEntitlements(client, row.id);
+      return publicUser(mapRow((await this.findAuthRowByDatabaseId(row.id, client)) ?? row));
+    });
   }
 
   async findOrCreateOAuthUser(input: OAuthUserProfile) {

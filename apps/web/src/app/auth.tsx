@@ -2,8 +2,10 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { Language } from "@nomduchat/shared";
 import {
   type AuthApiResponse,
+  confirmPasswordReset as confirmPasswordResetApi,
   getCurrentUser,
   loginUser,
+  requestPasswordReset as requestPasswordResetApi,
   registerUser,
   setApiAccessToken,
   setApiLocalRoleOverride,
@@ -26,6 +28,8 @@ type AuthContextValue = {
   canUseRoleSwitcher: boolean;
   setRoleOverride: (role: LocalRoleOverride) => void;
   login: (input: { email: string; password: string }) => Promise<void>;
+  requestPasswordReset: (input: { email: string }) => Promise<{ resetUrl?: string }>;
+  confirmPasswordReset: (input: { token: string; password: string }) => Promise<void>;
   register: (input: {
     email: string;
     password: string;
@@ -114,6 +118,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async login(input) {
         const response = await loginUser(input);
+        setRoleOverrideState("real");
+        updateSession(response);
+      },
+      async requestPasswordReset(input) {
+        return requestPasswordResetApi(input);
+      },
+      async confirmPasswordReset(input) {
+        const response = await confirmPasswordResetApi(input);
         setRoleOverrideState("real");
         updateSession(response);
       },

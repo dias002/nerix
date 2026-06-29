@@ -556,6 +556,7 @@ test("database migrations include runtime columns for auth and subscriptions", a
   assert.match(sql, /provider_checkout_id/);
   assert.match(sql, /create table if not exists subscriptions/);
   assert.match(sql, /create table if not exists oauth_accounts/);
+  assert.match(sql, /create table if not exists password_reset_tokens/);
   assert.match(sql, /create table if not exists business_groups/);
   assert.match(sql, /create table if not exists business_employee_activity/);
   assert.match(sql, /create table if not exists business_employee_daily_reports/);

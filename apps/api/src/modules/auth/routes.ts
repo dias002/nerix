@@ -21,6 +21,15 @@ const loginSchema = z.object({
   password: z.string().min(1).max(256),
 });
 
+const passwordResetRequestSchema = z.object({
+  email: z.string().email(),
+});
+
+const passwordResetConfirmSchema = z.object({
+  token: z.string().trim().min(32).max(512),
+  password: z.string().min(8).max(256),
+});
+
 const oauthStartSchema = z.object({
   returnTo: z.string().optional(),
 });
@@ -73,6 +82,39 @@ export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService
 
   app.get("/auth/me", async (request, reply) => {
     return sendResult(reply, await auth.me(readBearerToken(request.headers.authorization)));
+  });
+
+  app.post("/auth/password-reset/request", async (request, reply) => {
+    const input = passwordResetRequestSchema.safeParse(request.body);
+
+    if (!input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Valid email is required.",
+        },
+      });
+    }
+
+    const allowed = await abuseGuard.assertLoginAllowed(request, { email: input.data.email });
+    if (!allowed.ok) return sendResult(reply, allowed);
+
+    return sendResult(reply, await auth.requestPasswordReset(input.data));
+  });
+
+  app.post("/auth/password-reset/confirm", async (request, reply) => {
+    const input = passwordResetConfirmSchema.safeParse(request.body);
+
+    if (!input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Valid reset token and password are required.",
+        },
+      });
+    }
+
+    return sendResult(reply, await auth.confirmPasswordReset(input.data));
   });
 
   app.get("/auth/oauth/:provider/start", async (request, reply) => {

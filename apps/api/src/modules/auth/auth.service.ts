@@ -1,4 +1,6 @@
+import { createHash, randomBytes } from "node:crypto";
 import type { CountryCode, Language } from "@nomduchat/shared";
+import { config } from "../../config.js";
 import { DomainError, fail, ok } from "../../domain/result.js";
 import type { AuthRepository } from "./auth.repository.js";
 import {
@@ -8,10 +10,14 @@ import {
   supportedOAuthProviders,
 } from "./oauth-provider.js";
 import { hashPassword, verifyPassword } from "./password.js";
+import type { PasswordResetMailer } from "./password-reset-mailer.js";
 import { signAccessToken, verifyAccessToken } from "./token.js";
 
 export class AuthService {
-  constructor(private readonly repository: AuthRepository) {}
+  constructor(
+    private readonly repository: AuthRepository,
+    private readonly passwordResetMailer?: PasswordResetMailer
+  ) {}
 
   async register(input: {
     email: string;
@@ -86,6 +92,71 @@ export class AuthService {
     });
   }
 
+  async requestPasswordReset(input: { email: string }) {
+    const email = input.email.trim().toLowerCase();
+    const rawToken = randomBytes(32).toString("base64url");
+    const tokenHash = hashResetToken(rawToken);
+    const expiresAt = new Date(Date.now() + config.PASSWORD_RESET_TTL_MINUTES * 60_000).toISOString();
+    const target = await this.repository.createPasswordResetToken({
+      email,
+      tokenHash,
+      expiresAt,
+    });
+    const resetUrl = buildResetUrl(rawToken);
+
+    if (!target) {
+      return ok({
+        accepted: true,
+      });
+    }
+
+    try {
+      await this.passwordResetMailer?.sendPasswordReset({
+        email: target.email,
+        name: target.name,
+        resetUrl,
+      });
+    } catch (error) {
+      if (config.NODE_ENV === "production") {
+        const message = error instanceof Error ? error.message : "Password reset email could not be sent.";
+        return fail(new DomainError("provider_unavailable", message, 503));
+      }
+    }
+
+    return ok({
+      accepted: true,
+      ...(config.NODE_ENV === "production" ? {} : { resetUrl }),
+    });
+  }
+
+  async confirmPasswordReset(input: { token: string; password: string }) {
+    if (!isRegistrationPasswordSafe(input.password)) {
+      return fail(new DomainError("validation_failed", "Password length is invalid."));
+    }
+
+    const token = input.token.trim();
+    if (!isResetTokenFormatSafe(token)) {
+      return fail(new DomainError("validation_failed", "Reset link is invalid or expired.", 400));
+    }
+
+    const user = await this.repository.resetPasswordWithToken({
+      tokenHash: hashResetToken(token),
+      passwordHash: hashPassword(input.password),
+    });
+
+    if (!user?.email) {
+      return fail(new DomainError("validation_failed", "Reset link is invalid or expired.", 400));
+    }
+
+    return ok({
+      user,
+      accessToken: signAccessToken({
+        userId: user.id,
+        email: user.email,
+      }),
+    });
+  }
+
   async startOAuth(input: { provider: string; returnTo?: string }) {
     if (!isOAuthProvider(input.provider)) {
       return fail(
@@ -151,4 +222,18 @@ function isPasswordLengthSafe(password: string) {
 
 function isRegistrationPasswordSafe(password: string) {
   return password.length >= 8 && password.length <= 256;
+}
+
+function isResetTokenFormatSafe(token: string) {
+  return /^[A-Za-z0-9_-]{32,256}$/.test(token);
+}
+
+function hashResetToken(token: string) {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function buildResetUrl(token: string) {
+  const webUrl = config.WEB_APP_URL.replace(/\/$/, "");
+  const query = new URLSearchParams({ token });
+  return `${webUrl}/auth/reset?${query.toString()}`;
 }

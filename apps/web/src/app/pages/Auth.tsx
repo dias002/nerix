@@ -213,6 +213,14 @@ export default function AuthPage() {
               </label>
             </div>
 
+            {mode === "login" ? (
+              <div className="mt-3 text-right">
+                <Link to="/auth/reset" className="text-sm text-gray-500 transition-colors hover:text-white">
+                  Забыли пароль?
+                </Link>
+              </div>
+            ) : null}
+
             {mode === "register" ? <TurnstileBox action="register" onTokenChange={setTurnstileToken} /> : null}
 
             {error ? (

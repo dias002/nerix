@@ -10,6 +10,7 @@ const Support = lazy(() => import("./pages/Support"));
 const DataDeletion = lazy(() => import("./pages/DataDeletion"));
 const AuthPage = lazy(() => import("./pages/Auth"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
+const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
 const Chat = lazy(() => import("./pages/Chat"));
 const History = lazy(() => import("./pages/History"));
@@ -113,6 +114,10 @@ export const router = createBrowserRouter(
     {
       path: "/auth/callback",
       Component: AuthCallback,
+    },
+    {
+      path: "/auth/reset",
+      Component: PasswordReset,
     },
     {
       path: "/workspace",

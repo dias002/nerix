@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { config } from "../src/config.js";
 import type { DatabaseClient, DatabaseQueryResult } from "../src/database/index.js";
+import type { PasswordResetMailer, PasswordResetMailInput } from "../src/modules/auth/password-reset-mailer.js";
 import { AbuseGuardService, InMemoryAbuseRateLimitRepository } from "../src/modules/security/abuse-guard.js";
 import { createApp } from "../src/server/create-app.js";
 import { createDependencies } from "../src/server/dependencies.js";
@@ -131,6 +132,96 @@ test("auth register, login, and me use signed access tokens", async () => {
   });
 
   assert.equal(invalidLoginResponse.statusCode, 401);
+
+  await app.close();
+});
+
+test("auth password reset sends one-time link and updates password", async () => {
+  const passwordResetMailer = new FakePasswordResetMailer();
+  const app = await createApp({
+    dependencies: createDependencies({ passwordResetMailer }),
+  });
+
+  const registerResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: {
+      email: "reset@example.com",
+      password: "old-secure-password",
+      name: "Reset User",
+    },
+  });
+
+  assert.equal(registerResponse.statusCode, 200);
+
+  const requestResponse = await app.inject({
+    method: "POST",
+    url: "/auth/password-reset/request",
+    payload: {
+      email: "reset@example.com",
+    },
+  });
+
+  assert.equal(requestResponse.statusCode, 200);
+  assert.equal(requestResponse.json().accepted, true);
+  assert.ok(passwordResetMailer.lastEmail);
+  assert.equal(passwordResetMailer.lastEmail?.email, "reset@example.com");
+  const token = new URL(passwordResetMailer.lastEmail!.resetUrl).searchParams.get("token");
+  assert.ok(token);
+
+  const confirmResponse = await app.inject({
+    method: "POST",
+    url: "/auth/password-reset/confirm",
+    payload: {
+      token,
+      password: "new-secure-password",
+    },
+  });
+
+  assert.equal(confirmResponse.statusCode, 200);
+  assert.equal(confirmResponse.json().user.email, "reset@example.com");
+  assert.ok(confirmResponse.json().accessToken);
+
+  const oldLoginResponse = await app.inject({
+    method: "POST",
+    url: "/auth/login",
+    payload: {
+      email: "reset@example.com",
+      password: "old-secure-password",
+    },
+  });
+  assert.equal(oldLoginResponse.statusCode, 401);
+
+  const newLoginResponse = await app.inject({
+    method: "POST",
+    url: "/auth/login",
+    payload: {
+      email: "reset@example.com",
+      password: "new-secure-password",
+    },
+  });
+  assert.equal(newLoginResponse.statusCode, 200);
+
+  const reusedTokenResponse = await app.inject({
+    method: "POST",
+    url: "/auth/password-reset/confirm",
+    payload: {
+      token,
+      password: "another-secure-password",
+    },
+  });
+  assert.equal(reusedTokenResponse.statusCode, 400);
+
+  const missingEmailResponse = await app.inject({
+    method: "POST",
+    url: "/auth/password-reset/request",
+    payload: {
+      email: "missing@example.com",
+    },
+  });
+
+  assert.equal(missingEmailResponse.statusCode, 200);
+  assert.equal(missingEmailResponse.json().accepted, true);
 
   await app.close();
 });
@@ -1979,6 +2070,14 @@ async function withFetchStub<T>(fetchStub: typeof fetch, callback: () => Promise
     return await callback();
   } finally {
     globalThis.fetch = originalFetch;
+  }
+}
+
+class FakePasswordResetMailer implements PasswordResetMailer {
+  lastEmail: PasswordResetMailInput | null = null;
+
+  async sendPasswordReset(input: PasswordResetMailInput) {
+    this.lastEmail = input;
   }
 }
 
