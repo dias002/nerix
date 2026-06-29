@@ -38,7 +38,8 @@ export function isChunkLoadError(reason: unknown) {
     message.includes("modulepreload") ||
     message.includes("valid javascript mime type") ||
     message.includes("unsupported mime type") ||
-    (message.includes("mime type") && message.includes("javascript"))
+    (message.includes("mime type") && message.includes("javascript")) ||
+    message.includes("cannot read properties of undefined (reading 'default')")
   );
 }
 
