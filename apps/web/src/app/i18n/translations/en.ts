@@ -19,7 +19,7 @@ export const en = {
       aiBudget: "AI budget",
       users: "Users",
       price: "Pricing",
-      balance: "Balance",
+      balance: "Subscription",
       settings: "Settings",
       start: "Start",
     },

@@ -3,6 +3,7 @@ import type { UserApiRecord } from "./api";
 export type WorkspaceAccess = {
   isGuest: boolean;
   isAdmin: boolean;
+  isOwner: boolean;
   canUseChat: boolean;
   canUseHistory: boolean;
   canUseBalance: boolean;
@@ -20,21 +21,24 @@ export type WorkspaceAccess = {
 export function getWorkspaceAccess(user: UserApiRecord | null): WorkspaceAccess {
   const isGuest = !user;
   const isAdmin = Boolean(user?.permissions.adminPanel);
+  const isOwner = user?.email?.trim().toLowerCase() === "dias.sunnatilla@gmail.com";
   const hasBusinessIdentity =
+    isOwner ||
     user?.workspaceRole === "business_owner" ||
     user?.workspaceRole === "business_employee" ||
     user?.activePlanId === "business" ||
     Boolean(user?.businessWorkspace);
-  const canUseBusiness = Boolean(user?.permissions.business && hasBusinessIdentity && !isAdmin);
+  const canUseBusiness = Boolean(user?.permissions.business && hasBusinessIdentity && (!isAdmin || isOwner));
   const canManageBusiness = Boolean(canUseBusiness && user?.permissions.businessSettings);
   const canSeeEmployeeReports = Boolean(canUseBusiness && user?.permissions.employeeReports);
 
   return {
     isGuest,
     isAdmin,
-    canUseChat: !isAdmin,
-    canUseHistory: !isAdmin,
-    canUseBalance: Boolean(user && !isAdmin),
+    isOwner,
+    canUseChat: !isAdmin || isOwner,
+    canUseHistory: !isAdmin || isOwner,
+    canUseBalance: !isAdmin || isOwner,
     canUseSettings: Boolean(user),
     canUseMailings: Boolean(isAdmin && user?.permissions.mailings),
     canUseBusiness,
@@ -48,7 +52,7 @@ export function getWorkspaceAccess(user: UserApiRecord | null): WorkspaceAccess 
 }
 
 export function getUnauthorizedWorkspaceRedirect(pathname: string, access: WorkspaceAccess) {
-  if (access.isAdmin) {
+  if (access.isAdmin && !access.isOwner) {
     if (isWorkspacePath(pathname, "/workspace/mailings") && !access.canUseMailings) {
       return "/workspace/admin";
     }
@@ -61,8 +65,13 @@ export function getUnauthorizedWorkspaceRedirect(pathname: string, access: Works
     return adminPathAllowed ? null : "/workspace/admin";
   }
 
-  if (isWorkspacePath(pathname, "/workspace/admin") || isWorkspacePath(pathname, "/workspace/mailings")) {
-    return "/workspace/chat";
+  if (isWorkspacePath(pathname, "/workspace/admin")) {
+    return access.isAdmin ? null : "/workspace/chat";
+  }
+
+  if (isWorkspacePath(pathname, "/workspace/mailings")) {
+    if (!access.isAdmin) return "/workspace/chat";
+    return access.canUseMailings ? null : "/workspace/admin";
   }
 
   if (isWorkspacePath(pathname, "/workspace/business")) {

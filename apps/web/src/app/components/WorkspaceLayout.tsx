@@ -28,7 +28,7 @@ export default function WorkspaceLayout() {
   }, [sidebarCollapsed]);
 
   const access = useMemo(() => getWorkspaceAccess(user), [user]);
-  const isAdminNavigation = access.isAdmin;
+  const isAdminNavigation = access.isAdmin && !access.isOwner;
   const adminTab = new URLSearchParams(location.search).get("tab");
   const roleOptions: LocalRoleOverride[] = ["real", "admin", "user", "business_owner", "business_employee"];
   const isBusinessSection =
@@ -42,8 +42,7 @@ export default function WorkspaceLayout() {
     { path: "/workspace/business/analytics", icon: BarChart3, label: t.nav.businessAnalytics, visible: access.canUseBusinessAnalytics },
     { path: "/workspace/business/ideas", icon: Lightbulb, label: t.nav.businessIdeas, visible: access.canUseBusinessIdeas },
   ];
-  const navItems = isAdminNavigation
-    ? [
+  const adminNavItems = [
         {
           path: "/workspace/admin",
           icon: ShieldCheck,
@@ -94,8 +93,8 @@ export default function WorkspaceLayout() {
         },
         { path: "/workspace/mailings", icon: Mail, label: t.nav.mailings, visible: access.canUseMailings },
         { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: access.canUseSettings },
-      ]
-    : [
+      ];
+  const workspaceNavItems = [
         { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: access.canUseChat },
         { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: access.canUseHistory },
         { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: access.canUseBusiness },
@@ -108,9 +107,10 @@ export default function WorkspaceLayout() {
           active: () => location.pathname.startsWith("/workspace/settings") || location.pathname === "/workspace/memory",
         },
       ];
+  const navItems = isAdminNavigation ? adminNavItems : access.isOwner ? [...workspaceNavItems, ...adminNavItems] : workspaceNavItems;
 
   const refreshUsageLimits = useCallback(() => {
-    if (isAdminNavigation) {
+    if (isAdminNavigation || access.isGuest) {
       setUsageLimits(null);
       setWallet(null);
       setCurrentSubscription(null);
@@ -133,7 +133,7 @@ export default function WorkspaceLayout() {
         setCurrentSubscription(null);
         setPlans([]);
       });
-  }, [isAdminNavigation, user?.id, user?.activePlanId, user?.country, roleOverride]);
+  }, [access.isGuest, isAdminNavigation, user?.id, user?.activePlanId, user?.country, roleOverride]);
 
   useEffect(() => {
     const redirectPath = getUnauthorizedWorkspaceRedirect(location.pathname, access);
@@ -308,7 +308,13 @@ export default function WorkspaceLayout() {
 
         {!sidebarCollapsed && !isAdminNavigation && access.canUseBalance ? (
           <div className="hidden px-3 pb-3 md:block">
-            <UsageLimitPanel usage={usageLimits} wallet={wallet} subscription={currentSubscription} plans={plans} />
+            <UsageLimitPanel
+              isGuest={access.isGuest}
+              usage={usageLimits}
+              wallet={wallet}
+              subscription={currentSubscription}
+              plans={plans}
+            />
           </div>
         ) : null}
 
@@ -456,16 +462,36 @@ export default function WorkspaceLayout() {
 }
 
 function UsageLimitPanel({
+  isGuest,
   usage,
   wallet,
   subscription,
   plans,
 }: {
+  isGuest: boolean;
   usage: UsageLimitsApiResponse | null;
   wallet: WalletBalance | null;
   subscription: CurrentSubscriptionApiResponse | null;
   plans: PlanApiRecord[];
 }) {
+  if (isGuest) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-[#070707] p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-medium uppercase tracking-[0.12em] text-gray-600">Подписка</span>
+          <CreditCard className="h-4 w-4 text-gray-500" strokeWidth={1.6} />
+        </div>
+        <p className="mt-2 text-sm font-medium text-white">Текст, видео и песни доступны после подключения тарифа.</p>
+        <Link
+          to="/workspace/balance"
+          className="mt-3 inline-flex h-8 w-full items-center justify-center rounded-lg border border-white/10 text-xs font-medium text-gray-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
+        >
+          Смотреть тарифы
+        </Link>
+      </div>
+    );
+  }
+
   if (!usage) {
     return (
       <div className="rounded-2xl border border-white/10 bg-[#070707] p-3 text-xs text-gray-500">

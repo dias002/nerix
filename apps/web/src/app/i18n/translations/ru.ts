@@ -19,7 +19,7 @@ export const ru = {
       aiBudget: "AI бюджет",
       users: "Пользователи",
       price: "Прайс",
-      balance: "Баланс",
+      balance: "Подписка",
       settings: "Настройки",
       start: "Старт",
     },

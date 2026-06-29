@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { isCountryCode, type CountryCode, type Language } from "@nomduchat/shared";
-import { config } from "../../config.js";
 import type { DatabaseClient } from "../../database/index.js";
+import { ensureOwnerAccountEntitlements, isAdminEmail } from "../users/admin-access.js";
 import { toPublicUserId } from "../users/local-user.js";
 import type { SystemRole, UserPermissions, UserRecord, WorkspaceRole } from "../users/user.types.js";
 
@@ -220,6 +220,7 @@ export class PostgresAuthRepository implements AuthRepository {
     if (!row) return null;
 
     await this.linkPendingBusinessInvites(row.id, normalizedEmail);
+    await ensureOwnerAccountEntitlements(this.database, row.id);
     return mapRow((await this.findAuthRowByDatabaseId(row.id)) ?? row);
   }
 
@@ -261,7 +262,10 @@ export class PostgresAuthRepository implements AuthRepository {
     );
 
     const row = result.rows[0];
-    return row ? publicUser(mapRow(row)) : null;
+    if (!row) return null;
+
+    await ensureOwnerAccountEntitlements(this.database, row.id);
+    return publicUser(mapRow((await this.findAuthRowByDatabaseId(row.id)) ?? row));
   }
 
   async findOrCreateOAuthUser(input: OAuthUserProfile) {
@@ -309,6 +313,7 @@ export class PostgresAuthRepository implements AuthRepository {
         if (normalizedEmail) {
           await this.linkPendingBusinessInvites(row.id, normalizedEmail, client);
         }
+        await ensureOwnerAccountEntitlements(client, row.id);
         return publicUser(mapRow((await this.findAuthRowByDatabaseId(row.id, client)) ?? row));
       }
 
@@ -384,6 +389,7 @@ export class PostgresAuthRepository implements AuthRepository {
       if (normalizedEmail) {
         await this.linkPendingBusinessInvites(userRow.id, normalizedEmail, client);
       }
+      await ensureOwnerAccountEntitlements(client, userRow.id);
 
       await client.query(
         `
@@ -523,11 +529,7 @@ function publicUser(user: AuthUserRecord): UserRecord {
 
 function resolveSystemRole(value: string | null, email: string | null): SystemRole {
   if (value === "admin") return "admin";
-  const adminEmails = config.ADMIN_EMAILS.split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (email && adminEmails.includes(email.toLowerCase())) return "admin";
+  if (isAdminEmail(email)) return "admin";
   return "user";
 }
 

@@ -1,6 +1,6 @@
 import { isCountryCode, type Language } from "@nomduchat/shared";
-import { config } from "../../config.js";
 import type { DatabaseClient } from "../../database/index.js";
+import { isAdminEmail } from "./admin-access.js";
 import { ensureLocalUser, LOCAL_USER_PUBLIC_ID, toDatabaseUserId, toPublicUserId } from "./local-user.js";
 import type { SystemRole, UserPermissions, UserRecord, WorkspaceRole } from "./user.types.js";
 
@@ -523,11 +523,7 @@ function mapUserRow(row: UserRow): UserRecord {
 
 function resolveSystemRole(value: string | null, email: string | null): SystemRole {
   if (value === "admin") return "admin";
-  const adminEmails = config.ADMIN_EMAILS.split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (email && adminEmails.includes(email.toLowerCase())) return "admin";
+  if (isAdminEmail(email)) return "admin";
   return "user";
 }
 

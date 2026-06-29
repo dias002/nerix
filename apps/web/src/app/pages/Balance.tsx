@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { AlertCircle, CreditCard, ExternalLink, FileText, Mail, TrendingDown, Wallet, Zap } from "lucide-react";
+import { Link, useNavigate } from "react-router";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 import {
@@ -21,7 +22,8 @@ import {
 
 export default function Balance() {
   const { t } = useLanguage();
-  const { refreshUser, user } = useAuth();
+  const navigate = useNavigate();
+  const { isAuthenticated, refreshUser, user } = useAuth();
   const country = useMemo(() => {
     if (typeof window !== "undefined") {
       return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
@@ -42,18 +44,34 @@ export default function Balance() {
   useEffect(() => {
     let active = true;
 
-    Promise.allSettled([getWallet(), getLedger(), getPlans(country), getCurrentSubscription(), getSubscriptionCheckouts()]).then((results) => {
+    getPlans(country)
+      .then((response) => {
+        if (active) setPlans(response.plans);
+      })
+      .catch(() => {
+        if (active) setPlans(null);
+      });
+
+    if (!isAuthenticated) {
+      setWallet(null);
+      setLedger([]);
+      setCurrentSubscription(null);
+      setCheckouts([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    Promise.allSettled([getWallet(), getLedger(), getCurrentSubscription(), getSubscriptionCheckouts()]).then((results) => {
       if (!active) return;
 
       const walletResult = results[0];
       const ledgerResult = results[1];
-      const plansResult = results[2];
-      const subscriptionResult = results[3];
-      const checkoutsResult = results[4];
+      const subscriptionResult = results[2];
+      const checkoutsResult = results[3];
 
       setWallet(walletResult.status === "fulfilled" ? walletResult.value : null);
       setLedger(ledgerResult.status === "fulfilled" ? ledgerResult.value.entries : null);
-      setPlans(plansResult.status === "fulfilled" ? plansResult.value.plans : null);
       setCurrentSubscription(subscriptionResult.status === "fulfilled" ? subscriptionResult.value.subscription : null);
       setCheckouts(checkoutsResult.status === "fulfilled" ? checkoutsResult.value.checkouts : null);
     });
@@ -61,7 +79,7 @@ export default function Balance() {
     return () => {
       active = false;
     };
-  }, [country]);
+  }, [country, isAuthenticated]);
 
   const capturedEntries = useMemo(
     () => ledger?.filter((entry) => entry.type === "capture") ?? [],
@@ -100,11 +118,18 @@ export default function Balance() {
       name: translated?.name ?? plan.name,
       amount: translated?.amount ?? plan.description,
       price: formatPrice(plan.price.amountMinor, plan.price.currency),
+      credits: plan.monthlyCredits,
       note: translated?.note ?? plan.description,
     };
   });
 
   const handleSubscribe = async (planId: PlanId) => {
+    if (!isAuthenticated) {
+      const returnTo = "/workspace/balance";
+      navigate(`/auth?mode=register&returnTo=${encodeURIComponent(returnTo)}`, { state: { from: returnTo } });
+      return;
+    }
+
     setPendingPlanId(planId);
     setCheckoutError(null);
 
@@ -146,26 +171,39 @@ export default function Balance() {
       <div className="mx-auto max-w-6xl space-y-10">
         <div>
           <h2 className="text-2xl font-medium text-white">{t.balance.title}</h2>
-          <p className="mt-2 text-gray-400">{t.balance.subtitle}</p>
+          <p className="mt-2 text-gray-400">
+            {isAuthenticated
+              ? t.balance.subtitle
+              : "Выберите тариф, чтобы открыть расширенные лимиты, видео, песни и бизнес-возможности."}
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {stats.map((stat, index) => (
-            <motion.div
-              key={stat.label}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: index * 0.05 }}
-              className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5"
-            >
-              <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-300">
-                <stat.icon className="h-5 w-5" strokeWidth={1.6} />
-              </div>
-              <div className="text-3xl font-medium text-white">{stat.value}</div>
-              <div className="mt-2 text-sm text-gray-500">{stat.label}</div>
-            </motion.div>
-          ))}
-        </div>
+        {isAuthenticated ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {stats.map((stat, index) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: index * 0.05 }}
+                className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5"
+              >
+                <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-300">
+                  <stat.icon className="h-5 w-5" strokeWidth={1.6} />
+                </div>
+                <div className="text-3xl font-medium text-white">{stat.value}</div>
+                <div className="mt-2 text-sm text-gray-500">{stat.label}</div>
+              </motion.div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5 text-sm leading-relaxed text-gray-400">
+            Аккаунт понадобится на последнем шаге оплаты: так подписка, кредиты и чеки будут привязаны к вашему email.
+            <Link to="/auth?mode=register&returnTo=%2Fworkspace%2Fbalance" state={{ from: "/workspace/balance" }} className="ml-1 text-white underline-offset-4 hover:underline">
+              Создать аккаунт
+            </Link>
+          </div>
+        )}
 
         <section className="space-y-4">
           <h3 className="text-lg font-medium text-white">{t.balance.packagesTitle}</h3>
@@ -186,7 +224,8 @@ export default function Balance() {
                 <div className="flex-1">
                   <h4 className="text-lg font-medium text-white">{pack.name}</h4>
                   <div className="mt-4 text-2xl font-medium text-white">{pack.price}</div>
-                  <div className="mt-2 text-sm text-gray-400">{pack.amount}</div>
+                  <div className="mt-2 text-sm text-gray-400">{formatCredits(pack.credits)} nomduchat-кредитов / месяц</div>
+                  <div className="mt-1 text-sm text-gray-500">{pack.amount}</div>
                   <p className="mt-4 text-sm leading-relaxed text-gray-500">{pack.note}</p>
                   {checkoutNoticePlanId === pack.id ? (
                     <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-gray-400">
@@ -220,6 +259,7 @@ export default function Balance() {
           </div>
         </section>
 
+        {isAuthenticated ? (
         <section className="space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -297,7 +337,9 @@ export default function Balance() {
             )}
           </div>
         </section>
+        ) : null}
 
+        {isAuthenticated ? (
         <section className="space-y-4">
           <h3 className="text-lg font-medium text-white">{t.balance.activityTitle}</h3>
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0A]">
@@ -321,6 +363,7 @@ export default function Balance() {
             )}
           </div>
         </section>
+        ) : null}
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ export const kk = {
       aiBudget: "AI бюджет",
       users: "Пайдаланушылар",
       price: "Баға",
-      balance: "Баланс",
+      balance: "Жазылым",
       settings: "Баптаулар",
       start: "Бастау",
     },

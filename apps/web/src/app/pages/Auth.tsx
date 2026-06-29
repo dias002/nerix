@@ -18,7 +18,9 @@ export default function AuthPage() {
   const invitedEmail = searchParams.get("email")?.trim() ?? "";
   const inviteType = searchParams.get("invite");
   const invitedRole = searchParams.get("role");
-  const from = (location.state as { from?: string } | null)?.from ?? "/workspace";
+  const returnTo = searchParams.get("returnTo");
+  const safeReturnTo = returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : null;
+  const from = (location.state as { from?: string } | null)?.from ?? safeReturnTo ?? "/workspace";
   const [name, setName] = useState("");
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState("");
@@ -44,6 +46,7 @@ export default function AuthPage() {
     if (inviteType) nextParams.set("invite", inviteType);
     if (invitedRole) nextParams.set("role", invitedRole);
     if (invitedEmail) nextParams.set("email", invitedEmail);
+    if (safeReturnTo) nextParams.set("returnTo", safeReturnTo);
     setSearchParams(nextParams);
   };
 
