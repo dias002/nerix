@@ -145,6 +145,46 @@ export default function BusinessCabinet() {
     access.canUseBusinessAnalytics ? "аналитика сотрудников" : null,
     access.canUseBusinessIdeas ? "идеи роста" : null,
   ].filter(Boolean).join(", ");
+  const b2bReadiness = [
+    {
+      title: "AI-сайт внутри nomduchat",
+      status: "works" as const,
+      text: "Черновик, редактор, публикация и публичный адрес /site/slug уже работают. Клиент не ищет хостинг.",
+      path: "/workspace/business/website",
+      action: "Открыть сайты",
+      visible: access.canUseBusinessWebsite,
+    },
+    {
+      title: "Свои домены и автопокупка",
+      status: "setup" as const,
+      text: "Внутренний адрес работает. Для автоматической покупки домена нужен подключенный регистратор, оплата и подтверждение владельца.",
+      visible: access.canUseBusinessWebsite,
+    },
+    {
+      title: "Telegram-менеджер",
+      status: "partial" as const,
+      text: "Опрос, заявка, prompt и тест ответа готовы. Автоподключение живого бота к Telegram пока отдельный этап.",
+      path: "/workspace/business/telegram-bot",
+      action: "Открыть Telegram",
+      visible: access.canUseBusinessTelegramBot,
+    },
+    {
+      title: "Диалоги и обучение команды",
+      status: "works" as const,
+      text: "Диалоги клиентов, сообщения, оценка качества и сигналы для обучения сохраняются в business workspace.",
+      path: "/workspace/business/dialogs",
+      action: "Открыть диалоги",
+      visible: access.canUseBusinessDialogs,
+    },
+    {
+      title: "Аналитика сайта",
+      status: "setup" as const,
+      text: "Страница аналитики есть. Для реальных визитов, UTM и конверсий нужен tracker на публичных сайтах.",
+      path: "/workspace/business/analytics",
+      action: "Открыть аналитику",
+      visible: access.canUseBusinessAnalytics,
+    },
+  ].filter((item) => item.visible);
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-5 text-white md:p-10">
@@ -201,6 +241,40 @@ export default function BusinessCabinet() {
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-500">
             Доступные разделы: {visibleSectionNames || "business-обзор"}. Главный экран остается обзором, без перегруженной сетки карточек.
           </p>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <AlertCircle className="h-4 w-4" strokeWidth={1.7} />
+            Что работает и что нужно настроить
+          </div>
+          <h2 className="mt-2 text-2xl font-medium">Карта B2B-запуска</h2>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-500">
+            Здесь видны реальные границы продукта: что уже можно отдавать клиенту, а где нужен внешний доступ или интеграция.
+          </p>
+          <div className="mt-5 grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {b2bReadiness.map((item) => (
+              <article key={item.title} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${readinessClass(item.status)}`}>
+                      {readinessLabel(item.status)}
+                    </span>
+                    <h3 className="mt-3 text-base font-medium text-white">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-gray-500">{item.text}</p>
+                  </div>
+                  {item.path && item.action ? (
+                    <Link
+                      to={item.path}
+                      className="inline-flex shrink-0 items-center justify-center rounded-full border border-white/10 px-3 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                    >
+                      {item.action}
+                    </Link>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
         {canManageBusiness ? (
@@ -337,6 +411,21 @@ function jobStatusClass(status: BusinessJobApiRecord["status"]) {
   if (status === "failed") return "bg-red-400/10 text-red-100/80";
   if (status === "cancelled") return "bg-white/10 text-gray-400";
   return "bg-amber-300/10 text-amber-100/80";
+}
+
+function readinessLabel(status: "works" | "partial" | "setup") {
+  const labels = {
+    works: "Работает",
+    partial: "Частично",
+    setup: "Нужно настроить",
+  };
+  return labels[status];
+}
+
+function readinessClass(status: "works" | "partial" | "setup") {
+  if (status === "works") return "bg-emerald-400/10 text-emerald-100/80";
+  if (status === "partial") return "bg-amber-300/10 text-amber-100/80";
+  return "bg-white/10 text-gray-400";
 }
 
 function formatJobChannel(channel: BusinessJobApiRecord["channel"]) {

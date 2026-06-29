@@ -133,8 +133,15 @@ export default function BusinessWebsiteBuilder() {
 
   const publicUrl = useMemo(() => {
     if (!selected || selected.status !== "published") return "";
-    if (typeof window === "undefined") return selected.publicationPath;
-    return `${window.location.origin}${selected.publicationPath}`;
+    const path = `/site/${selected.slug}`;
+    if (typeof window === "undefined") return path;
+    return `${window.location.origin}${path}`;
+  }, [selected]);
+  const plannedUrl = useMemo(() => {
+    if (!selected) return "";
+    const path = `/site/${selected.slug}`;
+    if (typeof window === "undefined") return path;
+    return `${window.location.origin}${path}`;
   }, [selected]);
 
   const canGenerate = input.prompt.trim().length >= 20 && !generating;
@@ -346,14 +353,13 @@ export default function BusinessWebsiteBuilder() {
             </div>
             <h1 className="mt-4 text-3xl font-medium md:text-5xl">Сайт, который клиент может править сам</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-gray-400">
-              Опишите бизнес обычными словами. nomduchat соберет первую страницу с текстами, заявкой и блоками, а потом вы сможете поменять каждую строку в редакторе и опубликовать ссылку.
+              Опишите бизнес обычными словами. nomduchat соберет страницу с текстами, заявкой и блоками, а публикация сразу даст готовый адрес внутри нашей структуры: /site/название-сайта.
             </p>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <div className="hidden">
-              {selected ? (
-                <>
+            {selected ? (
+              <>
                 <button
                   type="button"
                   onClick={saveWebsite}
@@ -372,9 +378,8 @@ export default function BusinessWebsiteBuilder() {
                   {publishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" strokeWidth={1.7} />}
                   Опубликовать
                 </button>
-                </>
-              ) : null}
-            </div>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -397,10 +402,10 @@ export default function BusinessWebsiteBuilder() {
                 Запуск через короткий опрос
               </div>
               <h2 className="mt-3 max-w-3xl text-2xl font-medium md:text-3xl">
-                Клиент пишет, что ему нужно, а мы собираем первый сайт и показываем превью.
+                Клиент пишет, что ему нужно, а мы собираем первый сайт на готовом адресе nomduchat.
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-gray-500">
-                Не нужно отправлять клиента покупать домен, выбирать хостинг или искать подрядчика. Сначала он получает рабочий черновик с заявкой и понятными блоками, потом правит текст прямо здесь.
+                Не нужно отправлять клиента покупать домен, выбирать хостинг или искать подрядчика. После публикации сайт открывается по ссылке вида nomduchat.com/site/company, а правки остаются внутри кабинета.
               </p>
             </div>
             <button
@@ -414,9 +419,25 @@ export default function BusinessWebsiteBuilder() {
           </div>
         </section>
 
-        <section aria-hidden="true" className="hidden">
+        <section className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_1fr]">
           <div className="space-y-5">
             <article className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Globe className="h-4 w-4" strokeWidth={1.7} />
+                Как работает публикация
+              </div>
+              <h2 className="mt-3 text-2xl font-medium">Хостинг уже внутри nomduchat</h2>
+              <div className="mt-4 space-y-3 text-sm leading-relaxed text-gray-500">
+                <p>1. Клиент заполняет короткий опрос и получает черновик сайта.</p>
+                <p>2. Тексты, блоки, SEO, цвет и slug правятся в этом редакторе.</p>
+                <p>3. Кнопка «Опубликовать» сразу делает сайт доступным по адресу nomduchat.com/site/slug.</p>
+              </div>
+              <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm leading-relaxed text-amber-100/80">
+                Автопокупка отдельного домена пока не подключена. Для нее нужен API регистратора доменов, правила оплаты и подтверждение владельца. Внутренний адрес nomduchat работает без этого.
+              </div>
+            </article>
+
+            <article className="hidden rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Sparkles className="h-4 w-4" strokeWidth={1.7} />
                 Быстрый запуск
@@ -503,7 +524,7 @@ export default function BusinessWebsiteBuilder() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium">{site.title}</div>
-                          <div className="mt-1 text-xs text-gray-500">{site.publicationPath}</div>
+                          <div className="mt-1 text-xs text-gray-500">nomduchat.com{site.publicationPath}</div>
                         </div>
                         <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${site.status === "published" ? "bg-emerald-500/10 text-emerald-300" : "bg-white/10 text-gray-400"}`}>
                           {site.status === "published" ? "online" : "draft"}
@@ -596,6 +617,14 @@ export default function BusinessWebsiteBuilder() {
                           Скопировать
                         </button>
                       </div>
+                    </div>
+                  ) : plannedUrl ? (
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <div className="text-sm font-medium text-gray-200">Готовый адрес после публикации</div>
+                      <div className="mt-1 break-all text-sm text-gray-500">{plannedUrl}</div>
+                      <p className="mt-2 text-xs leading-relaxed text-gray-600">
+                        Пока это черновик. Нажмите «Опубликовать», и текущие правки выйдут на этот адрес.
+                      </p>
                     </div>
                   ) : null}
                 </article>
