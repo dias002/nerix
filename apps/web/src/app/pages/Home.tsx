@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { ArrowRight, BookOpen, Building2, ChevronDown, FileText, LifeBuoy } from "lucide-react";
+import { ArrowRight, BookOpen, Building2, ChevronDown, FileText, LifeBuoy, Sparkles } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 import LanguageSwitch from "../components/LanguageSwitch";
 import DownloadAppBanner from "../components/DownloadAppBanner";
@@ -42,9 +42,13 @@ export default function Home() {
           transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
           className="max-w-3xl mx-auto text-center space-y-6"
         >
-          <div className="mx-auto w-fit rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-300">
+          <Link
+            to="/models"
+            className="mx-auto inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/25 hover:bg-white/10 hover:text-white"
+          >
+            <Sparkles className="h-4 w-4" strokeWidth={1.7} />
             {t.home.eyebrow}
-          </div>
+          </Link>
           <h2 className="text-4xl md:text-6xl font-semibold">
             {t.home.welcome}
           </h2>

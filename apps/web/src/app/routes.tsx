@@ -3,6 +3,7 @@ import { createBrowserRouter, type RouteObject } from "react-router";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 
 const Home = lazy(() => import("./pages/Home"));
+const Models = lazy(() => import("./pages/Models"));
 const About = lazy(() => import("./pages/About"));
 const Business = lazy(() => import("./pages/Business"));
 const Requisites = lazy(() => import("./pages/Requisites"));
@@ -43,6 +44,10 @@ const routes: RouteObject[] = [
   {
     path: "/about",
     Component: About,
+  },
+  {
+    path: "/models",
+    Component: Models,
   },
   {
     path: "/business",
