@@ -57,12 +57,36 @@ export default function Home() {
           </p>
 
           <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
-            {t.home.metrics.map((metric) => (
-              <div key={metric.label} className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3">
-                <div className="text-2xl font-medium text-white">{metric.value}</div>
-                <div className="mt-1 text-xs leading-relaxed text-gray-500">{metric.label}</div>
-              </div>
-            ))}
+            {t.home.metrics.map((metric) => {
+              const isModelsMetric = metric.value === "40+";
+              const content = (
+                <>
+                  <div className="text-2xl font-medium text-white">{metric.value}</div>
+                  <div className="mt-1 text-xs leading-relaxed text-gray-500 transition-colors group-hover:text-gray-300">
+                    {metric.label}
+                  </div>
+                </>
+              );
+
+              if (isModelsMetric) {
+                return (
+                  <Link
+                    key={metric.label}
+                    to="/models"
+                    aria-label={`${t.home.eyebrow}. Открыть список моделей`}
+                    className="group rounded-2xl border border-white/10 bg-black/40 px-4 py-3 transition-colors hover:border-white/25 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
+                  >
+                    {content}
+                  </Link>
+                );
+              }
+
+              return (
+                <div key={metric.label} className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3">
+                  {content}
+                </div>
+              );
+            })}
           </div>
 
           <div className="pt-8">
