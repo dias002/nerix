@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentSubscription, getPlans, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
@@ -17,6 +17,7 @@ export default function WorkspaceLayout() {
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscriptionApiResponse | null>(null);
   const [plans, setPlans] = useState<PlanApiRecord[]>([]);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("nomduchat-sidebar-collapsed") === "true";
@@ -151,6 +152,15 @@ export default function WorkspaceLayout() {
   }, [refreshUsageLimits]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      setOnboardingOpen(false);
+      return;
+    }
+
+    setOnboardingOpen(window.localStorage.getItem(onboardingStorageKey(user.id)) !== "dismissed");
+  }, [isAuthenticated, user?.id]);
+
+  useEffect(() => {
     window.addEventListener("nomduchat-usage-updated", refreshUsageLimits);
     window.addEventListener("focus", refreshUsageLimits);
 
@@ -167,6 +177,12 @@ export default function WorkspaceLayout() {
       return location.pathname === "/workspace" || location.pathname === "/workspace/";
     }
     return location.pathname.startsWith(path);
+  };
+  const closeOnboarding = () => {
+    if (user?.id) {
+      window.localStorage.setItem(onboardingStorageKey(user.id), "dismissed");
+    }
+    setOnboardingOpen(false);
   };
 
   return (
@@ -457,8 +473,145 @@ export default function WorkspaceLayout() {
       >
         <Outlet />
       </main>
+      {user ? (
+        <WorkspaceOnboardingDialog
+          open={onboardingOpen}
+          access={access}
+          onClose={closeOnboarding}
+        />
+      ) : null}
     </div>
   );
+}
+
+function WorkspaceOnboardingDialog({
+  open,
+  access,
+  onClose,
+}: {
+  open: boolean;
+  access: ReturnType<typeof getWorkspaceAccess>;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  const items = [
+    {
+      icon: MessageSquare,
+      title: "Чат",
+      text: "Основное место для вопросов, текстов, кода, документов и генерации. Опишите задачу обычными словами.",
+      visible: access.canUseChat,
+    },
+    {
+      icon: Clock3,
+      title: "История",
+      text: "Здесь остаются прошлые диалоги, чтобы быстро вернуться к задаче и продолжить с контекстом.",
+      visible: access.canUseHistory,
+    },
+    {
+      icon: CreditCard,
+      title: "Подписка",
+      text: "Тарифы, баланс кредитов и платежи. Валюта берется по стране аккаунта: KZT или RUB.",
+      visible: access.canUseBalance,
+    },
+    {
+      icon: BriefcaseBusiness,
+      title: "Бизнес",
+      text: "Раздел для CRM-сценариев: клиенты, диалоги, отчеты, AI-сайт и Telegram-бот компании.",
+      visible: access.canUseBusiness,
+    },
+    {
+      icon: ShieldCheck,
+      title: "Админ",
+      text: "Пользователи, платежи, прайс, AI-провайдеры, агенты, рассылки и контроль запуска.",
+      visible: access.isAdmin,
+    },
+    {
+      icon: Settings,
+      title: "Настройки",
+      text: "Профиль, страна, язык и параметры аккаунта. Страна влияет на платежный сценарий.",
+      visible: access.canUseSettings,
+    },
+  ].filter((item) => item.visible);
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 px-4 pb-4 pt-16 backdrop-blur-md sm:items-center sm:p-6">
+      <section className="relative max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-[#080808] p-5 text-white shadow-2xl shadow-black/60 sm:p-6">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label="Закрыть инструкцию"
+          title="Закрыть инструкцию"
+        >
+          <X className="h-5 w-5" strokeWidth={1.7} />
+        </button>
+
+        <div className="pr-10">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-gray-400">
+            <Lightbulb className="h-3.5 w-3.5" strokeWidth={1.8} />
+            Первый вход на этом устройстве
+          </div>
+          <h2 className="text-2xl font-medium tracking-tight text-white">Коротко по рабочему пространству</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
+            Это окно показывается один раз на устройстве. Коллеги могут закрыть его и сразу пробовать доступные разделы.
+          </p>
+        </div>
+
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {items.map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.title} className="rounded-xl border border-white/10 bg-black p-4">
+                <div className="flex items-start gap-3">
+                  <div className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white">
+                    <Icon className="h-5 w-5" strokeWidth={1.6} />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-medium text-white">{item.title}</h3>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500">{item.text}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+          {access.isAdmin ? (
+            <Link
+              to="/workspace/admin"
+              onClick={onClose}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-200 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+            >
+              <ShieldCheck className="h-4 w-4" strokeWidth={1.8} />
+              Открыть админку
+            </Link>
+          ) : access.canUseChat ? (
+            <Link
+              to="/workspace/chat"
+              onClick={onClose}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-200 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+            >
+              <MessageSquare className="h-4 w-4" strokeWidth={1.8} />
+              Открыть чат
+            </Link>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200"
+          >
+            Понятно
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function onboardingStorageKey(userId: string) {
+  return `nomduchat-workspace-onboarding:v1:${userId}`;
 }
 
 function UsageLimitPanel({
