@@ -20,8 +20,8 @@ export type WorkspaceAccess = {
 
 export function getWorkspaceAccess(user: UserApiRecord | null): WorkspaceAccess {
   const isGuest = !user;
-  const isAdmin = Boolean(user?.permissions.adminPanel);
   const isOwner = user?.email?.trim().toLowerCase() === "dias.sunnatilla@gmail.com";
+  const isAdmin = Boolean(user?.permissions.adminPanel || isOwner);
   const hasBusinessIdentity =
     isOwner ||
     user?.workspaceRole === "business_owner" ||

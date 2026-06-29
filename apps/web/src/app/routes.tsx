@@ -14,6 +14,7 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
 const Chat = lazy(() => import("./pages/Chat"));
+const Agents = lazy(() => import("./pages/Agents"));
 const History = lazy(() => import("./pages/History"));
 const Memory = lazy(() => import("./pages/Memory"));
 const Mailings = lazy(() => import("./pages/Mailings"));
@@ -126,7 +127,7 @@ const routes: RouteObject[] = [
       { index: true, Component: Chat },
       { path: "chat", Component: Chat },
       { path: "history", Component: History },
-      { path: "agents", Component: Chat },
+      { path: "agents", Component: Agents },
       { path: "memory", Component: Memory },
       { path: "mailings", Component: Mailings },
       { path: "business", Component: BusinessCabinet },
