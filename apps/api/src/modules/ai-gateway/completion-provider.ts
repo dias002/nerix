@@ -16,8 +16,10 @@ export interface AiCompletionProvider {
   complete(input: CompletionInput): Promise<CompletionResult>;
 }
 
+export type CompletionProviderRegistry = Record<string, AiCompletionProvider>;
+
 export class MockCompletionProvider implements AiCompletionProvider {
-  async complete(_input: CompletionInput) {
+  async complete(_input: CompletionInput): Promise<CompletionResult> {
     if (!config.AI_MOCK_PROVIDER_ENABLED) {
       throw new Error("Mock AI provider is disabled.");
     }
@@ -176,23 +178,64 @@ export class GeminiCompletionProvider implements AiCompletionProvider {
 }
 
 export class BackendAiCompletionProvider implements AiCompletionProvider {
-  private readonly mock = new MockCompletionProvider();
-  private readonly openai = new OpenAiCompletionProvider();
-  private readonly anthropic = new AnthropicCompletionProvider();
-  private readonly gemini = new GeminiCompletionProvider();
+  constructor(
+    private readonly providers: CompletionProviderRegistry = createDefaultCompletionProviderRegistry(),
+    private readonly fallbackProviderCode = "mock-provider"
+  ) {}
 
   async complete(input: CompletionInput) {
-    if (input.provider === "mock-provider") return this.mock.complete(input);
-    if (input.provider === "openai") return this.openai.complete(input);
-    if (input.provider === "anthropic") return this.anthropic.complete(input);
-    if (input.provider === "gemini") return this.gemini.complete(input);
+    try {
+      return await this.resolveProvider(input.provider).complete(input);
+    } catch (error) {
+      if (
+        input.provider === this.fallbackProviderCode ||
+        config.NODE_ENV === "production" ||
+        !config.AI_MOCK_PROVIDER_ENABLED
+      ) {
+        throw error;
+      }
 
-    throw new Error(`AI provider '${input.provider}' is not supported.`);
+      const fallback = await this.resolveProvider(this.fallbackProviderCode).complete({
+        ...input,
+        provider: this.fallbackProviderCode,
+        model: "mock-text",
+      });
+      const message = error instanceof Error ? error.message : "Unknown provider error.";
+
+      return {
+        ...fallback,
+        rawUsage: {
+          ...(fallback.rawUsage ?? {}),
+          fallbackProvider: this.fallbackProviderCode,
+          failedProvider: input.provider,
+          failedModel: input.model,
+          fallbackReason: message.slice(0, 500),
+        },
+      };
+    }
+  }
+
+  private resolveProvider(code: string) {
+    const provider = this.providers[code];
+    if (!provider) {
+      throw new Error(`AI provider '${code}' is not supported.`);
+    }
+
+    return provider;
   }
 }
 
 export function createCompletionProvider(): AiCompletionProvider {
   return new BackendAiCompletionProvider();
+}
+
+export function createDefaultCompletionProviderRegistry(): CompletionProviderRegistry {
+  return {
+    "mock-provider": new MockCompletionProvider(),
+    openai: new OpenAiCompletionProvider(),
+    anthropic: new AnthropicCompletionProvider(),
+    gemini: new GeminiCompletionProvider(),
+  };
 }
 
 function extractOpenAiText(response: OpenAiResponse) {

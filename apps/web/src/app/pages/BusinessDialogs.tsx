@@ -26,6 +26,8 @@ import {
   type BusinessCustomerMessageRole,
   type BusinessOpsOverviewApiResponse,
 } from "../api";
+import { useAuth } from "../auth";
+import { getWorkspaceAccess } from "../roleAccess";
 
 const emptyConversationForm = {
   channel: "telegram" as BusinessCustomerChannel,
@@ -37,15 +39,28 @@ const emptyConversationForm = {
 };
 
 export default function BusinessDialogs() {
+  const { user } = useAuth();
+  const access = useMemo(() => getWorkspaceAccess(user), [user]);
+  const canManageBusiness = access.canUseBusinessWebsite || access.canUseBusinessTelegramBot || access.canUseBusinessIdeas;
+  const defaultTeamAuthor = user?.name || (canManageBusiness ? "Владелец" : "Сотрудник");
+  const teamRoleTitle = canManageBusiness ? "Владелец" : "Сотрудник";
   const [overview, setOverview] = useState<BusinessOpsOverviewApiResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [conversationForm, setConversationForm] = useState(emptyConversationForm);
   const [messageText, setMessageText] = useState("");
   const [teamText, setTeamText] = useState("");
-  const [teamAuthor, setTeamAuthor] = useState("Владелец");
+  const [teamAuthor, setTeamAuthor] = useState(defaultTeamAuthor);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    setTeamAuthor((current) => {
+      const normalized = current.trim();
+      if (!normalized || normalized === "Владелец" || normalized === "Сотрудник") return defaultTeamAuthor;
+      return current;
+    });
+  }, [defaultTeamAuthor]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,7 +113,7 @@ export default function BusinessDialogs() {
         customerName: conversationForm.customerName || "Клиент",
         customerContact: conversationForm.customerContact,
         source: conversationForm.source,
-        trainingAllowed: conversationForm.trainingAllowed,
+        trainingAllowed: canManageBusiness && conversationForm.trainingAllowed,
         messages,
       });
       updateOverview(response.overview);
@@ -154,8 +169,8 @@ export default function BusinessDialogs() {
     setNotice(null);
     try {
       const response = await addBusinessTeamMessage({
-        authorName: teamAuthor || "Владелец",
-        roleTitle: "Команда",
+        authorName: teamAuthor || defaultTeamAuthor,
+        roleTitle: teamRoleTitle,
         text: teamText,
       });
       updateOverview(response.overview);
@@ -185,10 +200,11 @@ export default function BusinessDialogs() {
             </div>
             <h1 className="mt-4 text-3xl font-medium md:text-5xl">Диалоги клиентов под контролем</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-gray-400">
-              Клиент пишет боту или на сайт, а владелец видит весь разговор: что человек хотел, где сомневался, когда звать менеджера и насколько хорошо бот довел заявку.
+              Клиент пишет боту или на сайт, а команда видит разговор: что человек хотел, где сомневался, когда звать менеджера и какой следующий шаг нужен.
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-4 text-sm text-gray-400 xl:w-80">
+          {canManageBusiness ? (
+            <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-4 text-sm text-gray-400 xl:w-80">
             <div className="flex items-center gap-2 text-gray-300">
               <ShieldCheck className="h-4 w-4" strokeWidth={1.7} />
               Данные для обучения
@@ -196,7 +212,8 @@ export default function BusinessDialogs() {
             <p className="mt-2 leading-relaxed text-gray-500">
               Диалоги можно помечать для обезличенного обучения позже. В MVP мы только храним согласие и сигналы качества.
             </p>
-          </div>
+            </div>
+          ) : null}
         </header>
 
         {notice ? (
@@ -293,17 +310,19 @@ export default function BusinessDialogs() {
                 placeholder={"клиент: Нужен бот, который отвечает по цене\nбот: Уточните город и контакт\nклиент: Дорого, но если быстро, готов обсудить"}
                 className="mt-3 min-h-40 w-full resize-y rounded-2xl border border-white/10 bg-black px-4 py-4 text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
               />
-              <label className="mt-3 flex items-start gap-3 text-sm text-gray-500">
-                <input
-                  type="checkbox"
-                  checked={conversationForm.trainingAllowed}
-                  onChange={(event) =>
-                    setConversationForm((form) => ({ ...form, trainingAllowed: event.target.checked }))
-                  }
-                  className="mt-1 h-4 w-4 rounded border-white/20 bg-black"
-                />
-                Можно использовать этот разговор в будущем датасете только после обезличивания.
-              </label>
+              {canManageBusiness ? (
+                <label className="mt-3 flex items-start gap-3 text-sm text-gray-500">
+                  <input
+                    type="checkbox"
+                    checked={conversationForm.trainingAllowed}
+                    onChange={(event) =>
+                      setConversationForm((form) => ({ ...form, trainingAllowed: event.target.checked }))
+                    }
+                    className="mt-1 h-4 w-4 rounded border-white/20 bg-black"
+                  />
+                  Можно использовать этот разговор в будущем датасете только после обезличивания.
+                </label>
+              ) : null}
               <button
                 type="button"
                 onClick={createConversation}
@@ -324,6 +343,7 @@ export default function BusinessDialogs() {
               onMessageTextChange={setMessageText}
               onAddMessage={addMessage}
               onRate={rateConversation}
+              canManageBusiness={canManageBusiness}
             />
 
             <article className="rounded-2xl border border-white/10 bg-[#0A0A0A]">
@@ -334,7 +354,7 @@ export default function BusinessDialogs() {
                 </div>
                 <h2 className="mt-2 text-2xl font-medium">Сотрудники видят задачу в одном месте</h2>
                 <p className="mt-2 text-sm text-gray-500">
-                  Владелец может оставить поручение, а менеджеры забирают диалог без пересылок между сервисами.
+                  Команда оставляет поручения и забирает диалог без пересылок между сервисами.
                 </p>
               </div>
               <div className="max-h-72 space-y-3 overflow-y-auto p-5">
@@ -430,6 +450,7 @@ function ConversationDetails({
   conversation,
   messageText,
   saving,
+  canManageBusiness,
   onMessageTextChange,
   onAddMessage,
   onRate,
@@ -437,6 +458,7 @@ function ConversationDetails({
   conversation: BusinessCustomerConversationApiRecord | null;
   messageText: string;
   saving: boolean;
+  canManageBusiness: boolean;
   onMessageTextChange: (value: string) => void;
   onAddMessage: () => void;
   onRate: (rating: BusinessConversationRating) => void;
@@ -466,23 +488,25 @@ function ConversationDetails({
           <h2 className="mt-2 text-2xl font-medium">{conversation.customerName || "Клиент"}</h2>
           <p className="mt-2 text-sm text-gray-500">{conversation.customerContact || "Контакт еще не указан"}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {(["bad", "good", "excellent"] as const).map((rating) => (
-            <button
-              key={rating}
-              type="button"
-              onClick={() => onRate(rating)}
-              disabled={saving}
-              className={`rounded-full border px-4 py-2 text-sm transition-colors ${
-                conversation.ownerRating === rating
-                  ? "border-white/40 bg-white text-black"
-                  : "border-white/10 text-gray-400 hover:border-white/20 hover:text-white"
-              }`}
-            >
-              {ratingLabel(rating)}
-            </button>
-          ))}
-        </div>
+        {canManageBusiness ? (
+          <div className="flex flex-wrap gap-2">
+            {(["bad", "good", "excellent"] as const).map((rating) => (
+              <button
+                key={rating}
+                type="button"
+                onClick={() => onRate(rating)}
+                disabled={saving}
+                className={`rounded-full border px-4 py-2 text-sm transition-colors ${
+                  conversation.ownerRating === rating
+                    ? "border-white/40 bg-white text-black"
+                    : "border-white/10 text-gray-400 hover:border-white/20 hover:text-white"
+                }`}
+              >
+                {ratingLabel(rating)}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-5 p-5 xl:grid-cols-[1fr_0.85fr]">
@@ -541,11 +565,13 @@ function ConversationDetails({
           <div className="rounded-2xl border border-white/10 bg-black p-5">
             <div className="text-sm text-gray-500">Следующий шаг</div>
             <p className="mt-2 text-sm leading-relaxed text-gray-300">{conversation.analysis.nextStep}</p>
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-relaxed text-gray-500">
-              {conversation.trainingAllowed
-                ? "Разговор помечен как разрешенный для будущего обезличенного датасета."
-                : "Для обучения не используем, пока владелец не включит согласие."}
-            </div>
+            {canManageBusiness ? (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-relaxed text-gray-500">
+                {conversation.trainingAllowed
+                  ? "Разговор помечен как разрешенный для будущего обезличенного датасета."
+                  : "Для обучения не используем, пока владелец не включит согласие."}
+              </div>
+            ) : null}
           </div>
         </aside>
       </div>

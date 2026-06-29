@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import { ensureBusinessPermission } from "../business/business-permissions.js";
 import type { BusinessJobService } from "../business-jobs/business-job.service.js";
 import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { BusinessWebsiteService } from "./business-website.service.js";
@@ -82,6 +83,9 @@ export async function registerBusinessWebsiteRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await websites.listWebsites(user.value.userId));
   });
 
@@ -98,6 +102,9 @@ export async function registerBusinessWebsiteRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "website-draft");
     if (!allowed.ok) return sendResult(reply, allowed);
@@ -119,6 +126,9 @@ export async function registerBusinessWebsiteRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await websites.getWebsite(user.value.userId, params.data.siteId));
   });
 
@@ -136,6 +146,9 @@ export async function registerBusinessWebsiteRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(
       reply,
@@ -160,6 +173,9 @@ export async function registerBusinessWebsiteRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await websites.publishWebsite(user.value.userId, params.data.siteId));
   });

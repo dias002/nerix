@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { DomainError, fail, ok, type Result } from "../../domain/result.js";
-import { readBearerToken, resolveRequestUserId } from "../../server/auth-context.js";
+import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import { ensureBusinessPermission } from "./business-permissions.js";
 import type { BusinessService } from "./business.service.js";
 
 const businessRoleKeySchema = z.enum(["owner", "sales", "support", "marketing", "developer"]);
@@ -32,6 +32,9 @@ export async function registerBusinessRoutes(app: FastifyInstance, business: Bus
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth);
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await business.getWorkspace(user.value.userId));
   });
 
@@ -49,7 +52,7 @@ export async function registerBusinessRoutes(app: FastifyInstance, business: Bus
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
-    const permission = await ensureCanManageBusinessMembers(request.headers.authorization, auth);
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
     if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await business.addMember(user.value.userId, input.data));
@@ -70,6 +73,9 @@ export async function registerBusinessRoutes(app: FastifyInstance, business: Bus
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth);
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await business.addDealNote(user.value.userId, params.data.dealId, input.data.text));
   });
 
@@ -88,23 +94,9 @@ export async function registerBusinessRoutes(app: FastifyInstance, business: Bus
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await business.updateIdeaStatus(user.value.userId, params.data.ideaId, input.data.status));
   });
-}
-
-async function ensureCanManageBusinessMembers(
-  authorization: string | undefined,
-  auth: AuthService
-): Promise<Result<null>> {
-  const accessToken = readBearerToken(authorization);
-  if (!accessToken) return ok(null);
-
-  const currentUser = await auth.me(accessToken);
-  if (!currentUser.ok) return fail(currentUser.error);
-
-  if (!currentUser.value.user.permissions.businessSettings) {
-    return fail(new DomainError("unauthorized", "Only the Business owner can invite employees.", 403));
-  }
-
-  return ok(null);
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import { ensureBusinessPermission } from "../business/business-permissions.js";
 import type { KnowledgeBaseService } from "./knowledge-base.service.js";
 
 const entryTypeSchema = z.enum(["company_profile", "service", "faq", "policy", "brand_voice", "source_note"]);
@@ -32,6 +33,9 @@ export async function registerKnowledgeBaseRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await knowledgeBase.listEntries(user.value.userId));
   });
 
@@ -48,6 +52,9 @@ export async function registerKnowledgeBaseRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await knowledgeBase.createEntry(user.value.userId, input.data));
   });
@@ -67,6 +74,9 @@ export async function registerKnowledgeBaseRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await knowledgeBase.updateEntry(user.value.userId, params.data.entryId, input.data));
   });
 
@@ -83,6 +93,9 @@ export async function registerKnowledgeBaseRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await knowledgeBase.deleteEntry(user.value.userId, params.data.entryId));
   });

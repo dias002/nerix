@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import { ensureBusinessPermission } from "../business/business-permissions.js";
 import type { BusinessJobService } from "./business-job.service.js";
 
 export async function registerBusinessJobRoutes(
@@ -13,6 +14,9 @@ export async function registerBusinessJobRoutes(
   app.get("/business/jobs", async (request, reply) => {
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await businessJobs.listJobs(user.value.userId));
   });
@@ -31,6 +35,9 @@ export async function registerBusinessJobRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await businessJobs.getJob(user.value.userId, params.data.jobId));
   });
 
@@ -47,6 +54,9 @@ export async function registerBusinessJobRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await businessJobs.cancelJob(user.value.userId, params.data.jobId));
   });

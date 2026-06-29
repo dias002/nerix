@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import { ensureBusinessPermission } from "../business/business-permissions.js";
 import type { BusinessOpsService } from "./business-ops.service.js";
 
 const messageRoleSchema = z.enum(["customer", "bot", "employee", "system"]);
@@ -50,6 +51,9 @@ export async function registerBusinessOpsRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth);
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(reply, await businessOps.getOverview(user.value.userId));
   });
 
@@ -67,7 +71,18 @@ export async function registerBusinessOpsRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
-    return sendResult(reply, await businessOps.createConversation(user.value.userId, input.data));
+    const permission = await ensureBusinessPermission(request, auth);
+    if (!permission.ok) return sendResult(reply, permission);
+
+    const settingsPermission = await ensureBusinessPermission(request, auth, "businessSettings");
+    const conversationInput = settingsPermission.ok
+      ? input.data
+      : {
+          ...input.data,
+          trainingAllowed: false,
+        };
+
+    return sendResult(reply, await businessOps.createConversation(user.value.userId, conversationInput));
   });
 
   app.post("/business/ops/conversations/:conversationId/messages", async (request, reply) => {
@@ -84,6 +99,9 @@ export async function registerBusinessOpsRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth);
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(
       reply,
@@ -106,6 +124,9 @@ export async function registerBusinessOpsRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     return sendResult(
       reply,
       await businessOps.rateConversation(user.value.userId, params.data.conversationId, input.data.rating)
@@ -125,6 +146,9 @@ export async function registerBusinessOpsRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth);
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await businessOps.addTeamMessage(user.value.userId, input.data));
   });

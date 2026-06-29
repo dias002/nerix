@@ -1,10 +1,11 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
 import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, Zap } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentSubscription, getPlans, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
 import { useLanguage } from "../i18n";
+import { getUnauthorizedWorkspaceRedirect, getWorkspaceAccess } from "../roleAccess";
 
 export default function WorkspaceLayout() {
   const location = useLocation();
@@ -26,20 +27,20 @@ export default function WorkspaceLayout() {
     window.localStorage.setItem("nomduchat-sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed]);
 
-  const permissions = user?.permissions;
-  const isAdminNavigation = Boolean(permissions?.adminPanel);
+  const access = useMemo(() => getWorkspaceAccess(user), [user]);
+  const isAdminNavigation = access.isAdmin;
   const adminTab = new URLSearchParams(location.search).get("tab");
   const roleOptions: LocalRoleOverride[] = ["real", "admin", "user", "business_owner", "business_employee"];
   const isBusinessSection =
     location.pathname === "/workspace/business" || location.pathname.startsWith("/workspace/business/");
-  const showBusinessBrand = isBusinessSection || user?.activePlanId === "business" || Boolean(user?.businessWorkspace);
+  const showBusinessBrand = access.canUseBusiness;
   const businessNavItems = [
-    { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.businessOverview },
-    { path: "/workspace/business/website", icon: Globe, label: t.nav.businessWebsite },
-    { path: "/workspace/business/telegram-bot", icon: Bot, label: t.nav.businessTelegramBot },
-    { path: "/workspace/business/dialogs", icon: MessageSquare, label: t.nav.businessDialogs },
-    { path: "/workspace/business/analytics", icon: BarChart3, label: t.nav.businessAnalytics },
-    { path: "/workspace/business/ideas", icon: Lightbulb, label: t.nav.businessIdeas },
+    { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.businessOverview, visible: access.canUseBusinessOverview },
+    { path: "/workspace/business/website", icon: Globe, label: t.nav.businessWebsite, visible: access.canUseBusinessWebsite },
+    { path: "/workspace/business/telegram-bot", icon: Bot, label: t.nav.businessTelegramBot, visible: access.canUseBusinessTelegramBot },
+    { path: "/workspace/business/dialogs", icon: MessageSquare, label: t.nav.businessDialogs, visible: access.canUseBusinessDialogs },
+    { path: "/workspace/business/analytics", icon: BarChart3, label: t.nav.businessAnalytics, visible: access.canUseBusinessAnalytics },
+    { path: "/workspace/business/ideas", icon: Lightbulb, label: t.nav.businessIdeas, visible: access.canUseBusinessIdeas },
   ];
   const navItems = isAdminNavigation
     ? [
@@ -91,19 +92,19 @@ export default function WorkspaceLayout() {
           visible: true,
           active: () => location.pathname === "/workspace/admin/pricing" || (location.pathname === "/workspace/admin" && adminTab === "pricing"),
         },
-        { path: "/workspace/mailings", icon: Mail, label: t.nav.mailings, visible: Boolean(permissions?.mailings) },
-        { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: true },
+        { path: "/workspace/mailings", icon: Mail, label: t.nav.mailings, visible: access.canUseMailings },
+        { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: access.canUseSettings },
       ]
     : [
-        { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: true },
-        { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: true },
-        { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: true },
-        { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: true },
+        { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: access.canUseChat },
+        { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: access.canUseHistory },
+        { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: access.canUseBusiness },
+        { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: access.canUseBalance },
         {
           path: "/workspace/settings",
           icon: Settings,
           label: t.nav.settings,
-          visible: true,
+          visible: access.canUseSettings,
           active: () => location.pathname.startsWith("/workspace/settings") || location.pathname === "/workspace/memory",
         },
       ];
@@ -135,17 +136,15 @@ export default function WorkspaceLayout() {
   }, [isAdminNavigation, user?.id, user?.activePlanId, user?.country, roleOverride]);
 
   useEffect(() => {
-    if (!isAdminNavigation) return;
-
-    const adminPaths = ["/workspace/admin", "/workspace/mailings", "/workspace/settings"];
-    if (!adminPaths.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`))) {
-      navigate("/workspace/admin", { replace: true });
+    const redirectPath = getUnauthorizedWorkspaceRedirect(location.pathname, access);
+    if (redirectPath && redirectPath !== location.pathname) {
+      navigate(redirectPath, { replace: true });
     }
-  }, [isAdminNavigation, location.pathname, navigate]);
+  }, [access, location.pathname, navigate]);
 
   useEffect(() => {
-    setBusinessMenuOpen(isBusinessSection && !sidebarCollapsed);
-  }, [isBusinessSection, sidebarCollapsed]);
+    setBusinessMenuOpen(access.canUseBusiness && isBusinessSection && !sidebarCollapsed);
+  }, [access.canUseBusiness, isBusinessSection, sidebarCollapsed]);
 
   useEffect(() => {
     refreshUsageLimits();
@@ -267,7 +266,7 @@ export default function WorkspaceLayout() {
                       }`}
                     >
                       <ul className="mt-1 space-y-1 border-l border-white/10 pl-4">
-                        {businessNavItems.map((subItem, index) => {
+                        {businessNavItems.filter((subItem) => subItem.visible).map((subItem, index) => {
                           const SubIcon = subItem.icon;
                           const subActive =
                             subItem.path === "/workspace/business"
@@ -307,7 +306,7 @@ export default function WorkspaceLayout() {
           </ul>
         </nav>
 
-        {!sidebarCollapsed && !isAdminNavigation ? (
+        {!sidebarCollapsed && !isAdminNavigation && access.canUseBalance ? (
           <div className="hidden px-3 pb-3 md:block">
             <UsageLimitPanel usage={usageLimits} wallet={wallet} subscription={currentSubscription} plans={plans} />
           </div>

@@ -21,9 +21,11 @@ import {
   toPublicApiError,
 } from "../api";
 import { useAuth } from "../auth";
+import { getWorkspaceAccess } from "../roleAccess";
 
 export default function BusinessEmployeeAnalytics() {
   const { user } = useAuth();
+  const access = useMemo(() => getWorkspaceAccess(user), [user]);
   const [workspaceData, setWorkspaceData] = useState<BusinessWorkspaceApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export default function BusinessEmployeeAnalytics() {
   const reports = workspaceData?.employeeReports ?? [];
   const roles = workspaceData?.roles ?? [];
   const groups = workspaceData?.groups ?? [];
-  const canManageBusiness = !user || user.permissions.businessSettings;
+  const canManageBusiness = access.canUseBusinessWebsite || access.canUseBusinessTelegramBot || access.canUseBusinessIdeas;
   const activeRole = useMemo(
     () => roles.find((role) => role.key === activeRoleKey) ?? roles[0],
     [activeRoleKey, roles]
@@ -181,17 +183,19 @@ export default function BusinessEmployeeAnalytics() {
               Отдельный экран для контроля работы команды: кто в сети, сколько обработано запросов, какие роли выданы и какие отчеты появились за день.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openInvite}
-            className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
-          >
-            <UserPlus className="h-4 w-4" strokeWidth={1.8} />
-            Пригласить сотрудника
-          </button>
+          {canManageBusiness ? (
+            <button
+              type="button"
+              onClick={openInvite}
+              className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
+            >
+              <UserPlus className="h-4 w-4" strokeWidth={1.8} />
+              Пригласить сотрудника
+            </button>
+          ) : null}
         </header>
 
-        {inviteOpen ? (
+        {canManageBusiness && inviteOpen ? (
           <section className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
@@ -312,7 +316,7 @@ export default function BusinessEmployeeAnalytics() {
           </div>
         ) : null}
 
-        {inviteLink ? (
+        {canManageBusiness && inviteLink ? (
           <section className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-4">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -444,7 +448,7 @@ export default function BusinessEmployeeAnalytics() {
                 <div className="text-sm text-gray-400">{member.access}</div>
                 <div className="space-y-2 text-sm text-gray-500">
                   <div>{member.invitedEmail || "Аккаунт подключен"}</div>
-                  {member.invitedEmail && !member.userId ? (
+                  {canManageBusiness && member.invitedEmail && !member.userId ? (
                     <button
                       type="button"
                       onClick={() => shareInvite(buildInviteLink(member.invitedEmail, member.roleKey), member.invitedEmail)}

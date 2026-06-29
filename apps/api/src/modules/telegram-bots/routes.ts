@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveRequestUserId } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import type { AuthService } from "../auth/auth.service.js";
+import { ensureBusinessPermission } from "../business/business-permissions.js";
 import type { BusinessJobService } from "../business-jobs/business-job.service.js";
 import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { TelegramBotOrderService } from "./telegram-bot.service.js";
@@ -67,6 +68,9 @@ export async function registerTelegramBotRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
+
     const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "telegram-miniapp-draft");
     if (!allowed.ok) return sendResult(reply, allowed);
 
@@ -76,6 +80,9 @@ export async function registerTelegramBotRoutes(
   app.get("/telegram-bots/orders", async (request, reply) => {
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     return sendResult(reply, await telegramBots.listOrders(user.value.userId));
   });
@@ -93,6 +100,9 @@ export async function registerTelegramBotRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "telegram-order");
     if (!allowed.ok) return sendResult(reply, allowed);
@@ -114,6 +124,9 @@ export async function registerTelegramBotRoutes(
 
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const permission = await ensureBusinessPermission(request, auth, "businessSettings");
+    if (!permission.ok) return sendResult(reply, permission);
 
     const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "telegram-test-message");
     if (!allowed.ok) return sendResult(reply, allowed);

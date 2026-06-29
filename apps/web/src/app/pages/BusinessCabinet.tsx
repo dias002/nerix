@@ -19,16 +19,27 @@ import {
   type BusinessJobApiRecord,
   type BusinessWorkspaceApiResponse,
 } from "../api";
+import { useAuth } from "../auth";
+import { getWorkspaceAccess } from "../roleAccess";
 
 export default function BusinessCabinet() {
+  const { user } = useAuth();
+  const access = useMemo(() => getWorkspaceAccess(user), [user]);
+  const canManageBusiness = access.canUseBusinessWebsite || access.canUseBusinessTelegramBot || access.canUseBusinessIdeas;
   const [workspaceData, setWorkspaceData] = useState<BusinessWorkspaceApiResponse | null>(null);
   const [jobs, setJobs] = useState<BusinessJobApiRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [jobsLoading, setJobsLoading] = useState(true);
+  const [jobsLoading, setJobsLoading] = useState(false);
   const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
   const [jobMessage, setJobMessage] = useState<string | null>(null);
 
   const loadJobs = useCallback(async () => {
+    if (!canManageBusiness) {
+      setJobs([]);
+      setJobsLoading(false);
+      return;
+    }
+
     setJobsLoading(true);
     try {
       const response = await getBusinessJobs();
@@ -38,7 +49,7 @@ export default function BusinessCabinet() {
     } finally {
       setJobsLoading(false);
     }
-  }, []);
+  }, [canManageBusiness]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +93,9 @@ export default function BusinessCabinet() {
   const members = workspaceData?.members ?? [];
   const reports = workspaceData?.employeeReports ?? [];
   const deals = workspaceData?.deals ?? [];
-  const advisorCount = workspaceData?.advisorViews.reduce((sum, view) => sum + view.ideas.length, 0) ?? 0;
+  const advisorCount = access.canUseBusinessIdeas
+    ? workspaceData?.advisorViews.reduce((sum, view) => sum + view.ideas.length, 0) ?? 0
+    : 0;
   const accessLabel =
     workspaceData?.access.mode === "active"
       ? "Business активен"
@@ -106,14 +119,32 @@ export default function BusinessCabinet() {
         value: String(reports.reduce((sum, report) => sum + report.clientReportsCount, 0)),
         detail: "по клиентам",
       },
-      {
+      access.canUseBusinessIdeas ? {
         label: "Идеи",
         value: String(advisorCount),
         detail: "для роста",
+      } : {
+        label: "Чаты",
+        value: String(reports.reduce((sum, report) => sum + report.chatsCount, 0)),
+        detail: "в работе команды",
       },
     ],
-    [advisorCount, deals.length, members, reports]
+    [access.canUseBusinessIdeas, advisorCount, deals.length, members, reports]
   );
+  const visibleFeatureNotes = [
+    access.canUseBusinessWebsite ? "Сайт создается на отдельной странице." : null,
+    access.canUseBusinessTelegramBot ? "ИИ в Telegram создается и настраивается владельцем." : null,
+    access.canUseBusinessDialogs ? "Диалоги клиентов сохраняются отдельно: видны сообщения, возражения, интерес и следующий шаг." : null,
+    access.canUseBusinessAnalytics ? "Аналитика сотрудников показывает отчеты и состояние команды." : null,
+    access.canUseBusinessIdeas ? "Идеи роста доступны владельцу для планирования изменений." : null,
+  ].filter(Boolean) as string[];
+  const visibleSectionNames = [
+    access.canUseBusinessWebsite ? "сайт" : null,
+    access.canUseBusinessTelegramBot ? "ИИ в Telegram" : null,
+    access.canUseBusinessDialogs ? "диалоги клиентов" : null,
+    access.canUseBusinessAnalytics ? "аналитика сотрудников" : null,
+    access.canUseBusinessIdeas ? "идеи роста" : null,
+  ].filter(Boolean).join(", ");
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-5 text-white md:p-10">
@@ -126,24 +157,28 @@ export default function BusinessCabinet() {
             </div>
             <h1 className="mt-5 text-3xl font-medium md:text-5xl">Бизнес-разделы nomduchat</h1>
             <p className="mt-4 max-w-3xl text-base leading-relaxed text-gray-400">
-              Это короткая карта продукта. Сайт, Telegram-менеджер, аналитика и идеи роста лежат отдельно, чтобы клиент не разбирался в лишних настройках.
+              Это короткая карта доступных вам business-разделов. Каждый экран показывает только те действия, которые разрешены вашей роли.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Link
-              to="/workspace/business/website"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
-            >
-              <Globe className="h-4 w-4" strokeWidth={1.8} />
-              Создать сайт
-            </Link>
-            <Link
-              to="/workspace/business/dialogs"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-            >
-              <MessageSquare className="h-4 w-4" strokeWidth={1.8} />
-              Диалоги клиентов
-            </Link>
+            {access.canUseBusinessWebsite ? (
+              <Link
+                to="/workspace/business/website"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
+              >
+                <Globe className="h-4 w-4" strokeWidth={1.8} />
+                Создать сайт
+              </Link>
+            ) : null}
+            {access.canUseBusinessDialogs ? (
+              <Link
+                to="/workspace/business/dialogs"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-5 py-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+              >
+                <MessageSquare className="h-4 w-4" strokeWidth={1.8} />
+                Диалоги клиентов
+              </Link>
+            ) : null}
           </div>
         </header>
 
@@ -164,11 +199,12 @@ export default function BusinessCabinet() {
           </div>
           <h2 className="mt-2 text-2xl font-medium">Основные разделы теперь в левом меню</h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-500">
-            Сайт, ИИ в Telegram, диалоги клиентов, аналитика сотрудников и идеи роста находятся под пунктом «Бизнес» в боковой панели. Главный экран остается обзором, без перегруженной сетки карточек.
+            Доступные разделы: {visibleSectionNames || "business-обзор"}. Главный экран остается обзором, без перегруженной сетки карточек.
           </p>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
+        {canManageBusiness ? (
+          <section className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -239,7 +275,8 @@ export default function BusinessCabinet() {
               </div>
             )}
           </div>
-        </section>
+          </section>
+        ) : null}
 
         <section className="grid grid-cols-1 gap-5 xl:grid-cols-[0.9fr_1.1fr]">
           <article className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-5">
@@ -248,13 +285,7 @@ export default function BusinessCabinet() {
               Как теперь устроен B2B
             </div>
             <div className="mt-5 space-y-4">
-              {[
-                "Сайт и ИИ в Telegram создаются на отдельных страницах.",
-                "Диалоги клиентов сохраняются отдельно: видны сообщения, возражения, интерес и оценка разговора.",
-                "Telegram-менеджер принимает заявки и передает их человеку, когда нужен расчет.",
-                "Аналитика сотрудников больше не смешана с созданием продуктов.",
-                "Главная B2B-страница показывает только входы и краткое состояние.",
-              ].map((item) => (
+              {visibleFeatureNotes.map((item) => (
                 <div key={item} className="flex items-start gap-3 text-sm text-gray-300">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" strokeWidth={1.8} />
                   {item}

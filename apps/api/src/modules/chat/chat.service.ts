@@ -4,45 +4,31 @@ import type { AiGatewayService } from "../ai-gateway/ai-gateway.service.js";
 import type { GenerationService } from "../generation/generation.service.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 import type { ConversationMessage, MessageFeedbackRating } from "./conversation.types.js";
-
-const freeDailyTextLimit = 7;
-const paidOnlyAgentIds = new Set(["image", "video", "music", "voice"]);
-const paidOnlyModalities = new Set(["image", "video", "music", "voice"]);
-
-type ChatAttachment = {
-  name: string;
-  type?: string;
-  size: number;
-  content?: string;
-  truncated?: boolean;
-};
-
-type SubscriptionAccessService = {
-  currentSubscription(userId: string): Promise<{
-    ok: true;
-    value: {
-      subscription: {
-        planId: string;
-        status: string;
-      } | null;
-    };
-  } | {
-    ok: false;
-    error: {
-      code: string;
-      message: string;
-      statusCode?: number;
-    };
-  }>;
-};
+import {
+  buildConversationPrompt,
+  buildMediaGenerationPrompt,
+  buildPrompt,
+  buildRoutingPrompt,
+  createConversationTitle,
+  createPromptExcerpt,
+  normalizeAttachments,
+  readAttachmentsFromMetadata,
+  type ChatAttachment,
+} from "./prompt-builder.js";
+import { ChatUsagePolicy, type SubscriptionAccessService } from "./usage-policy.js";
 
 export class ChatService {
+  private readonly usagePolicy: ChatUsagePolicy;
+
   constructor(
     private readonly conversations: ConversationRepository,
     private readonly aiGateway: AiGatewayService,
     private readonly generation?: GenerationService,
-    private readonly subscriptions?: SubscriptionAccessService
-  ) {}
+    subscriptions?: SubscriptionAccessService,
+    usagePolicy?: ChatUsagePolicy
+  ) {
+    this.usagePolicy = usagePolicy ?? new ChatUsagePolicy(conversations, subscriptions);
+  }
 
   async listConversations(userId: string) {
     return ok({
@@ -68,25 +54,7 @@ export class ChatService {
   }
 
   async getUsageLimits(userId: string) {
-    const access = await this.getSubscriptionAccess(userId);
-    const dailyTextUsed = await this.conversations.countFreeTextRequestsSince(userId, startOfUtcDayIso());
-    const dailyTextRemaining = Math.max(0, freeDailyTextLimit - dailyTextUsed);
-
-    return ok({
-      planId: access.planId,
-      hasActiveSubscription: access.hasActiveSubscription,
-      text: {
-        dailyLimit: access.hasActiveSubscription ? null : freeDailyTextLimit,
-        usedToday: access.hasActiveSubscription ? null : dailyTextUsed,
-        remainingToday: access.hasActiveSubscription ? null : dailyTextRemaining,
-      },
-      media: {
-        image: access.hasActiveSubscription,
-        video: access.hasActiveSubscription,
-        music: access.hasActiveSubscription,
-        voice: access.hasActiveSubscription,
-      },
-    });
+    return this.usagePolicy.getUsageLimits(userId);
   }
 
   async sendMessage(input: {
@@ -573,174 +541,8 @@ export class ChatService {
   }
 
   private async assertRequestAllowed(input: { userId: string; route: { agentId: string; modality: string } }) {
-    const access = await this.getSubscriptionAccess(input.userId);
-    if (access.hasActiveSubscription) return ok({ allowed: true });
-
-    if (paidOnlyModalities.has(input.route.modality) || paidOnlyAgentIds.has(input.route.agentId)) {
-      return fail(
-        new DomainError(
-          "subscription_required",
-          "Картинки, видео, песни и голос доступны после подписки. В бесплатном режиме доступно 7 обычных текстовых запросов в день.",
-          402
-        )
-      );
-    }
-
-    const dailyTextUsed = await this.conversations.countFreeTextRequestsSince(input.userId, startOfUtcDayIso());
-    if (dailyTextUsed >= freeDailyTextLimit) {
-      return fail(
-        new DomainError(
-          "daily_text_limit_exceeded",
-          "Бесплатные 7 текстовых запросов на сегодня закончились. Подключите подписку, чтобы продолжить.",
-          402
-        )
-      );
-    }
-
-    return ok({ allowed: true });
+    return this.usagePolicy.assertRequestAllowed(input);
   }
-
-  private async getSubscriptionAccess(userId: string) {
-    if (!this.subscriptions) {
-      return {
-        hasActiveSubscription: false,
-        planId: null as string | null,
-      };
-    }
-
-    const current = await this.subscriptions.currentSubscription(userId);
-    const subscription = current.ok ? current.value.subscription : null;
-    const hasActiveSubscription = subscription?.status === "active";
-
-    return {
-      hasActiveSubscription,
-      planId: hasActiveSubscription ? subscription.planId : null,
-    };
-  }
-}
-
-function createConversationTitle(message: string) {
-  const title = message.replace(/\s+/g, " ").trim();
-  return title.length > 48 ? `${title.slice(0, 45)}...` : title;
-}
-
-function createPromptExcerpt(prompt: string) {
-  const normalized = prompt.replace(/\s+/g, " ").trim();
-  return normalized.length > 500 ? `${normalized.slice(0, 497)}...` : normalized;
-}
-
-function buildConversationPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
-  const contextMessages = previousMessages
-    .filter((message) => message.content.trim() && ["system", "user", "assistant"].includes(message.role))
-    .slice(-12);
-
-  if (contextMessages.length === 0) return currentPrompt;
-
-  const context = contextMessages
-    .map((message) => `${conversationRoleLabel(message.role)}: ${trimContextContent(message.content)}`)
-    .join("\n");
-
-  return [
-    "Используй контекст текущего диалога. Учитывай имена, просьбы, уточнения и ограничения, которые уже были сказаны.",
-    "Не начинай разговор заново, если пользователь пишет короткое уточнение.",
-    "Если последнее сообщение пользователя спрашивает \"какие детали?\", \"что именно?\" или \"каких?\", отвечай относительно последней просьбы из контекста. Не спрашивай, какие детали пользователь имеет в виду.",
-    "Если запрос достаточно понятен, дай готовый результат и только потом предложи, что можно уточнить.",
-    "",
-    "Контекст диалога:",
-    context,
-    "",
-    "Последнее сообщение пользователя:",
-    currentPrompt,
-  ].join("\n");
-}
-
-function buildRoutingPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
-  if (!isContextualMediaFollowUp(currentPrompt)) return currentPrompt;
-
-  const contextMessages = previousMessages
-    .filter((message) => message.content.trim() && ["system", "user", "assistant"].includes(message.role))
-    .slice(-6);
-
-  if (contextMessages.length === 0) return currentPrompt;
-
-  const context = contextMessages
-    .map((message) => `${conversationRoleLabel(message.role)}: ${trimContextContent(message.content)}`)
-    .join("\n");
-
-  return [
-    "Контекст нужен только для выбора типа запроса и агента.",
-    "",
-    "Контекст диалога:",
-    context,
-    "",
-    "Последняя просьба пользователя:",
-    currentPrompt,
-  ].join("\n");
-}
-
-function buildMediaGenerationPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
-  const contextMessages = previousMessages
-    .filter((message) => message.content.trim() && ["system", "user", "assistant"].includes(message.role))
-    .slice(-8);
-
-  if (contextMessages.length === 0) return currentPrompt;
-
-  const context = contextMessages
-    .map((message) => `${conversationRoleLabel(message.role)}: ${trimContextContent(message.content)}`)
-    .join("\n");
-
-  return [
-    "Создай медиа по последней просьбе пользователя.",
-    "Если пользователь ссылается на прошлый текст, песню, идею или описание словами вроде \"это\", \"этот текст\", \"который ты скинул\", используй контекст ниже.",
-    "",
-    "Контекст диалога:",
-    context,
-    "",
-    "Последняя просьба пользователя:",
-    currentPrompt,
-  ].join("\n");
-}
-
-function conversationRoleLabel(role: ConversationMessage["role"]) {
-  if (role === "assistant") return "Ассистент";
-  if (role === "system") return "Система";
-  return "Пользователь";
-}
-
-function trimContextContent(content: string) {
-  const normalized = content.replace(/\s+/g, " ").trim();
-  return normalized.length > 1_200 ? `${normalized.slice(0, 1_197)}...` : normalized;
-}
-
-function isContextualMediaFollowUp(prompt: string) {
-  const normalized = prompt.toLowerCase();
-  return containsAny(normalized, [
-    "аудио",
-    "audio",
-    "голос",
-    "озвуч",
-    "спой",
-    "вокал",
-    "картин",
-    "изображ",
-    "фото",
-    "image",
-    "video",
-    "видео",
-    "ролик",
-    "по этому",
-    "по этому тексту",
-    "который ты",
-  ]);
-}
-
-function containsAny(value: string, needles: string[]) {
-  return needles.some((needle) => value.includes(needle));
-}
-
-function startOfUtcDayIso() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
 }
 
 function findLastUserMessageIndex(messages: ConversationMessage[]) {
@@ -749,61 +551,6 @@ function findLastUserMessageIndex(messages: ConversationMessage[]) {
   }
 
   return -1;
-}
-
-function normalizeAttachments(attachments: ChatAttachment[] | undefined) {
-  return (attachments ?? []).slice(0, 5).map((attachment) => ({
-    name: attachment.name.slice(0, 180),
-    type: attachment.type?.slice(0, 120) || "application/octet-stream",
-    size: attachment.size,
-    content: attachment.content?.slice(0, 20_000),
-    truncated: Boolean(attachment.truncated),
-  }));
-}
-
-function buildPrompt(message: string, attachments: ChatAttachment[]) {
-  if (attachments.length === 0) return message;
-
-  const files = attachments
-    .map((attachment, index) => {
-      const header = [
-        `File ${index + 1}: ${attachment.name}`,
-        `type: ${attachment.type || "unknown"}`,
-        `size: ${attachment.size} bytes`,
-        attachment.truncated ? "content: truncated" : null,
-      ]
-        .filter(Boolean)
-        .join(", ");
-
-      if (!attachment.content?.trim()) {
-        return `${header}\nContent was not extracted. Use the file name and metadata only.`;
-      }
-
-      return `${header}\nContent:\n${attachment.content}`;
-    })
-    .join("\n\n");
-
-  return `${message}\n\nAttached files:\n${files}`;
-}
-
-function readAttachmentsFromMetadata(value: unknown): ChatAttachment[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter(isAttachmentLike)
-    .map((attachment) => ({
-      name: attachment.name,
-      type: attachment.type,
-      size: attachment.size,
-      content: attachment.content,
-      truncated: attachment.truncated,
-    }));
-}
-
-function isAttachmentLike(value: unknown): value is ChatAttachment {
-  if (!value || typeof value !== "object") return false;
-  const attachment = value as Partial<ChatAttachment>;
-  return typeof attachment.name === "string" && typeof attachment.size === "number";
 }
 
 function mediaLabel(modality: string) {

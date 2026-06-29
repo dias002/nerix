@@ -9,6 +9,7 @@ import { AgentService } from "../src/modules/agents/agent.service.js";
 import { AiGatewayService } from "../src/modules/ai-gateway/ai-gateway.service.js";
 import {
   AnthropicCompletionProvider,
+  BackendAiCompletionProvider,
   type CompletionInput,
   type CompletionResult,
   type AiCompletionProvider,
@@ -755,6 +756,49 @@ test("AI completion providers use backend company keys for OpenAI, Anthropic, an
     });
     assert.deepEqual(body.contents, [{ role: "user", parts: [{ text: "Скажи коротко" }] }]);
   });
+});
+
+test("backend completion falls back to local mock in development when a real provider fails", async () => {
+  await withConfig(
+    {
+      NODE_ENV: "development",
+      AI_MOCK_PROVIDER_ENABLED: true,
+      ANTHROPIC_API_KEY: "anthropic-key",
+    },
+    async () => {
+      await withFetchStub(async () => new Response("bad model", { status: 404 }), async () => {
+        const result = await new BackendAiCompletionProvider().complete({
+          provider: "anthropic",
+          model: "claude-missing",
+          prompt: "Скажи коротко",
+        });
+
+        assert.match(result.content, /mock-ответ nomduchat/);
+        assert.equal(result.rawUsage?.fallbackProvider, "mock-provider");
+        assert.equal(result.rawUsage?.failedProvider, "anthropic");
+      });
+    }
+  );
+});
+
+test("backend completion accepts injected providers without changing routing code", async () => {
+  const completion = new BackendAiCompletionProvider({
+    custom: {
+      async complete(input) {
+        return {
+          content: `custom:${input.model}:${input.prompt}`,
+        };
+      },
+    },
+  });
+
+  const result = await completion.complete({
+    provider: "custom",
+    model: "model-a",
+    prompt: "hello",
+  });
+
+  assert.equal(result.content, "custom:model-a:hello");
 });
 
 test("Gemini media provider sends interaction payloads without unsupported config", async () => {

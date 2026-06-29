@@ -1503,10 +1503,21 @@ test("YooKassa webhook accepts configured secret in query string", async () => {
 
 test("GET /business/workspace returns demo CRM, employees, and advisor ideas", async () => {
   const app = await createApp();
+  const businessOwnerHeaders = { "x-nomduchat-local-role": "business_owner" };
+
+  const personalResponse = await app.inject({
+    method: "GET",
+    url: "/business/workspace",
+    headers: { "x-nomduchat-local-role": "user" },
+  });
+
+  assert.equal(personalResponse.statusCode, 403);
+  assert.equal(personalResponse.json().error.code, "unauthorized");
 
   const response = await app.inject({
     method: "GET",
     url: "/business/workspace",
+    headers: businessOwnerHeaders,
   });
 
   assert.equal(response.statusCode, 200);
@@ -1520,6 +1531,7 @@ test("GET /business/workspace returns demo CRM, employees, and advisor ideas", a
   const overLimitResponse = await app.inject({
     method: "POST",
     url: "/business/members",
+    headers: businessOwnerHeaders,
     payload: {
       name: "Еще один сотрудник",
       roleKey: "sales",
@@ -1534,10 +1546,12 @@ test("GET /business/workspace returns demo CRM, employees, and advisor ideas", a
 
 test("business workspace persists CRM notes and advisor idea statuses", async () => {
   const app = await createApp();
+  const businessOwnerHeaders = { "x-nomduchat-local-role": "business_owner" };
 
   const noteResponse = await app.inject({
     method: "POST",
     url: "/business/deals/alem-beauty/notes",
+    headers: businessOwnerHeaders,
     payload: {
       text: "Попросили показать демо бота для записи.",
     },
@@ -1551,6 +1565,7 @@ test("business workspace persists CRM notes and advisor idea statuses", async ()
   const ideaResponse = await app.inject({
     method: "PATCH",
     url: "/business/ideas/sales-script",
+    headers: businessOwnerHeaders,
     payload: {
       status: "in_progress",
     },
@@ -1568,6 +1583,7 @@ test("business workspace persists CRM notes and advisor idea statuses", async ()
 
 test("business subscription switches workspace access from demo to active", async () => {
   const app = await createApp();
+  const businessOwnerHeaders = { "x-nomduchat-local-role": "business_owner" };
 
   const checkoutResponse = await app.inject({
     method: "POST",
@@ -1595,6 +1611,7 @@ test("business subscription switches workspace access from demo to active", asyn
   const workspaceResponse = await app.inject({
     method: "GET",
     url: "/business/workspace",
+    headers: businessOwnerHeaders,
   });
 
   assert.equal(workspaceResponse.statusCode, 200);
@@ -1608,10 +1625,12 @@ test("business subscription switches workspace access from demo to active", asyn
 
 test("business operations store customer conversations, analysis, ratings, and team chat", async () => {
   const app = await createApp();
+  const businessOwnerHeaders = { "x-nomduchat-local-role": "business_owner" };
 
   const initialResponse = await app.inject({
     method: "GET",
     url: "/business/ops",
+    headers: businessOwnerHeaders,
   });
 
   assert.equal(initialResponse.statusCode, 200);
@@ -1621,6 +1640,7 @@ test("business operations store customer conversations, analysis, ratings, and t
   const createResponse = await app.inject({
     method: "POST",
     url: "/business/ops/conversations",
+    headers: businessOwnerHeaders,
     payload: {
       channel: "telegram",
       customerName: "Nomdu Cafe",
@@ -1651,6 +1671,7 @@ test("business operations store customer conversations, analysis, ratings, and t
   const messageResponse = await app.inject({
     method: "POST",
     url: `/business/ops/conversations/${created.id}/messages`,
+    headers: businessOwnerHeaders,
     payload: {
       role: "customer",
       content: "Готовы созвониться, передайте менеджеру расчет.",
@@ -1664,6 +1685,7 @@ test("business operations store customer conversations, analysis, ratings, and t
   const ratingResponse = await app.inject({
     method: "PATCH",
     url: `/business/ops/conversations/${created.id}/rating`,
+    headers: businessOwnerHeaders,
     payload: {
       rating: "excellent",
     },
@@ -1676,6 +1698,7 @@ test("business operations store customer conversations, analysis, ratings, and t
   const teamMessageResponse = await app.inject({
     method: "POST",
     url: "/business/ops/team/messages",
+    headers: businessOwnerHeaders,
     payload: {
       authorName: "Egor",
       roleTitle: "Владелец",
@@ -1690,12 +1713,66 @@ test("business operations store customer conversations, analysis, ratings, and t
   await app.close();
 });
 
+test("business employee handles dialogs without owner-only review controls", async () => {
+  const app = await createApp();
+  const businessEmployeeHeaders = { "x-nomduchat-local-role": "business_employee" };
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/business/ops/conversations",
+    headers: businessEmployeeHeaders,
+    payload: {
+      channel: "manual",
+      customerName: "Employee Lead",
+      trainingAllowed: true,
+      messages: [
+        {
+          role: "customer",
+          content: "Хочу узнать цену и сроки запуска.",
+        },
+      ],
+    },
+  });
+
+  assert.equal(createResponse.statusCode, 200);
+  const conversation = createResponse.json().conversation;
+  assert.equal(conversation.trainingAllowed, false);
+
+  const messageResponse = await app.inject({
+    method: "POST",
+    url: `/business/ops/conversations/${conversation.id}/messages`,
+    headers: businessEmployeeHeaders,
+    payload: {
+      role: "customer",
+      content: "Добавьте расчет менеджеру.",
+    },
+  });
+
+  assert.equal(messageResponse.statusCode, 200);
+
+  const ratingResponse = await app.inject({
+    method: "PATCH",
+    url: `/business/ops/conversations/${conversation.id}/rating`,
+    headers: businessEmployeeHeaders,
+    payload: {
+      rating: "excellent",
+    },
+  });
+
+  assert.equal(ratingResponse.statusCode, 403);
+  assert.equal(ratingResponse.json().error.code, "unauthorized");
+
+  await app.close();
+});
+
 test("business website builder creates, edits, publishes, and serves a public site", async () => {
   const app = await createApp();
+  const businessOwnerHeaders = { "x-nomduchat-local-role": "business_owner" };
 
   const knowledgeResponse = await app.inject({
     method: "POST",
     url: "/business/knowledge-base",
+    headers: businessOwnerHeaders,
     payload: {
       type: "faq",
       title: "Доставка и оплата",
@@ -1709,6 +1786,7 @@ test("business website builder creates, edits, publishes, and serves a public si
   const draftResponse = await app.inject({
     method: "POST",
     url: "/business/websites/draft",
+    headers: businessOwnerHeaders,
     payload: {
       country: "KZ",
       companyName: "Nomdu Market",
@@ -1739,6 +1817,7 @@ test("business website builder creates, edits, publishes, and serves a public si
   const updateResponse = await app.inject({
     method: "PATCH",
     url: `/business/websites/${siteId}`,
+    headers: businessOwnerHeaders,
     payload: {
       title: "Nomdu Market",
       slug: "nomdu-market",
@@ -1753,6 +1832,7 @@ test("business website builder creates, edits, publishes, and serves a public si
   const publishResponse = await app.inject({
     method: "POST",
     url: `/business/websites/${siteId}/publish`,
+    headers: businessOwnerHeaders,
     payload: {},
   });
 
@@ -1774,11 +1854,13 @@ test("business website builder creates, edits, publishes, and serves a public si
 
 test("telegram bot order creates priced setup without exposing full bot token", async () => {
   const app = await createApp();
+  const businessOwnerHeaders = { "x-nomduchat-local-role": "business_owner" };
   const botToken = "123456:VERY_SECRET_TELEGRAM_TOKEN";
 
   const response = await app.inject({
     method: "POST",
     url: "/telegram-bots/orders",
+    headers: businessOwnerHeaders,
     payload: {
       country: "KZ",
       companyName: "Nomdu Market",
@@ -1811,6 +1893,7 @@ test("telegram bot order creates priced setup without exposing full bot token", 
   const ordersResponse = await app.inject({
     method: "GET",
     url: "/telegram-bots/orders",
+    headers: businessOwnerHeaders,
   });
 
   assert.equal(ordersResponse.statusCode, 200);
@@ -1820,6 +1903,7 @@ test("telegram bot order creates priced setup without exposing full bot token", 
   const testReplyResponse = await app.inject({
     method: "POST",
     url: `/telegram-bots/orders/${body.order.id}/test-message`,
+    headers: businessOwnerHeaders,
     payload: {
       message: "Здравствуйте, хочу оплатить и получить индивидуальную цену на большую партию.",
     },
@@ -1835,10 +1919,12 @@ test("telegram bot order creates priced setup without exposing full bot token", 
 
 test("telegram mini app draft generates bot elements from a short business brief", async () => {
   const app = await createApp();
+  const businessOwnerHeaders = { "x-nomduchat-local-role": "business_owner" };
 
   const response = await app.inject({
     method: "POST",
     url: "/telegram-bots/miniapp/draft",
+    headers: businessOwnerHeaders,
     payload: {
       country: "RU",
       companyName: "Nomduchat B2B",
