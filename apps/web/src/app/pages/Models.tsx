@@ -31,7 +31,7 @@ const modelGroups = [
   },
   {
     title: "Видео",
-    detail: "Сцены, короткие ролики, storyboard и видео-генерация через доступные backend-модели.",
+    detail: "Сцены, короткие ролики, storyboard и видео-генерация через backend-модели.",
     icon: Video,
     tags: ["Gemini / Veo"],
   },
@@ -64,6 +64,69 @@ const modalityLabels: Record<string, string> = {
   voice: "голос",
   file: "файлы",
 };
+
+const providerModelCatalog = [
+  {
+    provider: "OpenAI",
+    accent: "border-sky-300/15 bg-sky-300/[0.04]",
+    models: [
+      { name: "GPT-5.5", type: "текст, код, рассуждение" },
+      { name: "GPT-5.4", type: "текст, код, документы" },
+      { name: "GPT-5.4 mini", type: "быстрые задачи и код" },
+      { name: "GPT-5.4 nano", type: "легкие задачи и быстрые ответы" },
+      { name: "GPT Image 2", type: "изображения" },
+      { name: "GPT-Realtime-2", type: "голосовой диалог" },
+      { name: "GPT-Realtime-Translate", type: "перевод речи" },
+      { name: "GPT-Realtime-1.5", type: "аудио-в-аудио" },
+      { name: "GPT-Realtime mini", type: "быстрый голос" },
+      { name: "GPT-Realtime-Whisper", type: "распознавание речи" },
+      { name: "GPT-4o Transcribe", type: "транскрибация" },
+      { name: "GPT-4o mini Transcribe", type: "быстрая транскрибация" },
+      { name: "GPT-4o mini TTS", type: "озвучка" },
+    ],
+  },
+  {
+    provider: "Anthropic",
+    accent: "border-orange-300/15 bg-orange-300/[0.04]",
+    models: [
+      { name: "Claude Fable 5", type: "сложное рассуждение" },
+      { name: "Claude Mythos 5", type: "агентные сценарии" },
+      { name: "Claude Mythos Preview", type: "исследовательские задачи" },
+      { name: "Claude Opus 4.8", type: "код и сложные задачи" },
+      { name: "Claude Sonnet 4.6", type: "баланс скорости и качества" },
+      { name: "Claude Haiku 4.5", type: "быстрые ответы" },
+    ],
+  },
+  {
+    provider: "Google Gemini",
+    accent: "border-emerald-300/15 bg-emerald-300/[0.04]",
+    models: [
+      { name: "Gemini 3.1 Pro", type: "сложные задачи" },
+      { name: "Gemini 3.5 Flash", type: "текст, код, агенты" },
+      { name: "Gemini 3 Flash", type: "быстрые задачи" },
+      { name: "Gemini 3.1 Flash-Lite", type: "экономичные ответы" },
+      { name: "Gemini 3.5 Live Translate", type: "перевод речи" },
+      { name: "Gemini 3.1 Flash Live", type: "живой голосовой диалог" },
+      { name: "Gemini 3.1 Flash TTS", type: "озвучка" },
+      { name: "Gemini 2.5 Flash", type: "быстрый multimodal" },
+      { name: "Gemini 2.5 Flash Live Preview", type: "разговорные агенты" },
+      { name: "Gemini 2.5 Flash TTS Preview", type: "быстрая озвучка" },
+      { name: "Gemini 2.5 Flash-Lite", type: "дешевые массовые задачи" },
+      { name: "Gemini 2.5 Pro", type: "рассуждение и код" },
+      { name: "Gemini 2.5 Pro TTS Preview", type: "качественная озвучка" },
+      { name: "Nano Banana 2", type: "изображения" },
+      { name: "Nano Banana Pro", type: "дизайн и 4K-визуалы" },
+      { name: "Nano Banana", type: "быстрые изображения" },
+      { name: "Veo 3.1 Preview", type: "видео" },
+      { name: "Veo 3.1 Lite Preview", type: "быстрое видео" },
+      { name: "Lyria 3 Pro Preview", type: "песни и музыка" },
+      { name: "Lyria 3 Clip Preview", type: "короткие музыкальные клипы" },
+      { name: "Lyria RealTime Experimental", type: "музыка в реальном времени" },
+    ],
+  },
+];
+
+const providerModelCatalogTotal = providerModelCatalog.reduce((total, group) => total + group.models.length, 0);
 
 export default function Models() {
   const { t } = useLanguage();
@@ -101,14 +164,14 @@ export default function Models() {
           <section className="max-w-3xl">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-gray-300">
               <Sparkles className="h-4 w-4" strokeWidth={1.7} />
-              40+ ИИ-моделей и режимов
+              {providerModelCatalogTotal} ИИ-моделей внутри системы
             </div>
             <h1 className="text-4xl font-semibold tracking-tight md:text-6xl">
               Какие модели есть в nomduchat
             </h1>
             <p className="mt-5 text-lg leading-relaxed text-gray-400">
-              Пользователь выбирает задачу, а nomduchat сам подбирает подходящий backend-провайдер, агент и формат ответа:
-              текст, код, документы, изображения, видео, музыку, голос или бизнес-сценарий.
+              nomduchat использует модели OpenAI, Anthropic и Google Gemini. Система сама выбирает backend-провайдера,
+              агента и формат ответа: текст, код, документы, изображения, видео, музыку, голос или бизнес-сценарий.
             </p>
           </section>
 
@@ -136,6 +199,50 @@ export default function Models() {
                 </article>
               );
             })}
+          </section>
+
+          <section className="mt-12">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <h2 className="text-2xl font-medium text-white">40 моделей, которые используются</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
+                  Список показывает конкретные модели и режимы, которые лежат в основе маршрутизации nomduchat.
+                  API-ключи и внутренняя конфигурация остаются скрытыми.
+                </p>
+              </div>
+              <div className="w-fit rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-gray-300">
+                Всего: {providerModelCatalogTotal}
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-3">
+              {providerModelCatalog.map((group) => (
+                <article key={group.provider} className={`rounded-2xl border p-4 ${group.accent}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-lg font-medium text-white">{group.provider}</h3>
+                    <span className="rounded-full border border-white/10 bg-black/50 px-2.5 py-1 text-xs text-gray-300">
+                      {group.models.length} моделей
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {group.models.map((model, index) => (
+                      <div key={model.name} className="rounded-xl border border-white/10 bg-black/45 p-3">
+                        <div className="flex items-start gap-3">
+                          <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 text-xs text-gray-500">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-white">{model.name}</div>
+                            <div className="mt-1 text-xs leading-relaxed text-gray-500">{model.type}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
           </section>
 
           <section className="mt-12 grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
@@ -179,20 +286,20 @@ export default function Models() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#080808] p-5">
-              <h2 className="text-xl font-medium">Почему написано 40+</h2>
+              <h2 className="text-xl font-medium">Почему 40 моделей</h2>
               <div className="mt-4 space-y-4 text-sm leading-relaxed text-gray-500">
                 <p>
                   В интерфейсе пользователь видит не длинный список сырых моделей, а готовые режимы: чат, код, бизнес,
                   учеба, документы, изображения, видео, музыка, голос, маркетинг и поддержка.
                 </p>
                 <p>
-                  Внутри каждый режим может использовать основной provider, fallback provider, специализированную модель
+                  Внутри каждый режим использует основной provider, fallback provider, специализированную модель
                   по модальности и отдельные настройки качества. Поэтому пользователю не нужно вручную выбирать между
                   десятками backend-вариантов.
                 </p>
                 <p>
-                  Реальные ключи и точные model IDs не показываются публично. Это защищает backend-конфигурацию, но
-                  список активных провайдеров и типов задач открыт выше.
+                  Реальные ключи не показываются публично. Это защищает backend-конфигурацию, но список моделей,
+                  активных провайдеров и типов задач открыт на этой странице.
                 </p>
               </div>
 
