@@ -23,6 +23,9 @@ const defaultRunMigrations = defaultNodeEnv === "production" ? "false" : "true";
 const defaultWebAppUrl = process.env.WEB_APP_URL ?? "http://127.0.0.1:5173";
 const defaultCorsOrigins = [
   defaultWebAppUrl,
+  "https://nomduchat.com",
+  "https://www.nomduchat.com",
+  "https://nomduchat.pages.dev",
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://localhost:5174",
@@ -155,7 +158,14 @@ if (
 export const config = {
   ...rawConfig,
   ABUSE_HASH_SECRET: rawConfig.ABUSE_HASH_SECRET ?? rawConfig.JWT_SECRET,
-  CORS_ORIGINS: parseCsv(rawConfig.CORS_ORIGINS),
+  CORS_ORIGINS: Array.from(
+    new Set([
+      ...parseCsv(rawConfig.CORS_ORIGINS),
+      ...(rawConfig.NODE_ENV === "production"
+        ? ["https://nomduchat.com", "https://www.nomduchat.com", "https://nomduchat.pages.dev"]
+        : []),
+    ])
+  ),
 };
 
 function loadLocalEnvFile() {
