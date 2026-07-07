@@ -124,6 +124,8 @@ export const en = {
       removeFile: "Remove file",
       fileReadLimit: "File added. A text fragment will be used for the answer.",
       fileUnsupported: "File added without content: only text formats are readable now.",
+      fileTooLarge: "The file was not added: it is too large. Maximum attachment size is {maxSize}.",
+      fileAttachmentLimitReached: "Attachment limit reached. You can add up to 5 files.",
       filePrompt: "Analyze the attached files.",
       voiceListening: "Listening. Speak now, the text will appear in the message field.",
       voiceUnsupported: "This browser does not support voice input.",

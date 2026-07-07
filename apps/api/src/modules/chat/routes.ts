@@ -20,7 +20,7 @@ const sendMessageSchema = z.object({
       z.object({
         name: z.string().trim().min(1).max(180),
         type: z.string().trim().max(120).optional().default("application/octet-stream"),
-        size: z.number().int().nonnegative().max(2_000_000),
+        size: z.number().int().nonnegative().max(8_000_000),
         content: z.string().max(20_000).optional(),
         truncated: z.boolean().optional(),
       })

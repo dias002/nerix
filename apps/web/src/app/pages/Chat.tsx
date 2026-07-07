@@ -30,7 +30,7 @@ import {
 } from "../api";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme";
-import { formatFileSize, maxAttachedFiles, readAttachment, speechLocale } from "./chat/attachments";
+import { formatFileSize, maxAttachedFileSize, maxAttachedFiles, readAttachment, speechLocale } from "./chat/attachments";
 import { GenerationJobCard, generationStatusText, mediaExtension, mediaTitle } from "./chat/generation";
 import { toApiAttachment, toAssistantMessage, toChatMessage } from "./chat/messageMappers";
 import type { AttachedFile, Message } from "./chat/types";
@@ -412,13 +412,34 @@ export default function Chat() {
   };
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files ?? []).slice(0, maxAttachedFiles - attachedFiles.length);
-    event.target.value = "";
-    if (selectedFiles.length === 0) return;
+    const selectedFiles = Array.from(event.target.files ?? []);
+    const canAttachMore = maxAttachedFiles - attachedFiles.length;
+    if (canAttachMore <= 0) {
+      setUnavailableNotice(t.chat.fileAttachmentLimitReached);
+      event.target.value = "";
+      return;
+    }
 
-    const files = await Promise.all(selectedFiles.map(readAttachment));
+    const filesWithinLimit = selectedFiles.filter((file) => file.size <= maxAttachedFileSize);
+    const oversizedFiles = selectedFiles.filter((file) => file.size > maxAttachedFileSize);
+    const selectedFilesLimited = filesWithinLimit.slice(0, canAttachMore);
+
+    event.target.value = "";
+    if (selectedFilesLimited.length === 0) {
+      if (oversizedFiles.length > 0) {
+        setUnavailableNotice(t.chat.fileTooLarge.replace("{maxSize}", formatFileSize(maxAttachedFileSize)));
+      }
+      return;
+    }
+
+    const files = await Promise.all(selectedFilesLimited.map(readAttachment));
     setAttachedFiles((prev) => [...prev, ...files].slice(0, maxAttachedFiles));
-    setUnavailableNotice(files.some((file) => file.content) ? t.chat.fileReadLimit : t.chat.fileUnsupported);
+
+    const oversizedNotice = oversizedFiles.length
+      ? t.chat.fileTooLarge.replace("{maxSize}", formatFileSize(maxAttachedFileSize))
+      : null;
+    const fileNotice = files.some((file) => file.content) ? t.chat.fileReadLimit : t.chat.fileUnsupported;
+    setUnavailableNotice(oversizedNotice ?? fileNotice);
   };
 
   const removeFile = (fileId: string) => {
