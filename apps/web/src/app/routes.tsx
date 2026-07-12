@@ -18,7 +18,7 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
 const Chat = lazy(() => import("./pages/Chat"));
-const AvatarStudio = lazy(() => import("./pages/AvatarStudio"));
+const AvatarComingSoon = lazy(() => import("./pages/AvatarComingSoon"));
 const Apps = lazy(() => import("./pages/Apps"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Agents = lazy(() => import("./pages/Agents"));
@@ -169,7 +169,7 @@ const routes: RouteObject[] = [
     children: [
       { index: true, Component: Chat },
       { path: "chat", Component: Chat },
-      { path: "avatar", Component: AvatarStudio },
+      { path: "avatar", Component: AvatarComingSoon },
       { path: "apps", Component: Apps },
       { path: "projects", Component: Projects },
       { path: "history", Component: History },
