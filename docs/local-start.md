@@ -31,13 +31,20 @@ From the repo root:
 
 ```bash
 npm run web:dev
+npm run api:dev
 npm run web:build
 npm run infra:up
 ```
 
+By default, `npm run api:dev` uses in-memory repositories so local UI work does not require PostgreSQL. This is useful for quick smoke tests and frontend work; data is reset when the API process restarts.
+
 Local PostgreSQL is exposed on `127.0.0.1:55432` to avoid conflicts with a system PostgreSQL running on `5432`.
 
-The API scaffold is present, but dependencies still need to be installed before it can run.
+To test PostgreSQL persistence, start the infrastructure and set:
+
+```bash
+API_PERSISTENCE=postgres DATABASE_RUN_MIGRATIONS=true npm run api:dev
+```
 
 ## Product Rule
 

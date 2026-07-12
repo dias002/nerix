@@ -2,8 +2,8 @@ import { DomainError, fail, ok } from "../../domain/result.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 
 const freeDailyTextLimit = 7;
-const paidOnlyAgentIds = new Set(["image", "video", "music", "voice"]);
-const paidOnlyModalities = new Set(["image", "video", "music", "voice"]);
+const paidOnlyAgentIds = new Set(["image", "video", "avatar", "music", "voice"]);
+const paidOnlyModalities = new Set(["image", "video", "avatar_video", "music", "voice"]);
 
 export type SubscriptionAccessService = {
   currentSubscription(userId: string): Promise<{
@@ -46,6 +46,7 @@ export class ChatUsagePolicy {
       media: {
         image: access.hasActiveSubscription,
         video: access.hasActiveSubscription,
+        avatarVideo: access.hasActiveSubscription,
         music: access.hasActiveSubscription,
         voice: access.hasActiveSubscription,
       },
@@ -60,7 +61,7 @@ export class ChatUsagePolicy {
       return fail(
         new DomainError(
           "subscription_required",
-          "Картинки, видео, песни и голос доступны после подписки. В бесплатном режиме доступно 7 обычных текстовых запросов в день.",
+          "Картинки, видео, аватар-ролики, песни и голос доступны после подписки. В бесплатном режиме доступно 7 обычных текстовых запросов в день.",
           402
         )
       );

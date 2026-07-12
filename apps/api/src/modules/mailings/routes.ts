@@ -88,7 +88,7 @@ export async function registerMailingRoutes(
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
-    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-campaign-create");
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-contact-import");
     if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(
@@ -115,6 +115,9 @@ export async function registerMailingRoutes(
 
     const user = await resolveMailingUser(request, auth);
     if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await abuseGuard.assertBusinessActionAllowed(request, user.value.userId, "mailing-campaign-create");
+    if (!allowed.ok) return sendResult(reply, allowed);
 
     return sendResult(
       reply,

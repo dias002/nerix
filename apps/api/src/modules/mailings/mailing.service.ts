@@ -103,6 +103,9 @@ export class MailingService {
     const validationError = validateCampaign(input);
     if (validationError) return fail(validationError);
 
+    const html = ensureUnsubscribeBlock(normalizeCampaignHtml(input.html.trim()));
+    const text = input.text?.trim() || stripHtml(html);
+
     const campaign = await this.repository.createCampaign({
       ...input,
       name: input.name.trim(),
@@ -110,8 +113,8 @@ export class MailingService {
       fromName: input.fromName?.trim() ?? "",
       replyTo: input.replyTo?.trim().toLowerCase() ?? "",
       subject: input.subject.trim(),
-      html: ensureUnsubscribeBlock(input.html.trim()),
-      text: input.text?.trim() ?? "",
+      html,
+      text,
       tag: `nomduchat_${Date.now()}_${randomUUID().slice(0, 8)}`,
     });
     if (!campaign) return fail(new DomainError("not_found", "Audience was not found.", 404));
@@ -220,6 +223,9 @@ function validateCampaign(input: CreateMailingCampaignInput) {
   if (!input.subject.trim()) return new DomainError("validation_failed", "Subject is required.");
   if (hasHeaderControlChars(input.subject)) return new DomainError("validation_failed", "Subject is invalid.");
   if (!input.html.trim()) return new DomainError("validation_failed", "HTML body is required.");
+  if (/<script[\s>]/i.test(input.html)) {
+    return new DomainError("validation_failed", "Script tags are not allowed in email HTML.");
+  }
   if (input.html.length > maxCampaignHtmlLength || (input.text?.length ?? 0) > maxCampaignHtmlLength) {
     return new DomainError("validation_failed", "Campaign body is too large.");
   }
@@ -277,4 +283,42 @@ function ensureUnsubscribeBlock(html: string) {
 
   return `${html}
 <p style="margin-top:24px;color:#777;font-size:12px;line-height:1.5;">Если письмо больше не актуально, ответьте на него словом "отписка".</p>`;
+}
+
+function normalizeCampaignHtml(html: string) {
+  if (/<html[\s>]/i.test(html) || /<body[\s>]/i.test(html)) {
+    return html;
+  }
+
+  return `<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>nomduchat mailing</title>
+  </head>
+  <body style="margin:0;background:#f5f5f5;color:#111827;font-family:Arial,sans-serif;">
+    <div style="max-width:640px;margin:0 auto;padding:24px;">
+      <div style="background:#ffffff;border-radius:18px;padding:28px;border:1px solid #e5e7eb;">
+        ${html}
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
+function stripHtml(html: string) {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }

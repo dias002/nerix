@@ -10,7 +10,9 @@
   "scripts": {
     "web:dev": "npm --prefix apps/web run dev -- --host 127.0.0.1",
     "web:build": "npm run shared:build && npm --prefix apps/web run build",
+    "web:preview": "npm run web:build && npm --prefix apps/web run preview -- --host 127.0.0.1",
     "api:dev": "npm --prefix apps/api run dev",
+    "api:dev:postgres": "API_PERSISTENCE=postgres npm --prefix apps/api run dev",
     "api:build": "npm run shared:build && npm --prefix apps/api run build",
     "api:migrate": "npm run api:build && npm --prefix apps/api run migrate:build",
     "api:test": "npm --prefix apps/api run test",
@@ -20,6 +22,9 @@
     "shared:build": "npm --prefix packages/shared run build",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down",
+    "infra:ru:up": "docker compose --env-file infra/russia-vps/.env -f infra/russia-vps/docker-compose.yml up -d --build",
+    "infra:ru:down": "docker compose --env-file infra/russia-vps/.env -f infra/russia-vps/docker-compose.yml down",
+    "infra:ru:logs": "docker compose --env-file infra/russia-vps/.env -f infra/russia-vps/docker-compose.yml logs -f",
     "test": "npm run api:test",
     "check": "npm run api:build && npm run api:test && npm run web:build"
   },

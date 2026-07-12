@@ -8,7 +8,7 @@ export async function resolveRequestUserId(
   request: FastifyRequest,
   auth: AuthService,
   fallbackUserId = "local-user"
-): Promise<Result<{ userId: string; email?: string | null }>> {
+): Promise<Result<{ userId: string; email?: string | null; name?: string | null }>> {
   const accessToken = readBearerToken(request.headers.authorization);
   if (!accessToken) {
     if (process.env.NODE_ENV === "production") {
@@ -21,7 +21,11 @@ export async function resolveRequestUserId(
   const currentUser = await auth.me(accessToken);
   if (!currentUser.ok) return currentUser;
 
-  return ok({ userId: currentUser.value.user.id, email: currentUser.value.user.email });
+  return ok({
+    userId: currentUser.value.user.id,
+    email: currentUser.value.user.email,
+    name: currentUser.value.user.name,
+  });
 }
 
 export function readBearerToken(authorization: string | undefined) {

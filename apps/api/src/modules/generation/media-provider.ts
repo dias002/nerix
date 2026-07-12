@@ -1,5 +1,6 @@
 import type { AiModality } from "@nomduchat/shared";
 import { config } from "../../config.js";
+import type { AvatarVideoGenerationInput } from "./generation.types.js";
 
 export type MediaGenerationProviderInput = {
   jobId: string;
@@ -8,6 +9,7 @@ export type MediaGenerationProviderInput = {
   modality: AiModality;
   prompt: string;
   systemPrompt?: string;
+  avatarVideo?: AvatarVideoGenerationInput;
 };
 
 export type MediaGenerationProviderResult = {
@@ -44,6 +46,10 @@ export interface MediaGenerationProvider {
   cancel(operationName: string): Promise<MediaGenerationCancelResult>;
   fetchArtifact(uri: string): Promise<MediaArtifact>;
 }
+
+const heygenBaseUrl = "https://api.heygen.com";
+const heygenVideoAgentOperationPrefix = "heygen-video-agent://session/";
+const heygenVideoOperationPrefix = "heygen-video://video/";
 
 export class MockMediaGenerationProvider implements MediaGenerationProvider {
   async generate(input: MediaGenerationProviderInput) {
@@ -278,29 +284,355 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
   }
 }
 
+export class HeyGenMediaGenerationProvider implements MediaGenerationProvider {
+  async generate(input: MediaGenerationProviderInput) {
+    const apiKey = requireHeyGenApiKey("HeyGen avatar video generation");
+    if (input.modality !== "avatar_video" && input.modality !== "video") {
+      throw new Error(`HeyGen video agent does not support '${input.modality}'.`);
+    }
+
+    if (input.modality === "avatar_video" && input.avatarVideo?.referenceImage) {
+      return this.generateImageAvatarVideo(input, apiKey);
+    }
+
+    const requestBody = compactObject({
+      prompt: input.prompt,
+      mode: "generate",
+      avatar_id: nonEmptyString(config.HEYGEN_AVATAR_ID),
+      voice_id: nonEmptyString(config.HEYGEN_VOICE_ID),
+      style_id: nonEmptyString(config.HEYGEN_STYLE_ID),
+      brand_kit_id: nonEmptyString(config.HEYGEN_BRAND_KIT_ID),
+      orientation: config.HEYGEN_ORIENTATION,
+      callback_url: nonEmptyString(config.HEYGEN_CALLBACK_URL),
+      callback_id: input.jobId,
+      incognito_mode: true,
+    });
+
+    const body = await this.fetchJson(
+      "/v3/video-agents",
+      {
+        method: "POST",
+        headers: heygenJsonHeaders(apiKey),
+        body: JSON.stringify(requestBody),
+      },
+      "HeyGen video agent generation"
+    );
+    const data = dataRecord(body);
+    const status = firstString(data, ["status", "state"]);
+    if (isHeyGenFailedStatus(status)) {
+      throw new Error(`HeyGen video agent generation failed: ${extractFirstString(data, heygenErrorKeys) ?? status}`);
+    }
+
+    const sessionId = firstString(data, ["session_id", "sessionId", "id"]);
+    if (!sessionId) {
+      throw new Error("HeyGen video agent generation did not return a session id.");
+    }
+
+    return {
+      status: "running" as const,
+      operationName: makeHeyGenVideoAgentOperationName(sessionId),
+      raw: body,
+    };
+  }
+
+  async refresh(operationName: string) {
+    const apiKey = requireHeyGenApiKey("HeyGen avatar video refresh");
+    const directVideoId = parseHeyGenVideoOperationName(operationName);
+    if (directVideoId) return this.refreshVideo(apiKey, directVideoId);
+
+    const sessionId = parseHeyGenVideoAgentOperationName(operationName);
+    if (!sessionId) {
+      throw new Error("HeyGen operation name is invalid.");
+    }
+
+    const sessionBody = await this.fetchJson(
+      `/v3/video-agents/${encodeURIComponent(sessionId)}`,
+      {
+        method: "GET",
+        headers: heygenJsonHeaders(apiKey),
+      },
+      "HeyGen video agent refresh"
+    );
+    const sessionData = dataRecord(sessionBody);
+    const sessionStatus = firstString(sessionData, ["status", "state"]);
+    if (isHeyGenFailedStatus(sessionStatus)) {
+      return {
+        status: "failed" as const,
+        errorMessage: extractFirstString(sessionData, heygenErrorKeys) ?? "HeyGen video agent session failed.",
+        raw: sessionBody,
+      };
+    }
+
+    const videoId = firstString(sessionData, ["video_id", "videoId"]);
+    if (!videoId) {
+      return {
+        status: "running" as const,
+        raw: sessionBody,
+      };
+    }
+
+    const videoBody = await this.fetchJson(
+      `/v3/videos/${encodeURIComponent(videoId)}`,
+      {
+        method: "GET",
+        headers: heygenJsonHeaders(apiKey),
+      },
+      "HeyGen video status"
+    );
+    const videoData = dataRecord(videoBody);
+    const videoStatus = firstString(videoData, ["status", "state"]);
+    if (isHeyGenFailedStatus(videoStatus)) {
+      return {
+        status: "failed" as const,
+        errorMessage: extractFirstString(videoData, heygenErrorKeys) ?? "HeyGen video rendering failed.",
+        raw: {
+          session: sessionBody,
+          video: videoBody,
+        },
+      };
+    }
+
+    const videoUrl = firstString(videoData, ["video_url", "videoUrl", "url", "download_url", "downloadUrl"]);
+    if (isHeyGenCompletedStatus(videoStatus) && videoUrl) {
+      return {
+        status: "succeeded" as const,
+        mimeType: inferMimeTypeFromUri(videoUrl) ?? "video/mp4",
+        providerUri: videoUrl,
+        raw: {
+          session: sessionBody,
+          video: videoBody,
+        },
+      };
+    }
+
+    if (isHeyGenCompletedStatus(videoStatus)) {
+      return {
+        status: "failed" as const,
+        errorMessage: "HeyGen video completed without a downloadable video URL.",
+        raw: {
+          session: sessionBody,
+          video: videoBody,
+        },
+      };
+    }
+
+    return {
+      status: "running" as const,
+      raw: {
+        session: sessionBody,
+        video: videoBody,
+      },
+    };
+  }
+
+  async cancel(operationName: string) {
+    const sessionId = parseHeyGenVideoAgentOperationName(operationName);
+    const videoId = parseHeyGenVideoOperationName(operationName);
+    return {
+      raw: compactObject({
+        provider: "heygen",
+        sessionId,
+        videoId,
+        cancellation: "local_job_cancelled",
+      }),
+    };
+  }
+
+  async fetchArtifact(uri: string) {
+    const response = await fetch(uri);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`HeyGen artifact fetch failed with ${response.status}: ${errorBody.slice(0, 500)}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return {
+      mimeType: response.headers.get("content-type") ?? inferMimeTypeFromUri(uri) ?? "video/mp4",
+      data: Buffer.from(arrayBuffer),
+    };
+  }
+
+  private async fetchJson(path: string, init: RequestInit, label: string) {
+    const response = await fetch(`${heygenBaseUrl}${path}`, init);
+    const body = await readJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(`${label} failed with ${response.status}: ${JSON.stringify(body).slice(0, 500)}`);
+    }
+
+    return body;
+  }
+
+  private async generateImageAvatarVideo(input: MediaGenerationProviderInput, apiKey: string) {
+    const avatarVideo = input.avatarVideo;
+    const referenceImage = avatarVideo?.referenceImage;
+    if (!avatarVideo?.consentConfirmed) {
+      throw new Error("Consent is required before sending a face image to HeyGen.");
+    }
+    if (!referenceImage) {
+      throw new Error("A reference face image is required for personal avatar video generation.");
+    }
+
+    const script = nonEmptyString(avatarVideo.script) ?? input.prompt;
+    const voiceId = nonEmptyString(avatarVideo.voiceId) ?? nonEmptyString(config.HEYGEN_VOICE_ID);
+    if (!voiceId) {
+      throw new Error("HEYGEN_VOICE_ID is required for HeyGen image-to-video generation.");
+    }
+
+    const asset = await this.uploadAsset(apiKey, referenceImage);
+    const requestBody = compactObject({
+      type: "image",
+      image: {
+        type: "asset_id",
+        asset_id: asset.assetId,
+      },
+      script,
+      voice_id: voiceId,
+      title: createHeyGenTitle(avatarVideo.avatarName, input.jobId),
+      resolution: "1080p",
+      aspect_ratio: avatarVideo.aspectRatio ?? "auto",
+      callback_url: nonEmptyString(config.HEYGEN_CALLBACK_URL),
+      callback_id: input.jobId,
+      output_format: "mp4",
+    });
+
+    const body = await this.fetchJson(
+      "/v3/videos",
+      {
+        method: "POST",
+        headers: heygenJsonHeaders(apiKey),
+        body: JSON.stringify(requestBody),
+      },
+      "HeyGen image avatar video generation"
+    );
+    const data = dataRecord(body);
+    const status = firstString(data, ["status", "state"]);
+    if (isHeyGenFailedStatus(status)) {
+      throw new Error(`HeyGen image avatar video generation failed: ${extractFirstString(data, heygenErrorKeys) ?? status}`);
+    }
+
+    const videoId = firstString(data, ["video_id", "videoId", "id"]);
+    if (!videoId) {
+      throw new Error("HeyGen image avatar video generation did not return a video id.");
+    }
+
+    return {
+      status: "running" as const,
+      operationName: makeHeyGenVideoOperationName(videoId),
+      raw: compactObject({
+        provider: "heygen",
+        flow: "image_to_video",
+        assetId: asset.assetId,
+        assetMimeType: asset.mimeType,
+        assetSizeBytes: asset.sizeBytes,
+        videoId,
+        videoStatus: status,
+      }),
+    };
+  }
+
+  private async uploadAsset(apiKey: string, referenceImage: NonNullable<AvatarVideoGenerationInput["referenceImage"]>) {
+    const form = new FormData();
+    const bytes = Buffer.from(referenceImage.dataBase64, "base64");
+    form.append(
+      "file",
+      new Blob([new Uint8Array(bytes)], { type: referenceImage.mimeType }),
+      referenceImage.filename ?? `nomduchat-avatar-${Date.now()}.${extensionForMimeType(referenceImage.mimeType)}`
+    );
+
+    const body = await this.fetchJson(
+      "/v3/assets",
+      {
+        method: "POST",
+        headers: heygenUploadHeaders(apiKey),
+        body: form,
+      },
+      "HeyGen avatar image upload"
+    );
+    const data = dataRecord(body);
+    const assetId = firstString(data, ["asset_id", "assetId", "id"]);
+    if (!assetId) {
+      throw new Error("HeyGen avatar image upload did not return an asset id.");
+    }
+
+    return {
+      assetId,
+      mimeType: firstString(data, ["mime_type", "mimeType"]) ?? referenceImage.mimeType,
+      sizeBytes: typeof data.size_bytes === "number" ? data.size_bytes : bytes.byteLength,
+    };
+  }
+
+  private async refreshVideo(apiKey: string, videoId: string) {
+    const videoBody = await this.fetchJson(
+      `/v3/videos/${encodeURIComponent(videoId)}`,
+      {
+        method: "GET",
+        headers: heygenJsonHeaders(apiKey),
+      },
+      "HeyGen video status"
+    );
+    const videoData = dataRecord(videoBody);
+    const videoStatus = firstString(videoData, ["status", "state"]);
+    if (isHeyGenFailedStatus(videoStatus)) {
+      return {
+        status: "failed" as const,
+        errorMessage: extractFirstString(videoData, heygenErrorKeys) ?? "HeyGen video rendering failed.",
+        raw: videoBody,
+      };
+    }
+
+    const videoUrl = firstString(videoData, ["video_url", "videoUrl", "url", "download_url", "downloadUrl"]);
+    if (isHeyGenCompletedStatus(videoStatus) && videoUrl) {
+      return {
+        status: "succeeded" as const,
+        mimeType: inferMimeTypeFromUri(videoUrl) ?? "video/mp4",
+        providerUri: videoUrl,
+        raw: videoBody,
+      };
+    }
+
+    if (isHeyGenCompletedStatus(videoStatus)) {
+      return {
+        status: "failed" as const,
+        errorMessage: "HeyGen video completed without a downloadable video URL.",
+        raw: videoBody,
+      };
+    }
+
+    return {
+      status: "running" as const,
+      raw: videoBody,
+    };
+  }
+}
+
 export class BackendMediaGenerationProvider implements MediaGenerationProvider {
   private readonly mock = new MockMediaGenerationProvider();
   private readonly gemini = new GeminiMediaGenerationProvider();
+  private readonly heygen = new HeyGenMediaGenerationProvider();
 
   async generate(input: MediaGenerationProviderInput) {
     if (input.provider === "mock-provider") return this.mock.generate(input);
     if (input.provider === "gemini") return this.gemini.generate(input);
+    if (input.provider === "heygen") return this.heygen.generate(input);
 
     throw new Error(`Media provider '${input.provider}' is not supported yet.`);
   }
 
   async refresh(operationName: string) {
     if (operationName.startsWith("mock://")) return this.mock.refresh();
+    if (isHeyGenOperationName(operationName)) return this.heygen.refresh(operationName);
     return this.gemini.refresh(operationName);
   }
 
   async cancel(operationName: string) {
     if (operationName.startsWith("mock://")) return this.mock.cancel(operationName);
+    if (isHeyGenOperationName(operationName)) return this.heygen.cancel(operationName);
     return this.gemini.cancel(operationName);
   }
 
   async fetchArtifact(uri: string) {
     if (uri.startsWith("mock://")) return this.mock.fetchArtifact(uri);
+    if (isHttpUri(uri) && !isGeminiArtifactUri(uri)) return this.heygen.fetchArtifact(uri);
     return this.gemini.fetchArtifact(uri);
   }
 }
@@ -446,11 +778,122 @@ function defaultMimeTypeForModality(modality: AiModality) {
   if (modality === "image") return "image/png";
   if (modality === "music") return "audio/mpeg";
   if (modality === "voice") return "audio/wav";
-  if (modality === "video") return "video/mp4";
+  if (modality === "video" || modality === "avatar_video") return "video/mp4";
   return undefined;
 }
 
 function extractErrorMessage(error: object) {
   const message = (error as Record<string, unknown>).message;
   return typeof message === "string" ? message : undefined;
+}
+
+const heygenErrorKeys = ["message", "error", "error_message", "failure_message", "fail_reason", "details"];
+
+function requireHeyGenApiKey(scope: string) {
+  if (!config.HEYGEN_API_KEY) {
+    throw new Error(`HEYGEN_API_KEY is required for ${scope}.`);
+  }
+
+  return config.HEYGEN_API_KEY;
+}
+
+function heygenJsonHeaders(apiKey: string) {
+  return {
+    "Content-Type": "application/json",
+    "X-Api-Key": apiKey,
+  };
+}
+
+function heygenUploadHeaders(apiKey: string) {
+  return {
+    "X-Api-Key": apiKey,
+  };
+}
+
+function dataRecord(input: Record<string, unknown>) {
+  const data = input.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) return data as Record<string, unknown>;
+  return input;
+}
+
+function makeHeyGenVideoAgentOperationName(sessionId: string) {
+  return `${heygenVideoAgentOperationPrefix}${encodeURIComponent(sessionId)}`;
+}
+
+function isHeyGenVideoAgentOperationName(operationName: string) {
+  return operationName.startsWith(heygenVideoAgentOperationPrefix);
+}
+
+function makeHeyGenVideoOperationName(videoId: string) {
+  return `${heygenVideoOperationPrefix}${encodeURIComponent(videoId)}`;
+}
+
+function isHeyGenVideoOperationName(operationName: string) {
+  return operationName.startsWith(heygenVideoOperationPrefix);
+}
+
+function isHeyGenOperationName(operationName: string) {
+  return isHeyGenVideoAgentOperationName(operationName) || isHeyGenVideoOperationName(operationName);
+}
+
+function parseHeyGenVideoAgentOperationName(operationName: string) {
+  if (!isHeyGenVideoAgentOperationName(operationName)) return undefined;
+  const rawSessionId = operationName.slice(heygenVideoAgentOperationPrefix.length);
+  try {
+    return decodeURIComponent(rawSessionId);
+  } catch {
+    return rawSessionId;
+  }
+}
+
+function parseHeyGenVideoOperationName(operationName: string) {
+  if (!isHeyGenVideoOperationName(operationName)) return undefined;
+  const rawVideoId = operationName.slice(heygenVideoOperationPrefix.length);
+  try {
+    return decodeURIComponent(rawVideoId);
+  } catch {
+    return rawVideoId;
+  }
+}
+
+function isHeyGenFailedStatus(status?: string) {
+  if (!status) return false;
+  return ["failed", "failure", "error", "canceled", "cancelled"].includes(status.toLowerCase());
+}
+
+function isHeyGenCompletedStatus(status?: string) {
+  if (!status) return false;
+  return ["completed", "complete", "succeeded", "success", "done"].includes(status.toLowerCase());
+}
+
+function nonEmptyString(value?: string) {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function createHeyGenTitle(name: string | undefined, jobId: string) {
+  const cleanName = nonEmptyString(name)?.replace(/\s+/g, " ").slice(0, 60);
+  return cleanName ? `${cleanName} · nomduchat` : `nomduchat avatar ${jobId.slice(0, 8)}`;
+}
+
+function extensionForMimeType(mimeType: string) {
+  if (mimeType === "image/png") return "png";
+  if (mimeType === "image/webp") return "webp";
+  return "jpg";
+}
+
+function isHttpUri(uri: string) {
+  return uri.startsWith("http://") || uri.startsWith("https://");
+}
+
+function isGeminiArtifactUri(uri: string) {
+  try {
+    return new URL(uri).hostname === "generativelanguage.googleapis.com";
+  } catch {
+    return false;
+  }
+}
+
+function compactObject(input: Record<string, unknown>) {
+  return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
 }

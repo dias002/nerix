@@ -11,6 +11,7 @@ import {
   setApiLocalRoleOverride,
   type UserApiRecord,
 } from "./api";
+import { reachAnalyticsGoal } from "./analytics";
 
 export type LocalRoleOverride = "real" | "user" | "business_owner" | "business_employee" | "admin";
 
@@ -133,6 +134,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const response = await registerUser(input);
         setRoleOverrideState("real");
         updateSession(response);
+        reachAnalyticsGoal("registration", {
+          country: input.country ?? response.user.country,
+          language: input.language ?? response.user.language,
+        });
       },
       completeOAuth(nextSession) {
         updateSession(nextSession);

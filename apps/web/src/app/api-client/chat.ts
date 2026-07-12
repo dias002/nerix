@@ -1,4 +1,5 @@
 import type { Language } from "@nomduchat/shared";
+import type { ResponseStyleId } from "../responsePreferences";
 import type {
   ChatAnswerVariantApiRecord,
   ChatApiMessage,
@@ -34,6 +35,8 @@ export async function sendChatMessage(input: {
   message: string;
   conversationId?: string;
   agentId?: string;
+  selectedModelId?: string;
+  responseStyle?: ResponseStyleId;
   language?: Language;
   country?: "KZ" | "RU";
   attachments?: ChatAttachmentInput[];
@@ -45,6 +48,8 @@ export async function sendChatMessage(input: {
       language: input.language ?? "ru",
       conversationId: input.conversationId,
       agentId: input.agentId,
+      selectedModelId: input.selectedModelId,
+      responseStyle: input.responseStyle,
       message: input.message,
       attachments: input.attachments,
     }),
@@ -54,6 +59,8 @@ export async function sendChatMessage(input: {
 export async function regenerateChatMessage(input: {
   conversationId: string;
   agentId?: string;
+  selectedModelId?: string;
+  responseStyle?: ResponseStyleId;
   language?: Language;
   country?: "KZ" | "RU";
 }) {
@@ -64,6 +71,8 @@ export async function regenerateChatMessage(input: {
       language: input.language ?? "ru",
       conversationId: input.conversationId,
       agentId: input.agentId,
+      selectedModelId: input.selectedModelId,
+      responseStyle: input.responseStyle,
     }),
   });
 }

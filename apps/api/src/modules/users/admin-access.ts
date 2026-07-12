@@ -1,7 +1,7 @@
 import { config } from "../../config.js";
 import type { DatabaseClient } from "../../database/index.js";
 
-export const ownerEntitlementCredits = 1_000_000_000;
+export const ownerEntitlementCredits = 50_000;
 export const ownerEntitlementReferenceId = "owner-full-access";
 
 const builtInOwnerEmails = ["dias.sunnatilla@gmail.com"];
@@ -101,10 +101,25 @@ export async function ensureOwnerWalletCredits(client: DatabaseClient, databaseU
   if (!row) return;
 
   const availableCredits = toNumber(row.available_credits);
-  if (availableCredits >= ownerEntitlementCredits) return;
+  const ownerEntitlementLedger = await client.query<{ id: string }>(
+    `
+      select id
+      from ledger_entries
+      where wallet_id = $1
+        and reference_type = 'owner_entitlement'
+        and reference_id = $2
+      limit 1
+    `,
+    [row.id, ownerEntitlementReferenceId]
+  );
+  const hasOwnerEntitlement = Boolean(ownerEntitlementLedger.rows[0]);
+
+  if (availableCredits === ownerEntitlementCredits) return;
+  if (availableCredits > ownerEntitlementCredits && !hasOwnerEntitlement) return;
 
   const nextAvailableCredits = ownerEntitlementCredits;
   const amountCredits = nextAvailableCredits - availableCredits;
+  const ledgerType = amountCredits >= 0 ? "topup" : "adjustment";
 
   await client.query(
     `
@@ -127,14 +142,19 @@ export async function ensureOwnerWalletCredits(client: DatabaseClient, databaseU
         reference_id,
         metadata
       )
-      values ($1, 'topup', $2, $3, 'owner_entitlement', $4, $5::jsonb)
+      values ($1, $2, $3, $4, 'owner_entitlement', $5, $6::jsonb)
     `,
     [
       row.id,
+      ledgerType,
       amountCredits,
       nextAvailableCredits,
       ownerEntitlementReferenceId,
-      JSON.stringify({ email: owner.email, source: "built_in_owner_entitlement" }),
+      JSON.stringify({
+        email: owner.email,
+        source: "built_in_owner_entitlement",
+        previousAvailableCredits: availableCredits,
+      }),
     ]
   );
 }

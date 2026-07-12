@@ -90,7 +90,7 @@ export default function Settings() {
           label: t.memory.title,
           icon: Brain,
           value: t.memory.subtitle,
-          path: "/workspace/memory",
+          path: "/workspace/settings/memory",
         },
       ],
     },

@@ -33,6 +33,15 @@ export type AuthApiResponse = {
   accessToken: string;
 };
 
+export type LinkedAccountApiRecord = {
+  provider: "google" | "vk";
+  providerUserId: string;
+  email: string | null;
+  displayName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ChatApiMessage = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -205,6 +214,7 @@ export type UsageLimitsApiResponse = {
   media: {
     image: boolean;
     video: boolean;
+    avatarVideo: boolean;
     music: boolean;
     voice: boolean;
   };
@@ -223,6 +233,8 @@ export type SubscriptionCheckoutApiResponse = {
     creditsGranted: boolean;
     providerCheckoutId: string;
     checkoutUrl: string;
+    customerEmail: string | null;
+    customerName: string | null;
     createdAt: string;
     updatedAt: string;
   };
@@ -382,9 +394,20 @@ export type AiProviderApiRecord = {
   reason: string;
 };
 
+export type AiModelOptionApiRecord = {
+  id: string;
+  providerCode: string;
+  providerName: string;
+  label: string;
+  description: string;
+  tier: "fast" | "balanced" | "pro";
+  modalities: AiModality[];
+};
+
 export type AiProvidersApiResponse = {
   policyMode: string;
   providers: AiProviderApiRecord[];
+  models: AiModelOptionApiRecord[];
 };
 
 export type AdminFeatureFlagApiRecord = {
@@ -1020,3 +1043,4 @@ export * from './admin';
 export * from './mailings';
 export * from './business';
 export * from './telegram';
+export * from './geo';

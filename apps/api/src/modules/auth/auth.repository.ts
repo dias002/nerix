@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { isCountryCode, type CountryCode, type Language } from "@nomduchat/shared";
 import type { DatabaseClient } from "../../database/index.js";
 import { ensureOwnerAccountEntitlements, isAdminEmail } from "../users/admin-access.js";
-import { toPublicUserId } from "../users/local-user.js";
+import { toDatabaseUserId, toPublicUserId } from "../users/local-user.js";
 import type { SystemRole, UserPermissions, UserRecord, WorkspaceRole } from "../users/user.types.js";
 
 export type AuthUserRecord = UserRecord & {
@@ -21,6 +21,17 @@ export type OAuthUserProfile = {
   rawProfile?: Record<string, unknown>;
 };
 
+export type OAuthAccountRecord = {
+  provider: OAuthProviderCode;
+  providerUserId: string;
+  email: string | null;
+  displayName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OAuthUnlinkResult = "unlinked" | "not_found" | "last_sign_in_method";
+
 export type PasswordResetTokenTarget = {
   userId: string;
   email: string;
@@ -38,6 +49,8 @@ export interface AuthRepository {
   findByEmail(email: string): Promise<AuthUserRecord | null>;
   findById(userId: string): Promise<UserRecord | null>;
   findOrCreateOAuthUser(input: OAuthUserProfile): Promise<UserRecord>;
+  listOAuthAccounts(userId: string): Promise<OAuthAccountRecord[]>;
+  unlinkOAuthAccount(userId: string, provider: OAuthProviderCode): Promise<OAuthUnlinkResult>;
   createPasswordResetToken(input: {
     email: string;
     tokenHash: string;
@@ -52,7 +65,7 @@ export interface AuthRepository {
 export class InMemoryAuthRepository implements AuthRepository {
   private readonly users = new Map<string, AuthUserRecord>();
   private readonly emailIndex = new Map<string, string>();
-  private readonly oauthIndex = new Map<string, string>();
+  private readonly oauthIndex = new Map<string, OAuthAccountRecord & { userId: string }>();
   private readonly passwordResetTokens = new Map<
     string,
     { userId: string; expiresAt: string; usedAt: string | null }
@@ -101,16 +114,16 @@ export class InMemoryAuthRepository implements AuthRepository {
 
   async findOrCreateOAuthUser(input: OAuthUserProfile) {
     const oauthKey = `${input.provider}:${input.providerUserId}`;
-    const existingOAuthUserId = this.oauthIndex.get(oauthKey);
-    if (existingOAuthUserId) {
-      const existingUser = this.users.get(existingOAuthUserId);
+    const existingOAuth = this.oauthIndex.get(oauthKey);
+    if (existingOAuth) {
+      const existingUser = this.users.get(existingOAuth.userId);
       if (existingUser) return publicUser(existingUser);
     }
 
     const email = input.email ? normalizeEmail(input.email) : null;
     const existingEmailUserId = email ? this.emailIndex.get(email) : null;
     if (existingEmailUserId) {
-      this.oauthIndex.set(oauthKey, existingEmailUserId);
+      this.oauthIndex.set(oauthKey, createInMemoryOAuthAccount(existingEmailUserId, input));
       return publicUser(this.users.get(existingEmailUserId)!);
     }
 
@@ -132,8 +145,35 @@ export class InMemoryAuthRepository implements AuthRepository {
 
     this.users.set(user.id, user);
     if (email) this.emailIndex.set(email, user.id);
-    this.oauthIndex.set(oauthKey, user.id);
+    this.oauthIndex.set(oauthKey, createInMemoryOAuthAccount(user.id, input));
     return publicUser(user);
+  }
+
+  async listOAuthAccounts(userId: string) {
+    return Array.from(this.oauthIndex.values())
+      .filter((account) => account.userId === userId)
+      .map(({ userId: _userId, ...account }) => account)
+      .sort((left, right) => left.provider.localeCompare(right.provider) || left.createdAt.localeCompare(right.createdAt));
+  }
+
+  async unlinkOAuthAccount(userId: string, provider: OAuthProviderCode): Promise<OAuthUnlinkResult> {
+    const user = this.users.get(userId);
+    if (!user) return "not_found";
+
+    const entries = Array.from(this.oauthIndex.entries()).filter(
+      ([, account]) => account.userId === userId && account.provider === provider
+    );
+    if (entries.length === 0) return "not_found";
+
+    const accountCount = Array.from(this.oauthIndex.values()).filter((account) => account.userId === userId).length;
+    if (!user.passwordHash && accountCount <= entries.length) {
+      return "last_sign_in_method";
+    }
+
+    for (const [key] of entries) {
+      this.oauthIndex.delete(key);
+    }
+    return "unlinked";
   }
 
   async createPasswordResetToken(input: { email: string; tokenHash: string; expiresAt: string }) {
@@ -191,6 +231,15 @@ type AuthUserRow = {
   business_group_name?: string | null;
   password_hash: string | null;
 } & Record<string, unknown>;
+
+type OAuthAccountRow = {
+  provider: string;
+  provider_user_id: string;
+  email: string | null;
+  display_name: string | null;
+  created_at: Date | string;
+  updated_at: Date | string;
+};
 
 export class PostgresAuthRepository implements AuthRepository {
   constructor(private readonly database: DatabaseClient) {}
@@ -560,6 +609,66 @@ export class PostgresAuthRepository implements AuthRepository {
     });
   }
 
+  async listOAuthAccounts(userId: string) {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return [];
+
+    const result = await this.database.query<OAuthAccountRow>(
+      `
+        select provider, provider_user_id, email, display_name, created_at, updated_at
+        from oauth_accounts
+        where user_id = $1 and provider in ('google', 'vk')
+        order by provider asc, created_at asc
+      `,
+      [databaseUserId]
+    );
+
+    return result.rows.map(mapOAuthAccountRow);
+  }
+
+  async unlinkOAuthAccount(userId: string, provider: OAuthProviderCode): Promise<OAuthUnlinkResult> {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return "not_found";
+
+    return this.transaction(async (client) => {
+      const accountResult = await client.query<{ id: string; password_hash: string | null }>(
+        `
+          select oa.id, u.password_hash
+          from oauth_accounts oa
+          join users u on u.id = oa.user_id
+          where oa.user_id = $1 and oa.provider = $2
+          for update
+        `,
+        [databaseUserId, provider]
+      );
+      const accounts = accountResult.rows;
+      if (accounts.length === 0) return "not_found";
+
+      const countResult = await client.query<{ count: string | number }>(
+        `
+          select count(*) as count
+          from oauth_accounts
+          where user_id = $1
+        `,
+        [databaseUserId]
+      );
+      const oauthCount = Number(countResult.rows[0]?.count ?? 0);
+      const hasPassword = Boolean(accounts[0]?.password_hash);
+      if (!hasPassword && oauthCount <= accounts.length) {
+        return "last_sign_in_method";
+      }
+
+      await client.query(
+        `
+          delete from oauth_accounts
+          where user_id = $1 and provider = $2
+        `,
+        [databaseUserId, provider]
+      );
+      return "unlinked";
+    });
+  }
+
   private async transaction<T>(callback: (client: DatabaseClient) => Promise<T>) {
     if (!this.database.transaction) {
       return callback(this.database);
@@ -668,6 +777,33 @@ function publicUser(user: AuthUserRecord): UserRecord {
     activePlanId: user.activePlanId,
     businessWorkspace: user.businessWorkspace,
     permissions: user.permissions,
+  };
+}
+
+function createInMemoryOAuthAccount(
+  userId: string,
+  input: OAuthUserProfile
+): OAuthAccountRecord & { userId: string } {
+  const now = new Date().toISOString();
+  return {
+    userId,
+    provider: input.provider,
+    providerUserId: input.providerUserId,
+    email: input.email ? normalizeEmail(input.email) : null,
+    displayName: input.name,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function mapOAuthAccountRow(row: OAuthAccountRow): OAuthAccountRecord {
+  return {
+    provider: row.provider === "vk" ? "vk" : "google",
+    providerUserId: row.provider_user_id,
+    email: row.email,
+    displayName: row.display_name,
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString(),
   };
 }
 

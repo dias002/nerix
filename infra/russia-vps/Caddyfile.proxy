@@ -1,0 +1,53 @@
+{
+	email admin@nomduchat.com
+}
+
+nomduchat.com, www.nomduchat.com {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	handle_path /api/* {
+		reverse_proxy https://nomduchat-api.onrender.com {
+			header_up Host nomduchat-api.onrender.com
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle /health {
+		reverse_proxy https://nomduchat-api.onrender.com {
+			header_up Host nomduchat-api.onrender.com
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle {
+		reverse_proxy https://nomduchat.pages.dev {
+			header_up Host nomduchat.pages.dev
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+}
+
+api.nomduchat.com {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	reverse_proxy https://nomduchat-api.onrender.com {
+		header_up Host nomduchat-api.onrender.com
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}

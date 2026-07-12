@@ -43,6 +43,8 @@ export type SubscriptionCheckoutRecord = {
   creditsGranted: boolean;
   providerCheckoutId: string;
   checkoutUrl: string;
+  customerEmail: string | null;
+  customerName: string | null;
   createdAt: string;
   updatedAt: string;
 };

@@ -2,6 +2,8 @@ import type { AiModality, AiTaskType, CountryCode } from "@nomduchat/shared";
 import {
   getEnabledProvidersForModality,
   getProviderPolicyMode,
+  resolveSelectableModel,
+  supportsManualModelSelection,
   type ProviderCode,
   type ProviderPolicyMode,
 } from "./provider-registry.js";
@@ -19,8 +21,27 @@ export function chooseProvider(input: {
   preferredModel: string;
   agentId?: string;
   taskType?: AiTaskType;
+  selectedModelId?: string;
 }): ProviderDecision | null {
   const policyMode = getProviderPolicyMode();
+
+  const selectedModel = resolveSelectableModel({
+    selectedModelId: input.selectedModelId,
+    modality: input.modality,
+  });
+  if (selectedModel) {
+    return {
+      provider: selectedModel.provider.code,
+      model: selectedModel.model,
+      policyMode,
+      reason: `User selected ${selectedModel.option.label}.`,
+    };
+  }
+
+  if (input.selectedModelId && supportsManualModelSelection(input.modality)) {
+    return null;
+  }
+
   const providers = getEnabledProvidersForModality(input.modality);
   if (providers.length === 0) return null;
 
@@ -51,6 +72,10 @@ function preferredProviderOrder(input: {
 }): ProviderCode[] {
   if (input.taskType === "code_generation") {
     return ["anthropic", "openai", "gemini", "mock-provider"];
+  }
+
+  if (input.modality === "avatar_video" || input.agentId === "avatar") {
+    return ["heygen", "mock-provider"];
   }
 
   if (input.taskType === "media_generation") {

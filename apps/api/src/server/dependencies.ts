@@ -40,6 +40,10 @@ import { InMemoryMailingRepository, PostgresMailingRepository } from "../modules
 import { MailingService } from "../modules/mailings/mailing.service.js";
 import { SmtpBzClient, type MailingTransport } from "../modules/mailings/smtp-bz.client.js";
 import {
+  MailingTransactionalMailer,
+  type TransactionalMailer,
+} from "../modules/notifications/transactional-mailer.js";
+import {
   AbuseGuardService,
   createAbuseRateLimitRepository,
   type AbuseRateLimitRepository,
@@ -83,6 +87,7 @@ export type CreateDependenciesOptions = {
   persistence?: "memory" | "postgres";
   mailingTransport?: MailingTransport;
   passwordResetMailer?: PasswordResetMailer;
+  transactionalMailer?: TransactionalMailer;
   abuseRateLimitRepository?: AbuseRateLimitRepository;
   abuseGuard?: AbuseGuardService;
 };
@@ -128,11 +133,17 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     options.abuseRateLimitRepository ?? createAbuseRateLimitRepository(database, persistence);
 
   const users = new UserService(userRepository);
-  const auth = new AuthService(authRepository, options.passwordResetMailer ?? new MailingPasswordResetMailer());
+  const mailingTransport = options.mailingTransport ?? new SmtpBzClient();
+  const transactionalMailer = options.transactionalMailer ?? new MailingTransactionalMailer(mailingTransport);
+  const auth = new AuthService(
+    authRepository,
+    options.passwordResetMailer ?? new MailingPasswordResetMailer(mailingTransport),
+    transactionalMailer
+  );
   const agents = new AgentService(agentRepository);
   const billing = new BillingService(walletRepository, agents);
   const aiGateway = new AiGatewayService(agents, billing, createCompletionProvider());
-  const subscriptions = new SubscriptionService(subscriptionRepository, billing);
+  const subscriptions = new SubscriptionService(subscriptionRepository, billing, transactionalMailer);
   const generation = new GenerationService(
     generationRepository,
     aiGateway,
@@ -141,7 +152,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     subscriptions
   );
   const chat = new ChatService(conversationRepository, aiGateway, generation, subscriptions);
-  const mailings = new MailingService(mailingRepository, options.mailingTransport ?? new SmtpBzClient());
+  const mailings = new MailingService(mailingRepository, mailingTransport);
   const business = new BusinessService(businessRepository, subscriptions);
   const knowledgeBase = new KnowledgeBaseService(knowledgeBaseRepository, business);
   const businessOps = new BusinessOpsService(businessOpsRepository, business);

@@ -32,12 +32,17 @@ const passwordResetConfirmSchema = z.object({
 
 const oauthStartSchema = z.object({
   returnTo: z.string().optional(),
+  country: countrySchema.optional(),
 });
 
 const oauthCallbackSchema = z.object({
   code: z.string().min(1),
   state: z.string().min(1),
   format: z.enum(["json"]).optional(),
+});
+
+const linkedAccountProviderSchema = z.object({
+  provider: z.string().min(1),
 });
 
 export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService, abuseGuard: AbuseGuardService) {
@@ -82,6 +87,31 @@ export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService
 
   app.get("/auth/me", async (request, reply) => {
     return sendResult(reply, await auth.me(readBearerToken(request.headers.authorization)));
+  });
+
+  app.get("/auth/linked-accounts", async (request, reply) => {
+    return sendResult(reply, await auth.linkedAccounts(readBearerToken(request.headers.authorization)));
+  });
+
+  app.post("/auth/linked-accounts/:provider/unlink", async (request, reply) => {
+    const params = linkedAccountProviderSchema.safeParse(request.params);
+
+    if (!params.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "OAuth provider is required.",
+        },
+      });
+    }
+
+    return sendResult(
+      reply,
+      await auth.unlinkOAuthAccount({
+        accessToken: readBearerToken(request.headers.authorization),
+        provider: params.data.provider,
+      })
+    );
   });
 
   app.post("/auth/password-reset/request", async (request, reply) => {
@@ -133,7 +163,14 @@ export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService
     const allowed = await abuseGuard.assertOAuthStartAllowed(request, params.data.provider);
     if (!allowed.ok) return sendResult(reply, allowed);
 
-    return sendResult(reply, await auth.startOAuth({ provider: params.data.provider, returnTo: query.data.returnTo }));
+    return sendResult(
+      reply,
+      await auth.startOAuth({
+        provider: params.data.provider,
+        returnTo: query.data.returnTo,
+        country: query.data.country,
+      })
+    );
   });
 
   app.get("/auth/oauth/:provider/callback", async (request, reply) => {

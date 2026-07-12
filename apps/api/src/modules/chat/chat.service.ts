@@ -1,10 +1,11 @@
-import type { CountryCode, Language } from "@nomduchat/shared";
+import type { AiModality, CountryCode, Language } from "@nomduchat/shared";
 import { DomainError, fail, ok } from "../../domain/result.js";
 import type { AiGatewayService } from "../ai-gateway/ai-gateway.service.js";
 import type { GenerationService } from "../generation/generation.service.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 import type { ConversationMessage, MessageFeedbackRating } from "./conversation.types.js";
 import {
+  applyResponseStyle,
   buildConversationPrompt,
   buildMediaGenerationPrompt,
   buildPrompt,
@@ -14,6 +15,7 @@ import {
   normalizeAttachments,
   readAttachmentsFromMetadata,
   type ChatAttachment,
+  type ResponseStyle,
 } from "./prompt-builder.js";
 import { ChatUsagePolicy, type SubscriptionAccessService } from "./usage-policy.js";
 
@@ -64,6 +66,8 @@ export class ChatService {
     conversationId?: string;
     message: string;
     agentId?: string;
+    selectedModelId?: string;
+    responseStyle?: ResponseStyle;
     attachments?: ChatAttachment[];
   }) {
     const message = input.message.trim();
@@ -95,6 +99,7 @@ export class ChatService {
       language: input.language ?? "ru",
       agentId: routeAgentId,
       prompt: routingPrompt,
+      selectedModelId: input.selectedModelId,
     });
     if (!routeResult.ok) {
       await this.conversations.recordAiError({
@@ -139,6 +144,8 @@ export class ChatService {
       content: message,
       metadata: {
         requestedAgentId: input.agentId,
+        requestedModelId: input.selectedModelId,
+        responseStyle: input.responseStyle ?? "auto",
         attachments,
       },
     });
@@ -165,7 +172,7 @@ export class ChatService {
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt: buildConversationPrompt(previousMessages, prompt),
+      prompt: buildConversationPrompt(previousMessages, applyResponseStyle(prompt, input.responseStyle)),
       route: routeResult.value,
     });
     if (!completionResult.ok) return completionResult;
@@ -213,6 +220,8 @@ export class ChatService {
     language?: Language;
     conversationId: string;
     agentId?: string;
+    selectedModelId?: string;
+    responseStyle?: ResponseStyle;
   }) {
     const conversation = await this.conversations.findById(input.conversationId);
 
@@ -232,6 +241,10 @@ export class ChatService {
 
     const metadataAgentId =
       typeof userMessage.metadata?.requestedAgentId === "string" ? userMessage.metadata.requestedAgentId : undefined;
+    const metadataModelId =
+      typeof userMessage.metadata?.requestedModelId === "string" ? userMessage.metadata.requestedModelId : undefined;
+    const metadataResponseStyle =
+      typeof userMessage.metadata?.responseStyle === "string" ? (userMessage.metadata.responseStyle as ResponseStyle) : undefined;
     const attachments = normalizeAttachments(readAttachmentsFromMetadata(userMessage.metadata?.attachments));
     const prompt = buildPrompt(userMessage.content, attachments);
 
@@ -241,6 +254,7 @@ export class ChatService {
       language: input.language ?? "ru",
       agentId: input.agentId ?? metadataAgentId ?? conversation.agentId,
       prompt,
+      selectedModelId: input.selectedModelId ?? metadataModelId,
     });
     if (!routeResult.ok) {
       await this.conversations.recordAiError({
@@ -271,7 +285,10 @@ export class ChatService {
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt: buildConversationPrompt(conversation.messages.slice(0, lastUserMessageIndex), prompt),
+      prompt: buildConversationPrompt(
+        conversation.messages.slice(0, lastUserMessageIndex),
+        applyResponseStyle(prompt, input.responseStyle ?? metadataResponseStyle)
+      ),
       route: routeResult.value,
       stage: "regenerate_complete",
     });
@@ -469,7 +486,7 @@ export class ChatService {
       estimatedCredits: number;
       reserveCredits: number;
       asyncJob: boolean;
-      modality: "image" | "video" | "music" | "voice" | "text" | "code" | "file";
+      modality: AiModality;
       policyMode: string;
       routingReason: string;
     };
@@ -555,6 +572,7 @@ function findLastUserMessageIndex(messages: ConversationMessage[]) {
 
 function mediaLabel(modality: string) {
   if (modality === "image") return "изображение";
+  if (modality === "avatar_video") return "видео с аватаром";
   if (modality === "video") return "видео";
   if (modality === "music") return "трек";
   if (modality === "voice") return "озвучку";

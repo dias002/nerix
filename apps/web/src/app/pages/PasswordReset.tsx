@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
-import { ArrowLeft, LoaderCircle, Lock, Mail } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LoaderCircle, Lock, Mail } from "lucide-react";
 import { toPublicApiError } from "../api";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
@@ -13,6 +13,7 @@ export default function PasswordReset() {
   const token = searchParams.get("token")?.trim() ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [done, setDone] = useState(false);
   const [devResetUrl, setDevResetUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -81,13 +82,21 @@ export default function PasswordReset() {
                   <input
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    type="password"
+                    type={passwordVisible ? "text" : "password"}
                     required
                     minLength={8}
                     autoComplete="new-password"
                     className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-700"
                     placeholder="Минимум 8 символов"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setPasswordVisible((value) => !value)}
+                    aria-label={passwordVisible ? t.auth.hidePassword : t.auth.showPassword}
+                    className="-mr-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    {passwordVisible ? <EyeOff className="h-4 w-4" strokeWidth={1.7} /> : <Eye className="h-4 w-4" strokeWidth={1.7} />}
+                  </button>
                 </span>
               </label>
 

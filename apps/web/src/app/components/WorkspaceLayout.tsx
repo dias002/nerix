@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { ArrowLeft, BarChart3, Bot, Brain, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, Globe, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, Users, X, Zap } from "lucide-react";
+import { ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentSubscription, getPlans, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
@@ -79,13 +79,6 @@ export default function WorkspaceLayout() {
           active: () => location.pathname === "/workspace/admin/users" || (location.pathname === "/workspace/admin" && adminTab === "users"),
         },
         {
-          path: "/workspace/admin/memory",
-          icon: Brain,
-          label: t.nav.memory,
-          visible: true,
-          active: () => location.pathname === "/workspace/admin/memory" || (location.pathname === "/workspace/admin" && adminTab === "memory"),
-        },
-        {
           path: "/workspace/admin/pricing",
           icon: CreditCard,
           label: t.nav.price,
@@ -97,6 +90,9 @@ export default function WorkspaceLayout() {
       ];
   const workspaceNavItems = [
         { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: access.canUseChat },
+        { path: "/workspace/avatar", icon: UserRound, label: t.nav.avatar, visible: access.canUseChat },
+        { path: "/workspace/apps", icon: Grid2X2, label: t.nav.apps, visible: access.canUseChat },
+        { path: "/workspace/projects", icon: FolderKanban, label: t.nav.projects, visible: access.canUseChat },
         { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: access.canUseHistory },
         { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: access.canUseBusiness },
         { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: access.canUseBalance },

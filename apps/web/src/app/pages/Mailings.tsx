@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   Send,
+  Sparkles,
   Upload,
   Users,
 } from "lucide-react";
@@ -71,6 +72,7 @@ export default function Mailings() {
   const [error, setError] = useState<string | null>(null);
   const selectedAudience = audiences.find((audience) => audience.id === selectedAudienceId) ?? null;
   const selectedCampaign = campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? campaigns[0] ?? null;
+  const campaignPreviewHtml = useMemo(() => buildCampaignPreview(campaignForm), [campaignForm]);
 
   const stats = useMemo(() => {
     const totalContacts = audiences.reduce((total, audience) => total + audience.contactsCount, 0);
@@ -194,6 +196,7 @@ export default function Mailings() {
       const response = await createMailingCampaign({
         audienceId: selectedAudienceId,
         ...campaignForm,
+        html: campaignForm.html.trim() || buildDefaultEmailHtml(campaignForm),
       });
       setNotice(`Кампания "${response.campaign.name}" создана.`);
       setSelectedCampaignId(response.campaign.id);
@@ -204,6 +207,13 @@ export default function Mailings() {
       }));
       await loadDashboard();
     });
+  };
+
+  const handleBuildEmailTemplate = () => {
+    setCampaignForm((current) => ({
+      ...current,
+      html: buildDefaultEmailHtml(current),
+    }));
   };
 
   const handleSendCampaign = async (campaignId: string) => {
@@ -459,14 +469,40 @@ export default function Mailings() {
               </Field>
             </div>
 
-            <div className="mt-3">
-              <Field label="HTML письма">
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-4">
+              <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="text-xs font-medium text-gray-500">HTML письма</div>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-600">
+                    Можно вставить готовый HTML или собрать аккуратный шаблон из текстовой версии.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBuildEmailTemplate}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-sm font-medium text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+                >
+                  <Sparkles className="h-4 w-4" strokeWidth={1.7} />
+                  Собрать HTML из текста
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                 <textarea
                   value={campaignForm.html}
                   onChange={(event) => setCampaignForm({ ...campaignForm, html: event.target.value })}
-                  className="min-h-48 w-full resize-y rounded-xl border border-white/10 bg-black p-4 font-mono text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+                  placeholder="<h1>Заголовок письма</h1><p>Основной текст письма...</p>"
+                  className="min-h-72 w-full resize-y rounded-xl border border-white/10 bg-black p-4 font-mono text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
                 />
-              </Field>
+                <div className="min-h-72 overflow-hidden rounded-xl border border-white/10 bg-white">
+                  <iframe
+                    title="Предпросмотр письма"
+                    srcDoc={campaignPreviewHtml}
+                    sandbox=""
+                    className="h-72 w-full bg-white"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="mt-3">
@@ -489,7 +525,7 @@ export default function Mailings() {
                 !campaignForm.name.trim() ||
                 !campaignForm.fromEmail.trim() ||
                 !campaignForm.subject.trim() ||
-                !campaignForm.html.trim()
+                (!campaignForm.html.trim() && !campaignForm.text.trim())
               }
               className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-60"
             >
@@ -687,5 +723,58 @@ function recipientStatusLabel(status: MailingRecipientApiRecord["status"]) {
 }
 
 function errorMessage(error: unknown) {
-  return toPublicApiError(error, "Не удалось выполнить действие.");
+  const message = toPublicApiError(error, "Не удалось выполнить действие.");
+  if (/SMTP credentials are not configured/i.test(message)) {
+    return "SMTP для рассылок не настроен на сервере. Добавьте SMTP_BZ_API_KEY или SMTP_HOST, SMTP_USERNAME и SMTP_PASSWORD в Render.";
+  }
+  if (/Script tags are not allowed/i.test(message)) {
+    return "В HTML письма нельзя вставлять <script>. Оставьте только email-разметку, стили и текст.";
+  }
+  return message;
+}
+
+function buildCampaignPreview(form: CampaignForm) {
+  return form.html.trim() ? form.html : buildDefaultEmailHtml(form);
+}
+
+function buildDefaultEmailHtml(form: CampaignForm) {
+  const title = escapeHtml(form.subject.trim() || form.name.trim() || "Новое письмо");
+  const sender = escapeHtml(form.fromName.trim() || "nomduchat");
+  const paragraphs = (form.text.trim() || "Напишите текстовую версию письма, затем нажмите «Собрать HTML из текста».")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p style="margin:0 0 16px;color:#374151;font-size:16px;line-height:1.65;">${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
+    .join("\n");
+
+  return `<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+  </head>
+  <body style="margin:0;background:#f3f4f6;color:#111827;font-family:Arial,Helvetica,sans-serif;">
+    <div style="max-width:640px;margin:0 auto;padding:28px 18px;">
+      <div style="background:#ffffff;border:1px solid #e5e7eb;border-radius:22px;overflow:hidden;">
+        <div style="padding:24px 28px;border-bottom:1px solid #e5e7eb;">
+          <div style="font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;">${sender}</div>
+          <h1 style="margin:10px 0 0;color:#111827;font-size:28px;line-height:1.18;">${title}</h1>
+        </div>
+        <div style="padding:28px;">
+          ${paragraphs}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

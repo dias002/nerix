@@ -15,6 +15,8 @@ const sendMessageSchema = z.object({
   conversationId: z.string().optional(),
   message: z.string().min(1),
   agentId: z.string().optional(),
+  selectedModelId: z.string().trim().min(1).max(160).optional(),
+  responseStyle: z.enum(["auto", "business", "business_visual", "conversational", "brief", "detailed"]).optional(),
   attachments: z
     .array(
       z.object({
@@ -35,6 +37,8 @@ const regenerateMessageSchema = z.object({
   language: languageSchema.default("ru"),
   conversationId: z.string().min(1),
   agentId: z.string().optional(),
+  selectedModelId: z.string().trim().min(1).max(160).optional(),
+  responseStyle: z.enum(["auto", "business", "business_visual", "conversational", "brief", "detailed"]).optional(),
 });
 
 const selectAnswerSchema = z.object({

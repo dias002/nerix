@@ -62,6 +62,18 @@
   --sidebar-ring: var(--white);
 }
 
+html[data-font-size="compact"] {
+  --font-size: 15px;
+}
+
+html[data-font-size="comfortable"] {
+  --font-size: 16px;
+}
+
+html[data-font-size="large"] {
+  --font-size: 18px;
+}
+
 .dark {
   /* Dark mode uses the same cosmic theme */
   --background: var(--cosmic-navy);

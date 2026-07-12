@@ -27,6 +27,8 @@ export interface SubscriptionRepository {
     price: PlanPrice;
     providerCheckoutId: string;
     checkoutUrl: string;
+    customerEmail?: string | null;
+    customerName?: string | null;
   }): Promise<SubscriptionCheckoutRecord | null>;
   completeCheckoutPayment(
     checkoutId: string,
@@ -59,6 +61,8 @@ export class InMemorySubscriptionRepository implements SubscriptionRepository {
     price: PlanPrice;
     providerCheckoutId: string;
     checkoutUrl: string;
+    customerEmail?: string | null;
+    customerName?: string | null;
   }) {
     const now = new Date().toISOString();
     const checkout: SubscriptionCheckoutRecord = {
@@ -73,6 +77,8 @@ export class InMemorySubscriptionRepository implements SubscriptionRepository {
       creditsGranted: false,
       providerCheckoutId: input.providerCheckoutId,
       checkoutUrl: input.checkoutUrl,
+      customerEmail: input.customerEmail ?? null,
+      customerName: input.customerName ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -207,6 +213,8 @@ type CheckoutRow = {
   credits_granted: boolean;
   provider_checkout_id: string;
   checkout_url: string;
+  customer_email: string | null;
+  customer_name: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 } & Record<string, unknown>;
@@ -309,6 +317,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
     price: PlanPrice;
     providerCheckoutId: string;
     checkoutUrl: string;
+    customerEmail?: string | null;
+    customerName?: string | null;
   }) {
     const databaseUserId = toDatabaseUserId(input.userId);
     if (!databaseUserId) return null;
@@ -327,9 +337,11 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
           currency,
           amount_minor,
           provider_checkout_id,
-          checkout_url
+          checkout_url,
+          customer_email,
+          customer_name
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         returning
           id,
           user_id,
@@ -342,6 +354,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
           credits_granted,
           provider_checkout_id,
           checkout_url,
+          customer_email,
+          customer_name,
           created_at,
           updated_at
       `,
@@ -354,6 +368,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
         input.price.amountMinor,
         input.providerCheckoutId,
         input.checkoutUrl,
+        input.customerEmail ?? null,
+        input.customerName ?? null,
       ]
     );
 
@@ -439,6 +455,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
             credits_granted,
             provider_checkout_id,
             checkout_url,
+            customer_email,
+            customer_name,
             created_at,
             updated_at
         `,
@@ -488,6 +506,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
           credits_granted,
           provider_checkout_id,
           checkout_url,
+          customer_email,
+          customer_name,
           created_at,
           updated_at
         from subscription_checkouts
@@ -522,6 +542,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
           credits_granted,
           provider_checkout_id,
           checkout_url,
+          customer_email,
+          customer_name,
           created_at,
           updated_at
       `,
@@ -548,6 +570,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
             credits_granted,
             provider_checkout_id,
             checkout_url,
+            customer_email,
+            customer_name,
             created_at,
             updated_at
           from subscription_checkouts
@@ -599,6 +623,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
           credits_granted,
           provider_checkout_id,
           checkout_url,
+          customer_email,
+          customer_name,
           created_at,
           updated_at
       `,
@@ -627,6 +653,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
           credits_granted,
           provider_checkout_id,
           checkout_url,
+          customer_email,
+          customer_name,
           created_at,
           updated_at
         from subscription_checkouts
@@ -756,6 +784,8 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
           credits_granted,
           provider_checkout_id,
           checkout_url,
+          customer_email,
+          customer_name,
           created_at,
           updated_at
         from subscription_checkouts
@@ -840,6 +870,8 @@ function mapCheckoutRow(row: CheckoutRow): SubscriptionCheckoutRecord {
     creditsGranted: row.credits_granted,
     providerCheckoutId: row.provider_checkout_id,
     checkoutUrl: row.checkout_url,
+    customerEmail: row.customer_email,
+    customerName: row.customer_name,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
   };

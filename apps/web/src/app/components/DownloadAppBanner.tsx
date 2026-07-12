@@ -1,4 +1,4 @@
-import { Download, Smartphone } from "lucide-react";
+import { Download, Laptop, Smartphone } from "lucide-react";
 import { motion } from "motion/react";
 import { useLanguage } from "../i18n";
 
@@ -30,13 +30,25 @@ export default function DownloadAppBanner({ className = "" }: DownloadAppBannerP
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
           {[t.download.ios, t.download.android].map((label) => (
             <span
               key={label}
               className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-500"
             >
               <Download className="h-4 w-4" strokeWidth={1.8} />
+              {label}
+              <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-600">
+                {t.download.soon}
+              </span>
+            </span>
+          ))}
+          {["macOS", "Windows"].map((label) => (
+            <span
+              key={label}
+              className="inline-flex min-h-10 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 text-sm font-medium text-gray-500"
+            >
+              <Laptop className="h-4 w-4" strokeWidth={1.8} />
               {label}
               <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-gray-600">
                 {t.download.soon}

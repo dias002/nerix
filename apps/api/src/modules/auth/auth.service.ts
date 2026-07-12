@@ -11,12 +11,14 @@ import {
 } from "./oauth-provider.js";
 import { hashPassword, verifyPassword } from "./password.js";
 import type { PasswordResetMailer } from "./password-reset-mailer.js";
+import type { TransactionalMailer } from "../notifications/transactional-mailer.js";
 import { signAccessToken, verifyAccessToken } from "./token.js";
 
 export class AuthService {
   constructor(
     private readonly repository: AuthRepository,
-    private readonly passwordResetMailer?: PasswordResetMailer
+    private readonly passwordResetMailer?: PasswordResetMailer,
+    private readonly transactionalMailer?: TransactionalMailer
   ) {}
 
   async register(input: {
@@ -41,6 +43,13 @@ export class AuthService {
     if (!user || !user.email) {
       return fail(new DomainError("validation_failed", "User with this email already exists.", 409));
     }
+
+    await this.sendBestEffort(() =>
+      this.transactionalMailer?.sendWelcome({
+        email: user.email!,
+        name: user.name,
+      })
+    );
 
     return ok({
       user,
@@ -89,6 +98,50 @@ export class AuthService {
 
     return ok({
       user,
+    });
+  }
+
+  async linkedAccounts(accessToken: string | null) {
+    const currentUser = await this.me(accessToken);
+    if (!currentUser.ok) return currentUser;
+
+    return ok({
+      accounts: await this.repository.listOAuthAccounts(currentUser.value.user.id),
+    });
+  }
+
+  async unlinkOAuthAccount(input: { accessToken: string | null; provider: string }) {
+    if (!isOAuthProvider(input.provider)) {
+      return fail(
+        new DomainError(
+          "validation_failed",
+          `OAuth provider must be one of: ${supportedOAuthProviders().join(", ")}.`,
+          400
+        )
+      );
+    }
+
+    const currentUser = await this.me(input.accessToken);
+    if (!currentUser.ok) return currentUser;
+
+    const result = await this.repository.unlinkOAuthAccount(currentUser.value.user.id, input.provider);
+    if (result === "not_found") {
+      return fail(new DomainError("not_found", `Linked ${input.provider} account was not found.`, 404));
+    }
+    if (result === "last_sign_in_method") {
+      return fail(
+        new DomainError(
+          "validation_failed",
+          "Add a password or another login method before unlinking this account.",
+          400
+        )
+      );
+    }
+
+    return ok({
+      provider: input.provider,
+      unlinked: true,
+      accounts: await this.repository.listOAuthAccounts(currentUser.value.user.id),
     });
   }
 
@@ -157,7 +210,7 @@ export class AuthService {
     });
   }
 
-  async startOAuth(input: { provider: string; returnTo?: string }) {
+  async startOAuth(input: { provider: string; returnTo?: string; country?: CountryCode }) {
     if (!isOAuthProvider(input.provider)) {
       return fail(
         new DomainError(
@@ -168,12 +221,17 @@ export class AuthService {
       );
     }
 
+    if (input.provider === "google" && input.country === "RU") {
+      return fail(new DomainError("provider_unavailable", "Google OAuth is not available for RU accounts.", 403));
+    }
+
     try {
       return ok({
         provider: input.provider,
         authorizationUrl: createOAuthAuthorizationUrl({
           provider: input.provider,
           returnTo: input.returnTo,
+          country: input.country,
         }),
       });
     } catch (error) {
@@ -212,6 +270,14 @@ export class AuthService {
     } catch (error) {
       if (error instanceof DomainError) return fail(error);
       throw error;
+    }
+  }
+
+  private async sendBestEffort(task: () => Promise<void> | undefined) {
+    try {
+      await task();
+    } catch {
+      // Transactional email must not block account access.
     }
   }
 }

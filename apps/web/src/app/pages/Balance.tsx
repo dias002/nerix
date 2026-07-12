@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { AlertCircle, CreditCard, ExternalLink, FileText, Mail, TrendingDown, Wallet, Zap } from "lucide-react";
+import {
+  AlertCircle,
+  CreditCard,
+  Download,
+  ExternalLink,
+  FileText,
+  Mail,
+  RefreshCcw,
+  TrendingDown,
+  Wallet,
+  Zap,
+} from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
+import { reachAnalyticsGoal } from "../analytics";
 import {
   completeMockSubscription,
   createSubscriptionCheckout,
@@ -19,6 +31,17 @@ import {
   type PlanApiRecord,
   type SubscriptionCheckoutApiRecord,
 } from "../api";
+
+const autoRenewalStorageKey = "nomduchat-auto-renewal-enabled";
+type LedgerFilter = "all" | "topup" | "capture" | "reserve" | "refund";
+
+const ledgerFilters: Array<{ id: LedgerFilter; label: string }> = [
+  { id: "all", label: "Все" },
+  { id: "topup", label: "Пополнения" },
+  { id: "capture", label: "Списания" },
+  { id: "reserve", label: "Резервы" },
+  { id: "refund", label: "Возвраты" },
+];
 
 export default function Balance() {
   const { t } = useLanguage();
@@ -40,6 +63,8 @@ export default function Balance() {
   const [pendingPlanId, setPendingPlanId] = useState<PlanId | null>(null);
   const [checkoutNoticePlanId, setCheckoutNoticePlanId] = useState<PlanId | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [autoRenewalEnabled, setAutoRenewalEnabled] = useState(() => readAutoRenewalEnabled());
+  const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("all");
 
   useEffect(() => {
     let active = true;
@@ -85,9 +110,15 @@ export default function Balance() {
     () => ledger?.filter((entry) => entry.type === "capture") ?? [],
     [ledger]
   );
+  const filteredLedger = useMemo(() => {
+    if (!ledger) return null;
+    if (ledgerFilter === "all") return ledger;
+    return ledger.filter((entry) => entry.type === ledgerFilter);
+  }, [ledger, ledgerFilter]);
   const usageCredits = capturedEntries.reduce((total, entry) => total + Math.abs(entry.amountCredits), 0);
   const avgCost = capturedEntries.length > 0 ? Math.round(usageCredits / capturedEntries.length) : 0;
   const activePlan = plans?.find((plan) => plan.id === currentSubscription?.planId) ?? null;
+  const failedCheckout = checkouts?.find((checkout) => checkout.status === "failed" || checkout.status === "cancelled") ?? null;
   const displayAvailableCredits =
     wallet && activePlan ? Math.min(wallet.availableCredits, activePlan.monthlyCredits) : wallet?.availableCredits;
 
@@ -98,11 +129,14 @@ export default function Balance() {
   ];
 
   const activity =
-    ledger && ledger.length > 0
-      ? ledger.slice(0, 6).map((entry) => ({
+    filteredLedger && filteredLedger.length > 0
+      ? filteredLedger.slice(0, 12).map((entry) => ({
+          id: entry.id,
           label: ledgerLabel(entry.type),
           value: `${entry.amountCredits > 0 ? "+" : ""}${formatCredits(entry.amountCredits)}`,
           date: formatLedgerDate(entry.createdAt),
+          balance: formatCredits(entry.balanceAfterCredits),
+          reference: entry.referenceId ?? entry.referenceType ?? "—",
         }))
       : [];
   const translatedPlanIds: PlanId[] = ["base", "ultra", "pro", "business"];
@@ -120,6 +154,7 @@ export default function Balance() {
       price: formatPrice(plan.price.amountMinor, plan.price.currency),
       credits: plan.monthlyCredits,
       note: translated?.note ?? plan.description,
+      examples: getPlanExamples(plan.id),
     };
   });
 
@@ -145,6 +180,13 @@ export default function Balance() {
         country,
         customerEmail: user?.email ?? undefined,
       });
+      reachAnalyticsGoal("subscription_checkout", {
+        planId: checkout.checkout.planId,
+        country: checkout.checkout.country,
+        provider: checkout.checkout.provider,
+        amountMinor: checkout.checkout.amountMinor,
+        currency: checkout.checkout.currency,
+      });
 
       if (!checkout.checkout.checkoutUrl.startsWith("nomduchat://mock-checkout")) {
         window.location.href = checkout.checkout.checkoutUrl;
@@ -155,6 +197,13 @@ export default function Balance() {
       setWallet(completed.wallet);
       setCurrentSubscription(completed.subscription);
       setCheckoutNoticePlanId(null);
+      reachAnalyticsGoal("subscription_paid", {
+        planId: completed.checkout.planId,
+        country: completed.checkout.country,
+        provider: completed.checkout.provider,
+        amountMinor: completed.checkout.amountMinor,
+        currency: completed.checkout.currency,
+      });
       const latestCheckouts = await getSubscriptionCheckouts().catch(() => null);
       if (latestCheckouts) setCheckouts(latestCheckouts.checkouts);
       await refreshUser();
@@ -164,6 +213,14 @@ export default function Balance() {
     } finally {
       setPendingPlanId(null);
     }
+  };
+
+  const toggleAutoRenewal = () => {
+    setAutoRenewalEnabled((current) => {
+      const next = !current;
+      window.localStorage.setItem(autoRenewalStorageKey, String(next));
+      return next;
+    });
   };
 
   return (
@@ -227,6 +284,14 @@ export default function Balance() {
                   <div className="mt-2 text-sm text-gray-400">{formatCredits(pack.credits)} nomduchat-кредитов / месяц</div>
                   <div className="mt-1 text-sm text-gray-500">{pack.amount}</div>
                   <p className="mt-4 text-sm leading-relaxed text-gray-500">{pack.note}</p>
+                  <div className="mt-4 space-y-2">
+                    <div className="text-xs font-medium uppercase tracking-[0.12em] text-gray-600">Примеры в тарифе</div>
+                    <ul className="space-y-1 text-sm leading-relaxed text-gray-400">
+                      {pack.examples.map((example) => (
+                        <li key={example}>• {example}</li>
+                      ))}
+                    </ul>
+                  </div>
                   {checkoutNoticePlanId === pack.id ? (
                     <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-gray-400">
                       {t.balance.checkoutCreated}
@@ -246,6 +311,17 @@ export default function Balance() {
                       ? t.balance.pendingPlan
                       : t.balance.topUp}
                 </button>
+                <p className="mt-3 text-xs leading-relaxed text-gray-600">
+                  При оплате вы принимаете{" "}
+                  <Link to="/legal/terms" className="text-gray-400 underline-offset-4 hover:underline">
+                    условия сервиса
+                  </Link>{" "}
+                  и{" "}
+                  <Link to="/legal/pricing" className="text-gray-400 underline-offset-4 hover:underline">
+                    каталог услуг
+                  </Link>
+                  .
+                </p>
               </motion.div>
             )) : plans === null ? (
               <div className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 text-sm text-gray-500 md:col-span-2 xl:col-span-4">
@@ -258,6 +334,64 @@ export default function Balance() {
             ) : null}
           </div>
         </section>
+
+        {isAuthenticated ? (
+          <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
+            <div className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-300">
+                    <RefreshCcw className="h-5 w-5" strokeWidth={1.7} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-white">Автопродление</h3>
+                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-gray-500">
+                      По умолчанию подписка продлевается автоматически. Вы можете отключить это до следующего списания.
+                    </p>
+                    <p className="mt-3 text-xs leading-relaxed text-gray-600">
+                      Нажимая «Оформить», вы соглашаетесь с условиями{" "}
+                      <Link to="/legal/auto-renewal" className="text-gray-400 underline-offset-4 hover:underline">
+                        автопродления
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleAutoRenewal}
+                  className={`inline-flex h-10 min-w-40 items-center justify-center rounded-full border px-4 text-sm transition-colors ${
+                    autoRenewalEnabled
+                      ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
+                      : "border-white/10 bg-black text-gray-300 hover:border-white/20 hover:text-white"
+                  }`}
+                >
+                  {autoRenewalEnabled ? "Включено" : "Отключено"}
+                </button>
+              </div>
+            </div>
+
+            <div className={`rounded-2xl border p-5 ${
+              failedCheckout
+                ? "border-red-400/20 bg-red-400/10"
+                : "border-white/10 bg-[#0D0D0D]"
+            }`}>
+              <div className="flex items-start gap-3">
+                <AlertCircle className={`mt-0.5 h-5 w-5 shrink-0 ${failedCheckout ? "text-red-100" : "text-gray-400"}`} strokeWidth={1.7} />
+                <div>
+                  <h3 className="text-lg font-medium text-white">Статус продления</h3>
+                  <p className={`mt-1 text-sm leading-relaxed ${failedCheckout ? "text-red-100/80" : "text-gray-500"}`}>
+                    {failedCheckout
+                      ? "Не удалось продлить подписку. Проверьте способ оплаты или создайте новый платеж."
+                      : autoRenewalEnabled
+                        ? "Напоминание появится, если следующее списание не пройдет."
+                        : "Автопродление отключено. Тариф будет действовать до конца оплаченного периода."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {isAuthenticated ? (
         <section className="space-y-4">
@@ -341,24 +475,62 @@ export default function Balance() {
 
         {isAuthenticated ? (
         <section className="space-y-4">
-          <h3 className="text-lg font-medium text-white">{t.balance.activityTitle}</h3>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-white">История токенов</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Пополнения, резервы, списания и возвраты по вашему балансу.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {ledgerFilters.map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setLedgerFilter(filter.id)}
+                  className={`h-9 rounded-full border px-3 text-sm transition-colors ${
+                    ledgerFilter === filter.id
+                      ? "border-white/25 bg-white text-black"
+                      : "border-white/10 bg-black text-gray-400 hover:border-white/20 hover:text-white"
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => downloadLedgerCsv(filteredLedger ?? [])}
+                disabled={!filteredLedger?.length}
+                className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-white/10 px-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white disabled:opacity-40"
+              >
+                <Download className="h-4 w-4" strokeWidth={1.7} />
+                CSV
+              </button>
+            </div>
+          </div>
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0A]">
             {activity.length > 0 ? activity.map((item, index) => (
               <div
-                key={`${item.label}-${item.date}`}
-                className={`flex items-center justify-between gap-4 p-4 ${
+                key={item.id}
+                className={`grid grid-cols-1 gap-3 p-4 md:grid-cols-[1fr_auto] md:items-center ${
                   index !== activity.length - 1 ? "border-b border-white/5" : ""
                 }`}
               >
-                <div>
+                <div className="min-w-0">
                   <div className="text-sm font-medium text-white">{item.label}</div>
-                  <div className="mt-1 text-xs text-gray-600">{item.date}</div>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+                    <span>{item.date}</span>
+                    <span>Баланс после: {item.balance}</span>
+                    <span className="max-w-full truncate">Связь: {item.reference}</span>
+                  </div>
                 </div>
-                <div className={`text-sm font-medium ${item.value.startsWith("+") ? "text-white" : "text-gray-500"}`}>
+                <div className={`text-sm font-medium md:text-right ${item.value.startsWith("+") ? "text-white" : "text-gray-500"}`}>
                   {item.value}
                 </div>
               </div>
-            )) : (
+            )) : filteredLedger === null ? (
+              <div className="p-4 text-sm text-gray-500">История токенов пока не загружена.</div>
+            ) : (
               <div className="p-4 text-sm text-gray-500">{t.balance.emptyActivity}</div>
             )}
           </div>
@@ -405,6 +577,17 @@ function planLabel(planId: PlanId) {
   return labels[planId] ?? planId;
 }
 
+function getPlanExamples(planId: PlanId) {
+  const examples: Record<PlanId, string[]> = {
+    base: ["ежедневный чат и учеба", "письма, планы и короткие тексты", "разбор небольших документов"],
+    ultra: ["частая работа с документами", "код, маркетинг и длинные ответы", "несколько рабочих задач в день"],
+    pro: ["командные сценарии", "большие документы и промпты", "регулярная генерация медиа"],
+    business: ["бизнес-кабинет и роли", "заявки, CRM-заметки и аналитика", "Telegram-бот и AI-сайт компании"],
+  };
+
+  return examples[planId] ?? examples.base;
+}
+
 function providerLabel(provider: "kaspi" | "yookassa") {
   return provider === "kaspi" ? "Kaspi" : "YooKassa";
 }
@@ -443,6 +626,33 @@ function formatCheckoutError(error: unknown) {
   return toPublicApiError(error, "Оплата картой временно недоступна. Попробуйте позже.");
 }
 
+function downloadLedgerCsv(entries: LedgerApiEntry[]) {
+  if (!entries.length) return;
+
+  const header = ["date", "type", "amountCredits", "balanceAfterCredits", "referenceType", "referenceId"];
+  const rows = entries.map((entry) =>
+    [
+      entry.createdAt,
+      entry.type,
+      String(entry.amountCredits),
+      String(entry.balanceAfterCredits),
+      entry.referenceType ?? "",
+      entry.referenceId ?? "",
+    ].map(csvCell)
+  );
+  const csv = [header, ...rows].map((row) => row.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `nomduchat-token-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function csvCell(value: string) {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 function formatPrice(amountMinor: number, currency: "KZT" | "RUB") {
   const amount = amountMinor / 100;
   const formatted = new Intl.NumberFormat("ru-RU", {
@@ -450,4 +660,9 @@ function formatPrice(amountMinor: number, currency: "KZT" | "RUB") {
   }).format(amount);
 
   return `${formatted} ${currency === "KZT" ? "₸" : "₽"}`;
+}
+
+function readAutoRenewalEnabled() {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(autoRenewalStorageKey) !== "false";
 }

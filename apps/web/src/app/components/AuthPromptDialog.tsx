@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
-import { Globe, LoaderCircle, Lock, Mail, User, X } from "lucide-react";
+import { Eye, EyeOff, Globe, LoaderCircle, Lock, Mail, User, X } from "lucide-react";
 import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
 import TurnstileBox, { isTurnstileEnabled } from "./TurnstileBox";
@@ -8,6 +8,15 @@ import { useLanguage } from "../i18n";
 
 type AuthMode = "login" | "register";
 type BillingCountry = "KZ" | "RU";
+type OAuthProvider = "google" | "vk";
+
+type SocialAuthProvider = {
+  id: "google" | "vk" | "sber" | "yandex" | "mail";
+  label: string;
+  shortLabel: string;
+  oauthProvider?: OAuthProvider;
+  status?: string;
+};
 
 type AuthPromptDialogProps = {
   open: boolean;
@@ -22,6 +31,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [authCountry, setAuthCountry] = useState<BillingCountry>(() => readStoredBillingCountry());
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +39,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
   const turnstileEnabled = isTurnstileEnabled();
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
   const returnTo = `${location.pathname}${location.search}`;
+  const socialAuthProviders = useMemo(() => getSocialAuthProviders(authCountry, t.auth), [authCountry, t.auth]);
 
   if (!open || isAuthenticated) return null;
 
@@ -68,12 +79,12 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
     }
   };
 
-  const handleOAuth = async (provider: "google" | "vk") => {
+  const handleOAuth = async (provider: OAuthProvider) => {
     setError(null);
     setPending(true);
 
     try {
-      const response = await startOAuth(provider, returnTo);
+      const response = await startOAuth(provider, returnTo, authCountry);
       window.location.href = response.authorizationUrl;
     } catch (err) {
       setError(toPublicApiError(err, t.auth.error));
@@ -125,25 +136,24 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
           </button>
         </div>
 
-        <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => handleOAuth("google")}
-            disabled={pending || isLoading}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black px-3 text-sm text-gray-200 transition-colors hover:border-white/20 hover:text-white disabled:opacity-60"
-          >
-            <span className="font-medium">G</span>
-            {t.auth.google}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleOAuth("vk")}
-            disabled={pending || isLoading}
-            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black px-3 text-sm text-gray-200 transition-colors hover:border-white/20 hover:text-white disabled:opacity-60"
-          >
-            <span className="font-medium">VK</span>
-            {t.auth.vk}
-          </button>
+        <div className={`mb-4 grid grid-cols-1 gap-2 ${socialAuthProviders.length > 1 ? "sm:grid-cols-2" : ""}`}>
+          {socialAuthProviders.map((provider) => (
+            <button
+              key={provider.id}
+              type="button"
+              onClick={() => provider.oauthProvider ? handleOAuth(provider.oauthProvider) : undefined}
+              disabled={pending || isLoading || !provider.oauthProvider}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black px-3 text-sm text-gray-200 transition-colors hover:border-white/20 hover:text-white disabled:text-gray-600 disabled:opacity-100"
+            >
+              <span className="font-medium">{provider.shortLabel}</span>
+              <span>{provider.label}</span>
+              {provider.status ? (
+                <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-gray-600">
+                  {provider.status}
+                </span>
+              ) : null}
+            </button>
+          ))}
         </div>
 
         <div className="space-y-3">
@@ -170,7 +180,11 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
                 <Globe className="h-4 w-4 text-gray-500" strokeWidth={1.7} />
                 <select
                   value={authCountry}
-                  onChange={(event) => setAuthCountry(event.target.value === "RU" ? "RU" : "KZ")}
+                  onChange={(event) => {
+                    const nextCountry = event.target.value === "RU" ? "RU" : "KZ";
+                    setAuthCountry(nextCountry);
+                    window.localStorage.setItem("nomduchat-country", nextCountry);
+                  }}
                   required
                   className="h-11 min-w-0 flex-1 appearance-none bg-transparent text-sm text-white outline-none"
                 >
@@ -209,13 +223,21 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                type="password"
+                type={passwordVisible ? "text" : "password"}
                 required
                 minLength={mode === "register" ? 8 : 1}
                 autoComplete={mode === "register" ? "new-password" : "current-password"}
                 className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-700"
                 placeholder={mode === "register" ? t.auth.passwordPlaceholder : t.auth.password}
               />
+              <button
+                type="button"
+                onClick={() => setPasswordVisible((value) => !value)}
+                aria-label={passwordVisible ? t.auth.hidePassword : t.auth.showPassword}
+                className="-mr-1 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                {passwordVisible ? <EyeOff className="h-4 w-4" strokeWidth={1.7} /> : <Eye className="h-4 w-4" strokeWidth={1.7} />}
+              </button>
             </span>
           </label>
         </div>
@@ -236,6 +258,22 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
           {pending ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.8} /> : null}
           {mode === "register" ? t.auth.createAccount : t.auth.loginAction}
         </button>
+
+        <p className="mt-3 text-center text-xs leading-relaxed text-gray-600">
+          Нажимая кнопку входа, регистрации или продолжения, вы принимаете{" "}
+          <Link to="/legal/terms" className="text-gray-400 transition-colors hover:text-white">
+            пользовательское соглашение
+          </Link>
+          ,{" "}
+          <Link to="/legal/privacy" className="text-gray-400 transition-colors hover:text-white">
+            политику конфиденциальности
+          </Link>{" "}
+          и{" "}
+          <Link to="/legal/cookies" className="text-gray-400 transition-colors hover:text-white">
+            cookies
+          </Link>
+          .
+        </p>
 
         <button
           type="button"
@@ -258,4 +296,27 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
 function readStoredBillingCountry(): BillingCountry {
   if (typeof window === "undefined") return "KZ";
   return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
+}
+
+function getSocialAuthProviders(
+  country: BillingCountry,
+  authLabels: { google: string; vk: string }
+): SocialAuthProvider[] {
+  if (country === "RU") {
+    return [
+      { id: "sber", label: "Sber ID", shortLabel: "S", status: "скоро" },
+      { id: "yandex", label: "Yandex ID", shortLabel: "Я", status: "скоро" },
+      { id: "mail", label: "Mail.ru", shortLabel: "@", status: "скоро" },
+      { id: "vk", label: formatVkLabel(authLabels.vk), shortLabel: "VK", oauthProvider: "vk" },
+    ];
+  }
+
+  return [
+    { id: "google", label: authLabels.google, shortLabel: "G", oauthProvider: "google" },
+    { id: "vk", label: formatVkLabel(authLabels.vk), shortLabel: "VK", oauthProvider: "vk" },
+  ];
+}
+
+function formatVkLabel(label: string) {
+  return label.replace(/^VK\s*/i, "") || label;
 }

@@ -3,18 +3,24 @@ import { createPostgresDatabaseClient, getPostgresConfig, runDatabaseMigrations 
 import { createApp } from "./server/create-app.js";
 import { createDependencies } from "./server/dependencies.js";
 
-const database = createPostgresDatabaseClient(getPostgresConfig());
-if (config.DATABASE_RUN_MIGRATIONS) {
+const database = config.API_PERSISTENCE === "postgres" ? createPostgresDatabaseClient(getPostgresConfig()) : null;
+if (database && config.DATABASE_RUN_MIGRATIONS) {
   await runDatabaseMigrations(database);
 }
 
 const app = await createApp({
   logger: true,
-  dependencies: createDependencies({
-    database,
-    persistence: "postgres",
-  }),
+  dependencies: database
+    ? createDependencies({
+        database,
+        persistence: "postgres",
+      })
+    : createDependencies({
+        persistence: "memory",
+      }),
 });
+
+app.log.info({ persistence: config.API_PERSISTENCE }, "nomduchat API persistence mode");
 
 await app.listen({
   port: config.API_PORT,
@@ -23,7 +29,7 @@ await app.listen({
 
 const shutdown = async () => {
   await app.close();
-  await database.close();
+  await database?.close();
 };
 
 process.once("SIGINT", shutdown);

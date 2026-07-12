@@ -2,6 +2,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
+  readonly VITE_YANDEX_METRIKA_ID?: string;
+  readonly VITE_YANDEX_VERIFICATION?: string;
 }
 
 interface ImportMeta {
@@ -31,4 +33,5 @@ interface SpeechRecognitionConstructor {
 interface Window {
   SpeechRecognition?: SpeechRecognitionConstructor;
   webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  ym?: (counterId: number, method: string, goalOrOptions?: string | Record<string, unknown>, params?: Record<string, unknown>) => void;
 }

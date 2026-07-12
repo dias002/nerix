@@ -100,7 +100,7 @@ export function GenerationJobCard({
 
         {isReady && artifactUrl ? (
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-            {job.modality === "video" ? (
+            {job.modality === "video" || job.modality === "avatar_video" ? (
               <video className="aspect-video w-full bg-black" src={artifactUrl} controls playsInline />
             ) : job.modality === "music" || job.modality === "voice" ? (
               <div className="space-y-4 p-5">
@@ -155,6 +155,7 @@ export function mediaTitle(modality: string, status: MediaGenerationJobApiRecord
   const failed = status === "failed" || status === "refunded";
   if (status === "cancelled") return "Генерация остановлена";
   if (failed) return "Генерация остановилась";
+  if (modality === "avatar_video") return pending ? "Собираю аватар-видео" : "Аватар-видео готово";
   if (modality === "video") return pending ? "Собираю видео" : "Видео готово";
   if (modality === "music") return pending ? "Пишу музыку" : "Музыка готова";
   if (modality === "voice") return pending ? "Готовлю аудио" : "Аудио готово";
@@ -175,13 +176,14 @@ export function mediaExtension(mimeType?: string) {
 
 function mediaDetail(job: MediaGenerationJobApiRecord) {
   if (job.status === "queued") return "Задача в очереди. Обычно это занимает пару минут.";
-  if (job.status === "running") return "Gemini уже работает. Можно остаться в чате, результат появится сам.";
+  if (job.status === "running") return "Провайдер уже работает. Можно остаться в чате, результат появится сам.";
   if (job.status === "succeeded") return "Файл можно посмотреть здесь или скачать.";
   if (job.status === "cancelled") return "Процесс остановлен вручную.";
   return "Кредиты возвращены на баланс.";
 }
 
 function mediaNoun(modality: string) {
+  if (modality === "avatar_video") return "видео с аватаром";
   if (modality === "video") return "видео";
   if (modality === "music") return "музыку";
   if (modality === "voice") return "аудио";
@@ -191,7 +193,7 @@ function mediaNoun(modality: string) {
 
 function mediaIcon(modality: string, isPending: boolean) {
   if (isPending) return <Loader2 className="h-5 w-5 animate-spin" strokeWidth={1.8} />;
-  if (modality === "video") return <Video className="h-5 w-5" strokeWidth={1.8} />;
+  if (modality === "video" || modality === "avatar_video") return <Video className="h-5 w-5" strokeWidth={1.8} />;
   if (modality === "music" || modality === "voice") return <Music2 className="h-5 w-5" strokeWidth={1.8} />;
   if (modality === "image") return <ImageIcon className="h-5 w-5" strokeWidth={1.8} />;
   return <FileText className="h-5 w-5" strokeWidth={1.8} />;

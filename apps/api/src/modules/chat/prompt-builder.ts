@@ -8,6 +8,8 @@ export type ChatAttachment = {
   truncated?: boolean;
 };
 
+export type ResponseStyle = "auto" | "business" | "business_visual" | "conversational" | "brief" | "detailed";
+
 export function createConversationTitle(message: string) {
   const title = message.replace(/\s+/g, " ").trim();
   return title.length > 48 ? `${title.slice(0, 45)}...` : title;
@@ -35,6 +37,12 @@ export function buildConversationPrompt(previousMessages: ConversationMessage[],
     "Последнее сообщение пользователя:",
     currentPrompt,
   ].join("\n");
+}
+
+export function applyResponseStyle(prompt: string, style: ResponseStyle | undefined) {
+  if (!style || style === "auto") return prompt;
+
+  return [responseStyleInstruction(style), "", "Запрос пользователя:", prompt].join("\n");
 }
 
 export function buildRoutingPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
@@ -167,6 +175,23 @@ function isContextualMediaFollowUp(prompt: string) {
 
 function containsAny(value: string, needles: string[]) {
   return needles.some((needle) => value.includes(needle));
+}
+
+function responseStyleInstruction(style: ResponseStyle) {
+  switch (style) {
+    case "business":
+      return "Настройка ответа: деловой стиль. Отвечай структурно, конкретно, без лишней эмоциональности. Используй короткие абзацы и списки.";
+    case "business_visual":
+      return "Настройка ответа: деловой стиль с визуальными подсказками. Дай структурный ответ и отдельно предложи идеи картинок, схем, таблиц или визуальных блоков, если это уместно.";
+    case "conversational":
+      return "Настройка ответа: разговорный стиль. Пиши проще и живее, без канцелярита, но сохраняй точность.";
+    case "brief":
+      return "Настройка ответа: краткий стиль. Сначала главный вывод, затем короткий список действий. Не растягивай ответ.";
+    case "detailed":
+      return "Настройка ответа: подробный стиль. Дай контекст, шаги, нюансы и практические рекомендации, но не добавляй воду.";
+    default:
+      return "Настройка ответа: авто.";
+  }
 }
 
 function isAttachmentLike(value: unknown): value is ChatAttachment {

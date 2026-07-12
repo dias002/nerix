@@ -1,12 +1,113 @@
 import { Link } from "react-router";
 import type { ReactNode } from "react";
-import { ArrowLeft, CircleUser, Globe, Mail, Shield } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Check, CircleUser, Copy, Globe, Link2, Mail, Shield } from "lucide-react";
+import {
+  getLinkedAccounts,
+  startOAuth,
+  toPublicApiError,
+  unlinkLinkedAccount,
+  type LinkedAccountApiRecord,
+} from "../api";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 
+type OAuthProvider = "google" | "vk";
+type AccountProvider = {
+  id: string;
+  label: string;
+  oauthProvider?: OAuthProvider;
+  unavailableCountries?: Array<"KZ" | "RU">;
+};
+
+const accountProviders = [
+  { id: "google", label: "Google", oauthProvider: "google", unavailableCountries: ["RU"] },
+  { id: "vk", label: "VK", oauthProvider: "vk" },
+  { id: "yandex", label: "Yandex" },
+  { id: "mailru", label: "Mail.ru" },
+] satisfies AccountProvider[];
+
 export default function SettingsProfile() {
   const { t } = useLanguage();
-  const { user } = useAuth();
+  const { accessToken, user } = useAuth();
+  const [copied, setCopied] = useState(false);
+  const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountApiRecord[]>([]);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
+  const referralLink = useMemo(() => {
+    const origin = typeof window === "undefined" ? "https://nomduchat.com" : window.location.origin;
+    const ref = user?.id ?? user?.email ?? "guest";
+    return `${origin}/auth?mode=register&ref=${encodeURIComponent(ref)}`;
+  }, [user?.email, user?.id]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!accessToken) {
+      setLinkedAccounts([]);
+      setAccountError(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    getLinkedAccounts()
+      .then((response) => {
+        if (!active) return;
+        setLinkedAccounts(response.accounts);
+        setAccountError(null);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setLinkedAccounts([]);
+        setAccountError(toPublicApiError(error, "Не удалось загрузить привязанные аккаунты."));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [accessToken]);
+
+  const connectAccount = async (provider: AccountProvider) => {
+    if (!provider.oauthProvider) return;
+    if (!accessToken) {
+      setAccountError("Войдите в аккаунт, чтобы управлять привязками.");
+      return;
+    }
+    if (isProviderUnavailable(provider, user?.country)) {
+      setAccountError(`${provider.label} недоступен для выбранной страны аккаунта.`);
+      return;
+    }
+
+    setPendingProvider(provider.id);
+    setAccountError(null);
+    try {
+      const response = await startOAuth(provider.oauthProvider, "/workspace/settings/profile", resolveOAuthCountry(user?.country));
+      window.location.href = response.authorizationUrl;
+    } catch (error) {
+      setAccountError(toPublicApiError(error, "Не удалось открыть привязку аккаунта."));
+      setPendingProvider(null);
+    }
+  };
+
+  const unlinkAccount = async (provider: AccountProvider) => {
+    if (!provider.oauthProvider) return;
+    if (!accessToken) {
+      setAccountError("Войдите в аккаунт, чтобы управлять привязками.");
+      return;
+    }
+
+    setPendingProvider(provider.id);
+    setAccountError(null);
+    try {
+      const response = await unlinkLinkedAccount(provider.oauthProvider);
+      setLinkedAccounts(response.accounts);
+    } catch (error) {
+      setAccountError(toPublicApiError(error, "Не удалось отвязать аккаунт."));
+    } finally {
+      setPendingProvider(null);
+    }
+  };
 
   const rows = [
     { label: t.settings.profile, value: user?.name || t.auth.guest, icon: CircleUser },
@@ -33,6 +134,91 @@ export default function SettingsProfile() {
           </div>
         ))}
       </div>
+
+      <section className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-4">
+        <div className="flex items-start gap-3">
+          <Link2 className="mt-0.5 h-5 w-5 shrink-0 text-gray-400" strokeWidth={1.6} />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-medium text-white">Реферальная ссылка</h3>
+            <p className="mt-1 text-sm leading-relaxed text-gray-500">
+              Ссылка для приглашения пользователей. Позже по ней можно начислять бонусы и считать регистрации.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <div className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-gray-300">
+                <span className="block truncate">{referralLink}</span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  await navigator.clipboard?.writeText(referralLink);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1600);
+                }}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+              >
+                {copied ? <Check className="h-4 w-4" strokeWidth={1.7} /> : <Copy className="h-4 w-4" strokeWidth={1.7} />}
+                {copied ? "Скопировано" : "Скопировать"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-4">
+        <h3 className="text-base font-medium text-white">Привязанные аккаунты</h3>
+        <p className="mt-1 text-sm leading-relaxed text-gray-500">
+          Управляйте быстрыми входами, которые пользователь видит в личном кабинете.
+        </p>
+        {accountError ? (
+          <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {accountError}
+          </div>
+        ) : null}
+        <div className="mt-4 divide-y divide-white/5">
+          {accountProviders.map((provider) => {
+            const account = provider.oauthProvider
+              ? linkedAccounts.find((item) => item.provider === provider.oauthProvider) ?? null
+              : null;
+            const unavailable = isProviderUnavailable(provider, user?.country);
+            const pending = pendingProvider === provider.id;
+            const disabled = pendingProvider !== null || !provider.oauthProvider || !accessToken || unavailable;
+            const status = provider.oauthProvider
+              ? account
+                ? account.email ?? account.displayName ?? "Привязан"
+                : !accessToken
+                  ? "Войдите для управления"
+                  : unavailable
+                    ? "Недоступно для этой страны"
+                    : "Не привязан"
+              : "Скоро";
+            const label = !provider.oauthProvider
+              ? "Скоро"
+              : account
+                ? pending
+                  ? "Отвязываем"
+                  : "Отвязать"
+                : pending
+                  ? "Открываем"
+                  : "Привязать";
+            return (
+              <div key={provider.id} className="flex items-center justify-between gap-4 py-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-white">{provider.label}</div>
+                  <div className="mt-0.5 truncate text-xs text-gray-600">{status}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => (account ? unlinkAccount(provider) : connectAccount(provider))}
+                  disabled={disabled}
+                  className="inline-flex h-9 min-w-24 items-center justify-center rounded-lg border border-white/10 px-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  {label}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </SettingsDetailShell>
   );
 }
@@ -68,4 +254,13 @@ export function SettingsDetailShell({
       </div>
     </div>
   );
+}
+
+function resolveOAuthCountry(country: string | undefined) {
+  return country === "RU" ? "RU" : "KZ";
+}
+
+function isProviderUnavailable(provider: AccountProvider, country: string | undefined) {
+  const normalizedCountry = resolveOAuthCountry(country);
+  return provider.unavailableCountries?.includes(normalizedCountry) ?? false;
 }

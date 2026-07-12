@@ -6,9 +6,9 @@ import type { AiGatewayService } from "../ai-gateway/ai-gateway.service.js";
 import type { BillingService } from "../billing/billing.service.js";
 import type { GenerationRepository } from "./generation.repository.js";
 import type { MediaArtifact, MediaGenerationProvider } from "./media-provider.js";
-import type { MediaGenerationJob } from "./generation.types.js";
+import type { AvatarVideoGenerationInput, MediaGenerationJob } from "./generation.types.js";
 
-const mediaModalities = new Set<AiModality>(["image", "video", "music", "voice"]);
+const mediaModalities = new Set<AiModality>(["image", "video", "avatar_video", "music", "voice"]);
 
 type SubscriptionAccessService = {
   currentSubscription(userId: string): Promise<{
@@ -67,6 +67,7 @@ export class GenerationService {
     agentId?: string;
     modality?: AiModality;
     prompt: string;
+    avatarVideo?: AvatarVideoGenerationInput;
   }) {
     const prompt = input.prompt.trim();
     if (!prompt) {
@@ -84,7 +85,15 @@ export class GenerationService {
     if (!routeResult.ok) return routeResult;
 
     if (!mediaModalities.has(routeResult.value.modality)) {
-      return fail(new DomainError("validation_failed", "Use generation jobs only for image, video, music, or voice.", 400));
+      return fail(new DomainError("validation_failed", "Use generation jobs only for image, video, avatar video, music, or voice.", 400));
+    }
+
+    if (input.avatarVideo?.referenceImage && routeResult.value.modality !== "avatar_video") {
+      return fail(new DomainError("validation_failed", "Face reference images can only be used for avatar video jobs.", 400));
+    }
+
+    if (input.avatarVideo?.referenceImage && !input.avatarVideo.consentConfirmed) {
+      return fail(new DomainError("validation_failed", "Confirm that you own this face image or have permission to use it.", 400));
     }
 
     const access = await this.getSubscriptionAccess(input.userId);
@@ -92,7 +101,7 @@ export class GenerationService {
       return fail(
         new DomainError(
           "subscription_required",
-          "Картинки, видео, песни и голос доступны после подписки. В бесплатном режиме доступно 7 обычных текстовых запросов в день.",
+          "Картинки, видео, аватар-ролики, песни и голос доступны после подписки. В бесплатном режиме доступно 7 обычных текстовых запросов в день.",
           402
         )
       );
@@ -119,6 +128,7 @@ export class GenerationService {
       reservationId: reservation.value.reservationId,
       metadata: {
         route: routeResult.value,
+        avatarVideo: sanitizeAvatarVideoMetadata(input.avatarVideo),
       },
     });
 
@@ -134,6 +144,7 @@ export class GenerationService {
         model: routeResult.value.model,
         modality: routeResult.value.modality,
         prompt,
+        avatarVideo: input.avatarVideo,
       });
 
       if (providerResult.status === "running") {
@@ -463,7 +474,19 @@ function publicMediaErrorMessage(error: unknown) {
     normalized.includes("not enough quota") ||
     normalized.includes("quota")
   ) {
+    if (normalized.includes("heygen")) {
+      return "У текущего HeyGen ключа нет доступной квоты для avatar video генерации. Кредиты nomduchat возвращены.";
+    }
+
     return "У текущего Google Gemini ключа нет доступной квоты для этой медиа-генерации. Кредиты nomduchat возвращены.";
+  }
+
+  if (normalized.includes("heygen_api_key")) {
+    return "HeyGen ключ для avatar video генерации не настроен. Кредиты nomduchat возвращены.";
+  }
+
+  if (normalized.includes("heygen_voice_id")) {
+    return "HeyGen voice_id для avatar video генерации не настроен. Кредиты nomduchat возвращены.";
   }
 
   if (normalized.includes("google_ai_api_key")) {
@@ -495,8 +518,24 @@ function defaultMimeType(modality: AiModality) {
   if (modality === "image") return "image/png";
   if (modality === "music") return "audio/mpeg";
   if (modality === "voice") return "audio/wav";
-  if (modality === "video") return "video/mp4";
+  if (modality === "video" || modality === "avatar_video") return "video/mp4";
   return "application/octet-stream";
+}
+
+function sanitizeAvatarVideoMetadata(input?: AvatarVideoGenerationInput) {
+  if (!input) return undefined;
+
+  return compactObject({
+    hasReferenceImage: Boolean(input.referenceImage),
+    referenceImageMimeType: input.referenceImage?.mimeType,
+    referenceImageFilename: input.referenceImage?.filename,
+    scriptLength: input.script?.length,
+    avatarName: input.avatarName,
+    consentConfirmed: input.consentConfirmed,
+    aspectRatio: input.aspectRatio,
+    expressiveness: input.expressiveness,
+    motionPrompt: input.motionPrompt,
+  });
 }
 
 function stringMetadata(job: MediaGenerationJob, key: string) {

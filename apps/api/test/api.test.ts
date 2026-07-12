@@ -42,6 +42,51 @@ test("GET /health/database reports missing database in test app", async () => {
   await app.close();
 });
 
+test("GET /geo/country detects supported countries from proxy headers", async () => {
+  const app = await createApp();
+
+  const cloudflareResponse = await app.inject({
+    method: "GET",
+    url: "/geo/country",
+    headers: {
+      "cf-ipcountry": "RU",
+    },
+  });
+
+  assert.equal(cloudflareResponse.statusCode, 200);
+  assert.deepEqual(cloudflareResponse.json(), {
+    country: "RU",
+    source: "header",
+  });
+
+  const vercelResponse = await app.inject({
+    method: "GET",
+    url: "/geo/country",
+    headers: {
+      "x-vercel-ip-country": "KZ",
+    },
+  });
+
+  assert.equal(vercelResponse.statusCode, 200);
+  assert.deepEqual(vercelResponse.json(), {
+    country: "KZ",
+    source: "header",
+  });
+
+  const unknownResponse = await app.inject({
+    method: "GET",
+    url: "/geo/country",
+  });
+
+  assert.equal(unknownResponse.statusCode, 200);
+  assert.deepEqual(unknownResponse.json(), {
+    country: null,
+    source: "unknown",
+  });
+
+  await app.close();
+});
+
 test("GET /health/database reports injected database status", async () => {
   const database: DatabaseClient = {
     async query<T extends Record<string, unknown> = Record<string, unknown>>(): Promise<DatabaseQueryResult<T>> {
@@ -857,6 +902,30 @@ test("OAuth start reports unavailable providers until credentials are configured
   await app.close();
 });
 
+test("Google OAuth start is blocked for RU accounts", async () => {
+  await withConfig(
+    {
+      GOOGLE_CLIENT_ID: "google-client",
+      GOOGLE_CLIENT_SECRET: "google-secret",
+      API_PUBLIC_URL: "http://127.0.0.1:4000",
+      WEB_APP_URL: "http://127.0.0.1:5173",
+    },
+    async () => {
+      const app = await createApp();
+
+      const response = await app.inject({
+        method: "GET",
+        url: "/auth/oauth/google/start?country=RU",
+      });
+
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.json().error.code, "provider_unavailable");
+
+      await app.close();
+    }
+  );
+});
+
 test("Google OAuth callback creates a nomduchat session", async () => {
   await withConfig(
     {
@@ -909,6 +978,117 @@ test("Google OAuth callback creates a nomduchat session", async () => {
         assert.equal(callbackResponse.json().user.name, "Google User");
         assert.equal(callbackResponse.json().returnTo, "/workspace/balance");
         assert.ok(callbackResponse.json().accessToken);
+
+        const linkedResponse = await app.inject({
+          method: "GET",
+          url: "/auth/linked-accounts",
+          headers: {
+            authorization: `Bearer ${callbackResponse.json().accessToken}`,
+          },
+        });
+
+        assert.equal(linkedResponse.statusCode, 200);
+        assert.equal(linkedResponse.json().accounts.length, 1);
+        assert.equal(linkedResponse.json().accounts[0].provider, "google");
+        assert.equal(linkedResponse.json().accounts[0].email, "google-user@example.com");
+
+        const blockedUnlinkResponse = await app.inject({
+          method: "POST",
+          url: "/auth/linked-accounts/google/unlink",
+          headers: {
+            authorization: `Bearer ${callbackResponse.json().accessToken}`,
+          },
+        });
+
+        assert.equal(blockedUnlinkResponse.statusCode, 400);
+        assert.equal(blockedUnlinkResponse.json().error.code, "validation_failed");
+      });
+
+      await app.close();
+    }
+  );
+});
+
+test("OAuth account linked to password user can be listed and unlinked", async () => {
+  await withConfig(
+    {
+      GOOGLE_CLIENT_ID: "google-client",
+      GOOGLE_CLIENT_SECRET: "google-secret",
+      API_PUBLIC_URL: "http://127.0.0.1:4000",
+      WEB_APP_URL: "http://127.0.0.1:5173",
+    },
+    async () => {
+      const app = await createApp();
+
+      const registerResponse = await app.inject({
+        method: "POST",
+        url: "/auth/register",
+        payload: {
+          email: "linked-google@example.com",
+          password: "secure-password",
+          name: "Linked User",
+        },
+      });
+      assert.equal(registerResponse.statusCode, 200);
+
+      const startResponse = await app.inject({
+        method: "GET",
+        url: "/auth/oauth/google/start",
+      });
+      assert.equal(startResponse.statusCode, 200);
+      const state = new URL(startResponse.json().authorizationUrl).searchParams.get("state");
+      assert.ok(state);
+
+      await withFetchStub(async (input) => {
+        const url = String(input);
+        if (url === "https://oauth2.googleapis.com/token") {
+          return jsonResponse({
+            access_token: "google-access-token",
+          });
+        }
+
+        if (url === "https://openidconnect.googleapis.com/v1/userinfo") {
+          return jsonResponse({
+            sub: "google-linked-1",
+            email: "linked-google@example.com",
+            name: "Linked Google",
+          });
+        }
+
+        throw new Error(`Unexpected fetch URL: ${url}`);
+      }, async () => {
+        const callbackResponse = await app.inject({
+          method: "GET",
+          url: `/auth/oauth/google/callback?format=json&code=oauth-code&state=${encodeURIComponent(state)}`,
+        });
+
+        assert.equal(callbackResponse.statusCode, 200);
+        const accessToken = callbackResponse.json().accessToken;
+
+        const linkedResponse = await app.inject({
+          method: "GET",
+          url: "/auth/linked-accounts",
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        assert.equal(linkedResponse.statusCode, 200);
+        assert.equal(linkedResponse.json().accounts.length, 1);
+        assert.equal(linkedResponse.json().accounts[0].provider, "google");
+
+        const unlinkResponse = await app.inject({
+          method: "POST",
+          url: "/auth/linked-accounts/google/unlink",
+          headers: {
+            authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        assert.equal(unlinkResponse.statusCode, 200);
+        assert.equal(unlinkResponse.json().provider, "google");
+        assert.equal(unlinkResponse.json().unlinked, true);
+        assert.deepEqual(unlinkResponse.json().accounts, []);
       });
 
       await app.close();
@@ -1108,6 +1288,7 @@ test("GET /ai/providers exposes configured provider registry", async () => {
   assert.ok(body.providers.some((provider: { code: string }) => provider.code === "openai"));
   assert.ok(body.providers.some((provider: { code: string }) => provider.code === "anthropic"));
   assert.ok(body.providers.some((provider: { code: string }) => provider.code === "gemini"));
+  assert.ok(body.models.some((model: { id: string }) => model.id === "mock-provider:configured"));
 
   await app.close();
 });
@@ -1122,6 +1303,7 @@ test("POST /chat/messages returns a persisted local conversation response", asyn
       userId: "local-user",
       country: "KZ",
       language: "ru",
+      selectedModelId: "mock-provider:configured",
       message: "Помоги написать структуру лендинга для nomduchat",
     },
   });
@@ -1132,6 +1314,8 @@ test("POST /chat/messages returns a persisted local conversation response", asyn
   assert.equal(body.userMessage.role, "user");
   assert.equal(body.assistantMessage.role, "assistant");
   assert.equal(body.route.agentId, "general");
+  assert.equal(body.route.model, "mock-text");
+  assert.equal(body.userMessage.metadata.requestedModelId, "mock-provider:configured");
   assert.ok(body.usage.estimatedCredits >= 30);
   assert.equal(body.answerVariant.status, "candidate");
   assert.equal(body.answerVariant.assistantMessageId, body.assistantMessage.id);

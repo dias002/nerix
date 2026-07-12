@@ -12,8 +12,26 @@ const createJobSchema = z.object({
   country: countrySchema.default("KZ"),
   language: languageSchema.default("ru"),
   agentId: z.string().optional(),
-  modality: z.enum(["image", "video", "music", "voice"]).optional(),
+  modality: z.enum(["image", "video", "avatar_video", "music", "voice"]).optional(),
   prompt: z.string().trim().min(1),
+  avatarVideo: z
+    .object({
+      referenceImage: z
+        .object({
+          dataBase64: z.string().min(100).max(4_000_000),
+          mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+          filename: z.string().trim().max(120).optional(),
+        })
+        .optional(),
+      script: z.string().trim().min(1).max(4_000).optional(),
+      avatarName: z.string().trim().max(80).optional(),
+      consentConfirmed: z.boolean().optional(),
+      voiceId: z.string().trim().max(120).optional(),
+      aspectRatio: z.enum(["auto", "16:9", "9:16", "4:5", "5:4", "1:1"]).optional(),
+      expressiveness: z.enum(["low", "medium", "high"]).optional(),
+      motionPrompt: z.string().trim().max(500).optional(),
+    })
+    .optional(),
 });
 
 const jobParamsSchema = z.object({

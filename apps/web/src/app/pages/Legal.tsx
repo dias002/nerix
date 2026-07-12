@@ -1,11 +1,34 @@
 import { Link, useLocation } from "react-router";
-import { ArrowLeft, Building2, CreditCard, FileText, RefreshCcw, ShieldCheck, type LucideIcon } from "lucide-react";
+import { ArrowLeft, Building2, Cookie, CreditCard, FileText, RefreshCcw, Repeat2, ShieldCheck, type LucideIcon } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 
-type LegalPageKey = "privacy" | "terms" | "refund" | "pricing";
+type LegalPageKey = "privacy" | "terms" | "refund" | "pricing" | "cookies" | "autoRenewal";
 
 const companyName = "Товарищество с ограниченной ответственностью «removed-project»";
 const supportEmail = "admin@nomduchat.com";
+
+const pricingCatalog = [
+  {
+    name: "Подписка Easy Start на 1 месяц",
+    price: "990 ₽",
+    details: "2 000 nomduchat-кредитов, AI-чат, история диалогов, работа с текстами и файлами.",
+  },
+  {
+    name: "Подписка Active Work на 1 месяц",
+    price: "1 990 ₽",
+    details: "5 000 nomduchat-кредитов, расширенный лимит для документов, кода и регулярной работы.",
+  },
+  {
+    name: "Подписка Team Mode на 1 месяц",
+    price: "19 990 ₽",
+    details: "20 000 nomduchat-кредитов, командные и бизнес-сценарии с увеличенным контекстом.",
+  },
+  {
+    name: "Подписка Business Cabinet на 1 месяц",
+    price: "41 690 ₽",
+    details: "50 000 nomduchat-кредитов, бизнес-workspace до 5 сотрудников, роли, CRM-аналитика и инструменты компании.",
+  },
+];
 
 const pages: Record<
   LegalPageKey,
@@ -141,18 +164,17 @@ const pages: Record<
     ],
   },
   pricing: {
-    title: "Тарифы и состав услуги",
-    subtitle: "Что пользователь получает при оплате доступа к nomduchat.",
+    title: "Каталог услуг и цены",
+    subtitle: "Фиксированные цены на цифровые услуги nomduchat, доступные для онлайн-оплаты на сайте.",
     icon: CreditCard,
-    updatedAt: "27 июня 2026",
+    updatedAt: "2 июля 2026",
     sections: [
       {
-        title: "Платные тарифы",
+        title: "Что можно оплатить онлайн",
         text: [
-          "Easy Start: базовый доступ для регулярной работы с AI-чатом.",
-          "Active Work: увеличенный лимит для активной работы с текстами, документами и кодом.",
-          "Team Mode: расширенный лимит для командных и бизнес-задач.",
-          "Business Cabinet: workspace для бизнеса, роли сотрудников, CRM-аналитика и инструменты компании.",
+          "На сайте можно оплатить месячную подписку на доступ к цифровому AI-сервису nomduchat.",
+          "Оплата через YooKassa доступна для тарифов в рублях: Easy Start, Active Work, Team Mode и Business Cabinet.",
+          "Каждая услуга в каталоге ниже имеет фиксированную цену, указанную как точная сумма в рублях.",
         ],
       },
       {
@@ -161,6 +183,13 @@ const pages: Record<
           "AI-запросы в рамках лимита кредитов тарифа.",
           "История чатов, работа с текстовыми файлами, генерация и обработка контента при наличии доступного провайдера.",
           "B2B-функции для бизнес-тарифа: workspace, сотрудники, роли, заявки, идеи, Telegram-менеджер, сайты и CRM-заметки.",
+        ],
+      },
+      {
+        title: "Период доступа",
+        text: [
+          "Цена каждого тарифа указана за 1 месяц доступа.",
+          "После успешной оплаты сервис активирует выбранный тариф и начисляет указанный объем nomduchat-кредитов на аккаунт пользователя.",
         ],
       },
       {
@@ -175,6 +204,64 @@ const pages: Record<
         text: [
           "Чеки и подтверждения оплаты формируются платежным провайдером, если это поддерживается выбранным способом оплаты.",
           "Реквизиты оператора сервиса размещены на странице /requisites.",
+        ],
+      },
+    ],
+  },
+  cookies: {
+    title: "Согласие на использование cookies",
+    subtitle: "Какие cookies использует nomduchat и как пользователь может управлять согласием.",
+    icon: Cookie,
+    updatedAt: "7 июля 2026",
+    sections: [
+      {
+        title: "Необходимые cookies",
+        text: [
+          "Необходимые cookies нужны для работы интерфейса, авторизации, выбора языка, страны, темы, сохранения согласия и защиты сессии.",
+          "Без них часть функций сервиса может работать некорректно: вход, рабочее пространство, платежные статусы и настройки пользователя.",
+        ],
+      },
+      {
+        title: "Аналитические cookies",
+        text: [
+          "Аналитические cookies и события веб-аналитики используются только для понимания, какие страницы и функции требуют улучшения.",
+          "Такие cookies не нужны для базовой работы сервиса и могут включаться после согласия пользователя.",
+        ],
+      },
+      {
+        title: "Управление согласием",
+        text: [
+          "Пользователь может принять все cookies или оставить только необходимые в баннере на сайте.",
+          "Чтобы изменить выбор, можно очистить cookies и localStorage сайта в настройках браузера. После этого баннер появится снова.",
+        ],
+      },
+    ],
+  },
+  autoRenewal: {
+    title: "Согласие на автопродление подписки",
+    subtitle: "Условия автоматического продления тарифа nomduchat и отключения автосписания.",
+    icon: Repeat2,
+    updatedAt: "7 июля 2026",
+    sections: [
+      {
+        title: "Как работает автопродление",
+        text: [
+          "При подключении платного тарифа автопродление включается по умолчанию, если выбранный платежный провайдер поддерживает регулярные списания.",
+          "Следующее списание выполняется в конце оплаченного периода по цене активного тарифа, указанной в интерфейсе подписки и каталоге услуг.",
+        ],
+      },
+      {
+        title: "Как отключить",
+        text: [
+          "Пользователь может отключить автопродление в разделе «Подписка» до даты следующего списания.",
+          "После отключения текущий оплаченный период остается доступным до окончания срока действия тарифа.",
+        ],
+      },
+      {
+        title: "Если списание не прошло",
+        text: [
+          "Если платеж не прошел, сервис показывает уведомление и предлагает повторить оплату или выбрать другой способ оплаты.",
+          "Доступ к платным функциям может быть ограничен после окончания оплаченного периода, если подписка не продлена.",
         ],
       },
     ],
@@ -224,10 +311,13 @@ export default function Legal() {
           <LegalLink to="/legal/terms" label="Соглашение" active={pageKey === "terms"} />
           <LegalLink to="/legal/privacy" label="Конфиденциальность" active={pageKey === "privacy"} />
           <LegalLink to="/legal/refund" label="Возвраты" active={pageKey === "refund"} />
-          <LegalLink to="/legal/pricing" label="Тарифы" active={pageKey === "pricing"} />
+          <LegalLink to="/legal/pricing" label="Каталог и цены" active={pageKey === "pricing"} />
+          <LegalLink to="/legal/cookies" label="Cookies" active={pageKey === "cookies"} />
+          <LegalLink to="/legal/auto-renewal" label="Автопродление" active={pageKey === "autoRenewal"} />
         </nav>
 
         <section className="mt-8 space-y-4">
+          {pageKey === "pricing" ? <PricingCatalog /> : null}
           {page.sections.map((section) => (
             <article key={section.title} className="rounded-3xl border border-white/10 bg-[#080808]/85 p-5 backdrop-blur-md md:p-6">
               <h2 className="text-2xl font-medium">{section.title}</h2>
@@ -243,6 +333,31 @@ export default function Legal() {
         </section>
       </main>
     </div>
+  );
+}
+
+function PricingCatalog() {
+  return (
+    <article className="overflow-hidden rounded-3xl border border-white/10 bg-[#080808]/85 backdrop-blur-md">
+      <div className="border-b border-white/10 p-5 md:p-6">
+        <h2 className="text-2xl font-medium">Каталог товаров и услуг с фиксированными ценами</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-400 md:text-base">
+          Оплатить онлайн на сайте можно за следующие цифровые услуги nomduchat:
+        </p>
+      </div>
+      <div className="divide-y divide-white/10">
+        {pricingCatalog.map((item) => (
+          <div key={item.name} className="grid gap-4 p-5 md:grid-cols-[1.5fr_8rem_2fr] md:items-start md:p-6">
+            <div>
+              <div className="text-base font-medium text-white">{item.name}</div>
+              <div className="mt-1 text-xs uppercase tracking-[0.12em] text-gray-600">Цифровая услуга</div>
+            </div>
+            <div className="text-2xl font-semibold text-white md:text-right">{item.price}</div>
+            <p className="text-sm leading-relaxed text-gray-400">{item.details}</p>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 
@@ -262,6 +377,8 @@ function LegalLink({ to, label, active }: { to: string; label: string; active: b
 }
 
 function resolvePageKey(pathname: string): LegalPageKey {
+  if (pathname.includes("auto-renewal")) return "autoRenewal";
+  if (pathname.includes("cookies")) return "cookies";
   if (pathname.includes("privacy")) return "privacy";
   if (pathname.includes("refund")) return "refund";
   if (pathname.includes("pricing")) return "pricing";

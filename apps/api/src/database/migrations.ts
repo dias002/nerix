@@ -394,6 +394,12 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    alter table subscription_checkouts
+      add column if not exists customer_email text,
+      add column if not exists customer_name text
+  `);
+
+  await database.query(`
     create index if not exists subscription_checkouts_user_created_idx
       on subscription_checkouts(user_id, created_at desc)
   `);

@@ -9,13 +9,14 @@ export type AgentCategory =
   | "study"
   | "image"
   | "video"
+  | "avatar"
   | "music"
   | "voice"
   | "documents"
   | "marketing"
   | "support";
 
-export type AiModality = "text" | "code" | "image" | "video" | "music" | "voice" | "file";
+export type AiModality = "text" | "code" | "image" | "video" | "avatar_video" | "music" | "voice" | "file";
 
 export type AiTaskType =
   | "chat_reply"
@@ -68,6 +69,7 @@ export type AiRouteRequest = {
   taskType?: AiTaskType;
   modality: AiModality;
   prompt: string;
+  selectedModelId?: string;
   attachmentIds?: string[];
 };
 

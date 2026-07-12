@@ -5,8 +5,8 @@ import { ArrowRight, Bot, Briefcase, Code, FileText, GraduationCap, Headphones, 
 import { useLanguage } from "../i18n";
 import { getAgents } from "../api";
 
-const fallbackAgentIds = ["general", "business", "code", "study", "documents", "image", "video", "music", "voice", "marketing", "support"];
-const fallbackAgentIcons = [Bot, Briefcase, Code, GraduationCap, FileText, ImageIcon, Video, Music2, Mic, Megaphone, Headphones];
+const fallbackAgentIds = ["general", "business", "code", "study", "documents", "image", "video", "avatar", "music", "voice", "marketing", "support"];
+const fallbackAgentIcons = [Bot, Briefcase, Code, GraduationCap, FileText, ImageIcon, Video, Video, Music2, Mic, Megaphone, Headphones];
 
 export default function Agents() {
   const { t } = useLanguage();

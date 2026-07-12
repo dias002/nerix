@@ -15,9 +15,15 @@ function resolveDefaultApiUrl() {
   if (!import.meta.env.PROD) return "http://127.0.0.1:4000";
   if (
     typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ) {
+    return "http://127.0.0.1:4000";
+  }
+  if (
+    typeof window !== "undefined" &&
     (window.location.hostname === "nomduchat.com" || window.location.hostname === "www.nomduchat.com")
   ) {
-    return "https://api.nomduchat.com";
+    return "/api";
   }
 
   return "https://nomduchat-api.onrender.com";

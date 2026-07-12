@@ -1,7 +1,7 @@
 import type { AiModality } from "@nomduchat/shared";
 
 const codeNeedles = ["код", "code", "bug", "ошибка", "рефактор", "api", "typescript"];
-const imageNeedles = ["картин", "изображ", "image", "photo", "фото", "логотип"];
+const imageNeedles = ["картин", "изображ", "image", "photo", "фото", "логотип", "аватар", "avatar"];
 const videoNeedles = ["видео", "video", "ролик", "анимац"];
 const voiceNeedles = ["голос", "озвуч", "voice", "speech"];
 
@@ -48,6 +48,7 @@ export function inferModality(prompt: string): AiModality {
   ) {
     return "music";
   }
+  if (wantsAvatarVideo(normalized)) return "avatar_video";
   if (containsAny(normalized, imageNeedles)) return "image";
   if (containsAny(normalized, videoNeedles)) return "video";
   if (containsAny(normalized, voiceNeedles)) return "voice";
@@ -69,6 +70,47 @@ function wantsGeneratedAudio(value: string) {
 
 function wantsGeneratedMusic(value: string) {
   return containsAny(value, musicSubjectNeedles) && containsAny(value, generationVerbNeedles);
+}
+
+function wantsAvatarVideo(value: string) {
+  if (
+    containsAny(value, [
+      "говорящий аватар",
+      "говорящим аватар",
+      "аватар говорит",
+      "видео с аватар",
+      "avatar video",
+      "talking avatar",
+      "ai presenter",
+      "digital presenter",
+      "video agent",
+      "виртуальный ведущ",
+      "цифровой ведущ",
+      "видеоведущ",
+    ])
+  ) {
+    return true;
+  }
+
+  const hasAvatarSubject = containsAny(value, ["аватар", "avatar", "персонаж"]);
+  const hasVideoOrSpeechIntent = containsAny(value, [
+    "видео",
+    "ролик",
+    "video",
+    "mp4",
+    "shorts",
+    "reels",
+    "говор",
+    "озвуч",
+    "диктор",
+    "ведущ",
+    "presenter",
+    "talking",
+    "speech",
+    "расска",
+  ]);
+
+  return hasAvatarSubject && hasVideoOrSpeechIntent;
 }
 
 function extractLatestRequest(prompt: string) {

@@ -1,10 +1,11 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { ArrowRight, BookOpen, Building2, ChevronDown, FileText, LifeBuoy, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Building2, ChevronDown, CreditCard, FileText, HelpCircle, LifeBuoy, Mail, Sparkles } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 import LanguageSwitch from "../components/LanguageSwitch";
 import DownloadAppBanner from "../components/DownloadAppBanner";
 import { useLanguage } from "../i18n";
+import { reachAnalyticsGoal } from "../analytics";
 
 export default function Home() {
   const { t } = useLanguage();
@@ -113,6 +114,14 @@ export default function Home() {
                   {t.home.forBusiness}
                 </Link>
                 <Link
+                  to="/pricing"
+                  onClick={() => reachAnalyticsGoal("pricing_open", { source: "home_hero" })}
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <CreditCard className="h-4 w-4" strokeWidth={1.6} />
+                  Каталог и цены
+                </Link>
+                <Link
                   to="/requisites"
                   className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
                 >
@@ -132,6 +141,20 @@ export default function Home() {
                 >
                   <LifeBuoy className="h-4 w-4" strokeWidth={1.6} />
                   Поддержка
+                </Link>
+                <Link
+                  to="/faq"
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <HelpCircle className="h-4 w-4" strokeWidth={1.6} />
+                  FAQ
+                </Link>
+                <Link
+                  to="/contacts"
+                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+                >
+                  <Mail className="h-4 w-4" strokeWidth={1.6} />
+                  Контакты
                 </Link>
               </div>
             </div>
@@ -214,7 +237,16 @@ export default function Home() {
               Возвраты
             </Link>
             <Link to="/legal/pricing" className="transition-colors hover:text-white">
-              Тарифы
+              Каталог и цены
+            </Link>
+            <Link to="/legal/cookies" className="transition-colors hover:text-white">
+              Cookies
+            </Link>
+            <Link to="/faq" className="transition-colors hover:text-white">
+              FAQ
+            </Link>
+            <Link to="/contacts" className="transition-colors hover:text-white">
+              Контакты
             </Link>
             <Link to="/support" className="transition-colors hover:text-white">
               Поддержка

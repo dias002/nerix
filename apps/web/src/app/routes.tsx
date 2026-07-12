@@ -5,6 +5,9 @@ import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 const Home = lazy(() => import("./pages/Home"));
 const Models = lazy(() => import("./pages/Models"));
 const About = lazy(() => import("./pages/About"));
+const Faq = lazy(() => import("./pages/Faq"));
+const Contacts = lazy(() => import("./pages/Contacts"));
+const SeoArticles = lazy(() => import("./pages/SeoArticles"));
 const Business = lazy(() => import("./pages/Business"));
 const Requisites = lazy(() => import("./pages/Requisites"));
 const Legal = lazy(() => import("./pages/Legal"));
@@ -15,6 +18,9 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
 const Chat = lazy(() => import("./pages/Chat"));
+const AvatarStudio = lazy(() => import("./pages/AvatarStudio"));
+const Apps = lazy(() => import("./pages/Apps"));
+const Projects = lazy(() => import("./pages/Projects"));
 const Agents = lazy(() => import("./pages/Agents"));
 const History = lazy(() => import("./pages/History"));
 const Memory = lazy(() => import("./pages/Memory"));
@@ -44,6 +50,22 @@ const routes: RouteObject[] = [
   {
     path: "/about",
     Component: About,
+  },
+  {
+    path: "/faq",
+    Component: Faq,
+  },
+  {
+    path: "/contacts",
+    Component: Contacts,
+  },
+  {
+    path: "/seo/articles",
+    Component: SeoArticles,
+  },
+  {
+    path: "/seo/articles/:slug",
+    Component: SeoArticles,
   },
   {
     path: "/models",
@@ -78,6 +100,14 @@ const routes: RouteObject[] = [
     Component: Legal,
   },
   {
+    path: "/legal/cookies",
+    Component: Legal,
+  },
+  {
+    path: "/legal/auto-renewal",
+    Component: Legal,
+  },
+  {
     path: "/terms",
     Component: Legal,
   },
@@ -91,6 +121,14 @@ const routes: RouteObject[] = [
   },
   {
     path: "/pricing",
+    Component: Legal,
+  },
+  {
+    path: "/cookies",
+    Component: Legal,
+  },
+  {
+    path: "/auto-renewal",
     Component: Legal,
   },
   {
@@ -131,6 +169,9 @@ const routes: RouteObject[] = [
     children: [
       { index: true, Component: Chat },
       { path: "chat", Component: Chat },
+      { path: "avatar", Component: AvatarStudio },
+      { path: "apps", Component: Apps },
+      { path: "projects", Component: Projects },
       { path: "history", Component: History },
       { path: "agents", Component: Agents },
       { path: "memory", Component: Memory },
@@ -149,6 +190,7 @@ const routes: RouteObject[] = [
       { path: "admin/ai-budget", Component: Admin },
       { path: "balance", Component: Balance },
       { path: "settings", Component: Settings },
+      { path: "settings/memory", Component: Memory },
       { path: "settings/profile", Component: SettingsProfile },
       { path: "settings/appearance", Component: SettingsAppearance },
       { path: "settings/notifications", Component: SettingsNotifications },

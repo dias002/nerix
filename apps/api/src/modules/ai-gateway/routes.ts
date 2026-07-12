@@ -5,7 +5,7 @@ import { countrySchema, languageSchema } from "../../server/schemas.js";
 import { ok } from "../../domain/result.js";
 import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { AiGatewayService } from "./ai-gateway.service.js";
-import { getConfiguredProviders, getProviderPolicyMode } from "./provider-registry.js";
+import { getConfiguredProviders, getProviderPolicyMode, getSelectableModels } from "./provider-registry.js";
 
 const routeSchema = z.object({
   country: countrySchema.default("KZ"),
@@ -25,8 +25,9 @@ const routeSchema = z.object({
       "media_generation",
     ])
     .optional(),
-  modality: z.enum(["text", "code", "image", "video", "music", "voice", "file"]).optional(),
+  modality: z.enum(["text", "code", "image", "video", "avatar_video", "music", "voice", "file"]).optional(),
   prompt: z.string().min(1),
+  selectedModelId: z.string().trim().min(1).max(160).optional(),
   attachmentIds: z.array(z.string()).optional(),
 });
 
@@ -46,6 +47,15 @@ export async function registerAiGatewayRoutes(
           enabled,
           modalities,
           reason,
+        })),
+        models: getSelectableModels().map(({ id, providerCode, providerName, label, description, tier, modalities }) => ({
+          id,
+          providerCode,
+          providerName,
+          label,
+          description,
+          tier,
+          modalities,
         })),
       })
     );

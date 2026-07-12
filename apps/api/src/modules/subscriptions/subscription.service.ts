@@ -1,6 +1,7 @@
 import { DomainError, fail, ok } from "../../domain/result.js";
 import { config } from "../../config.js";
 import type { BillingService } from "../billing/billing.service.js";
+import type { TransactionalMailer } from "../notifications/transactional-mailer.js";
 import { findPlanPrice, isPlanId, isSubscriptionCountry } from "./plans.js";
 import { createSubscriptionPaymentProvider, type ProviderCheckout } from "./payment-provider.js";
 import type { SubscriptionRepository } from "./subscription.repository.js";
@@ -15,7 +16,8 @@ import type {
 export class SubscriptionService {
   constructor(
     private readonly repository: SubscriptionRepository,
-    private readonly billing: BillingService
+    private readonly billing: BillingService,
+    private readonly transactionalMailer?: TransactionalMailer
   ) {}
 
   async listPlans(country: SubscriptionCountry = "KZ") {
@@ -41,7 +43,13 @@ export class SubscriptionService {
     });
   }
 
-  async createCheckout(input: { userId: string; planId: string; country: string; customerEmail?: string | null }) {
+  async createCheckout(input: {
+    userId: string;
+    planId: string;
+    country: string;
+    customerEmail?: string | null;
+    customerName?: string | null;
+  }) {
     const country = input.country.toUpperCase();
     if (!isSubscriptionCountry(country)) {
       return fail(new DomainError("validation_failed", "Subscriptions are currently available only for KZ and RU.", 400));
@@ -85,10 +93,24 @@ export class SubscriptionService {
       price,
       providerCheckoutId: providerCheckout.providerCheckoutId,
       checkoutUrl: providerCheckout.checkoutUrl,
+      customerEmail,
+      customerName: input.customerName ?? null,
     });
 
     if (!checkout) {
       return fail(new DomainError("not_found", `User '${input.userId}' was not found.`, 404));
+    }
+
+    if (customerEmail) {
+      await this.sendBestEffort(() =>
+        this.transactionalMailer?.sendCheckoutCreated({
+          email: customerEmail,
+          name: input.customerName,
+          planName: plan.name,
+          amount: formatCheckoutAmount(price.amountMinor, price.currency),
+          checkoutUrl: checkout.checkoutUrl,
+        })
+      );
     }
 
     return ok({
@@ -188,6 +210,18 @@ export class SubscriptionService {
       if (updatedCheckout) {
         completion.checkout = updatedCheckout;
       }
+
+      if (completion.checkout.customerEmail) {
+        await this.sendBestEffort(() =>
+          this.transactionalMailer?.sendSubscriptionPaid({
+            email: completion.checkout.customerEmail!,
+            name: completion.checkout.customerName,
+            planName: plan.name,
+            amount: formatCheckoutAmount(completion.checkout.amountMinor, completion.checkout.currency),
+            periodEnd: formatSubscriptionDate(completion.subscription.currentPeriodEnd),
+          })
+        );
+      }
     }
 
     return ok({
@@ -214,9 +248,34 @@ export class SubscriptionService {
       subscription,
     });
   }
+
+  private async sendBestEffort(task: () => Promise<void> | undefined) {
+    try {
+      await task();
+    } catch {
+      // Transactional email must not block subscription flow.
+    }
+  }
 }
 
 function normalizeCustomerEmail(email: string | null | undefined) {
   const value = email?.trim().toLowerCase();
   return value || undefined;
+}
+
+function formatCheckoutAmount(amountMinor: number, currency: "KZT" | "RUB") {
+  const locale = currency === "RUB" ? "ru-RU" : "ru-KZ";
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amountMinor / 100);
+}
+
+function formatSubscriptionDate(value: string) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(value));
 }

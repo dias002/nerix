@@ -2,6 +2,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { config } from "../config.js";
 import { registerHealthRoutes } from "./health.routes.js";
+import { registerGeoRoutes } from "./geo.routes.js";
 import { createDependencies, type AppDependencies } from "./dependencies.js";
 import { registerAdminRoutes } from "../modules/admin/routes.js";
 import { registerAgentRoutes } from "../modules/agents/routes.js";
@@ -36,7 +37,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
 
   await app.register(cors, {
     origin(origin, callback) {
-      if (!origin || allowAnyOrigin || allowedOrigins.has(origin)) {
+      if (!origin || allowAnyOrigin || allowedOrigins.has(origin) || isLocalDevelopmentOrigin(origin)) {
         callback(null, true);
         return;
       }
@@ -54,6 +55,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
   });
 
   await registerHealthRoutes(app, dependencies.database);
+  await registerGeoRoutes(app);
   await registerAuthRoutes(app, dependencies.auth, dependencies.abuseGuard);
   await registerUserRoutes(app, dependencies.users, dependencies.auth);
   await registerAdminRoutes(app, dependencies.admin, dependencies.auth);
@@ -84,4 +86,15 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
   await registerMailingRoutes(app, dependencies.mailings, dependencies.auth, dependencies.abuseGuard);
 
   return app;
+}
+
+function isLocalDevelopmentOrigin(origin: string) {
+  if (config.NODE_ENV === "production") return false;
+
+  try {
+    const url = new URL(origin);
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
 }

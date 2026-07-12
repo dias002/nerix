@@ -37,6 +37,7 @@ export class AiGatewayService {
       preferredModel: agentResult.value.defaultModel,
       agentId: agentResult.value.id,
       taskType,
+      selectedModelId: input.selectedModelId,
     });
     if (!provider) {
       return fail(new DomainError("provider_unavailable", "No AI provider is configured for this request.", 503));
@@ -50,7 +51,7 @@ export class AiGatewayService {
       policyMode: provider.policyMode,
       estimatedCredits: estimateResult.value.estimatedCredits,
       reserveCredits: estimateResult.value.reserveCredits,
-      asyncJob: ["image", "video", "music", "voice"].includes(modality),
+      asyncJob: ["image", "video", "avatar_video", "music", "voice"].includes(modality),
       modality,
       routingReason: provider.reason,
     });
@@ -73,7 +74,13 @@ export class AiGatewayService {
 
 function inferTaskType(input: { prompt: string; modality: AiModality; agentId?: string }): AiTaskType {
   if (input.modality === "code") return "code_generation";
-  if (input.modality === "image" || input.modality === "video" || input.modality === "music" || input.modality === "voice") {
+  if (
+    input.modality === "image" ||
+    input.modality === "video" ||
+    input.modality === "avatar_video" ||
+    input.modality === "music" ||
+    input.modality === "voice"
+  ) {
     return "media_generation";
   }
 

@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import type { CountryCode } from "@nomduchat/shared";
 import { config } from "../../config.js";
 import { DomainError } from "../../domain/result.js";
 import type { OAuthProviderCode, OAuthUserProfile } from "./auth.repository.js";
@@ -6,6 +7,7 @@ import type { OAuthProviderCode, OAuthUserProfile } from "./auth.repository.js";
 type OAuthStatePayload = {
   provider: OAuthProviderCode;
   returnTo: string;
+  country: CountryCode;
   nonce: string;
   exp: number;
 };
@@ -50,7 +52,7 @@ export function isOAuthProviderConfigured(provider: OAuthProviderCode) {
   return Boolean(config.VK_CLIENT_ID && config.VK_CLIENT_SECRET);
 }
 
-export function createOAuthAuthorizationUrl(input: { provider: OAuthProviderCode; returnTo?: string }) {
+export function createOAuthAuthorizationUrl(input: { provider: OAuthProviderCode; returnTo?: string; country?: CountryCode }) {
   if (!isOAuthProviderConfigured(input.provider)) {
     throw new DomainError("provider_unavailable", `${providerLabel(input.provider)} OAuth is not configured.`, 503);
   }
@@ -58,6 +60,7 @@ export function createOAuthAuthorizationUrl(input: { provider: OAuthProviderCode
   const state = signOAuthState({
     provider: input.provider,
     returnTo: normalizeReturnTo(input.returnTo),
+    country: input.country ?? "KZ",
   });
 
   if (input.provider === "google") {
@@ -100,15 +103,19 @@ export async function exchangeOAuthCode(input: {
     input.provider === "google" ? await exchangeGoogleCode(input.code) : await exchangeVkCode(input.code);
 
   return {
-    profile,
+    profile: {
+      ...profile,
+      country: state.country,
+    },
     returnTo: state.returnTo,
   };
 }
 
-function signOAuthState(input: { provider: OAuthProviderCode; returnTo: string }) {
+function signOAuthState(input: { provider: OAuthProviderCode; returnTo: string; country: CountryCode }) {
   const payload: OAuthStatePayload = {
     provider: input.provider,
     returnTo: input.returnTo,
+    country: input.country,
     nonce: randomBytes(16).toString("base64url"),
     exp: Math.floor(Date.now() / 1000) + 10 * 60,
   };
@@ -128,6 +135,7 @@ function verifyOAuthState(value: string) {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as OAuthStatePayload;
     if (!isOAuthProvider(payload.provider)) return null;
     if (typeof payload.returnTo !== "string") return null;
+    if (payload.country !== "KZ" && payload.country !== "RU") return null;
     if (typeof payload.exp !== "number" || payload.exp < Math.floor(Date.now() / 1000)) return null;
     return payload;
   } catch {

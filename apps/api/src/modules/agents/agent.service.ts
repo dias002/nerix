@@ -67,6 +67,11 @@ export class AgentService {
       if (agent) return agent;
     }
 
+    if (wantsAvatarVideo(normalized)) {
+      const agent = selectEnabledAgent("avatar");
+      if (agent) return agent;
+    }
+
     if (containsAny(normalized, ["видео", "video", "ролик", "shorts", "reels", "анимац", "сценарий ролика"])) {
       const agent = selectEnabledAgent("video");
       if (agent) return agent;
@@ -141,6 +146,47 @@ function containsAny(value: string, needles: string[]) {
 
 function wantsGeneratedAudio(value: string) {
   return containsAny(value, ["аудио", "audio"]) && containsAny(value, ["сделай", "создай", "сгенер", "запиши", "make", "generate", "create"]);
+}
+
+function wantsAvatarVideo(value: string) {
+  if (
+    containsAny(value, [
+      "говорящий аватар",
+      "говорящим аватар",
+      "аватар говорит",
+      "видео с аватар",
+      "avatar video",
+      "talking avatar",
+      "ai presenter",
+      "digital presenter",
+      "video agent",
+      "виртуальный ведущ",
+      "цифровой ведущ",
+      "видеоведущ",
+    ])
+  ) {
+    return true;
+  }
+
+  const hasAvatarSubject = containsAny(value, ["аватар", "avatar", "персонаж"]);
+  const hasVideoOrSpeechIntent = containsAny(value, [
+    "видео",
+    "ролик",
+    "video",
+    "mp4",
+    "shorts",
+    "reels",
+    "говор",
+    "озвуч",
+    "диктор",
+    "ведущ",
+    "presenter",
+    "talking",
+    "speech",
+    "расска",
+  ]);
+
+  return hasAvatarSubject && hasVideoOrSpeechIntent;
 }
 
 function extractLatestRequest(prompt: string) {

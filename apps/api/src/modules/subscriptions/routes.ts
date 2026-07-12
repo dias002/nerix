@@ -94,6 +94,7 @@ export async function registerSubscriptionRoutes(
         ...input.data,
         userId: user.value.userId,
         customerEmail: user.value.email ?? input.data.customerEmail,
+        customerName: user.value.name,
       })
     );
   });

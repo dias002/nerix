@@ -26,7 +26,7 @@ import { InMemoryWalletRepository } from "../src/modules/billing/wallet.reposito
 import { InMemoryBusinessJobRepository } from "../src/modules/business-jobs/business-job.repository.js";
 import { ChatService } from "../src/modules/chat/chat.service.js";
 import { InMemoryConversationRepository } from "../src/modules/chat/conversation.repository.js";
-import { GeminiMediaGenerationProvider } from "../src/modules/generation/media-provider.js";
+import { GeminiMediaGenerationProvider, HeyGenMediaGenerationProvider } from "../src/modules/generation/media-provider.js";
 import { InMemoryMailingRepository } from "../src/modules/mailings/mailing.repository.js";
 import { MailingService, parseContacts } from "../src/modules/mailings/mailing.service.js";
 import type { SmtpBzMessage } from "../src/modules/mailings/mailing.types.js";
@@ -51,6 +51,8 @@ test("modality classifier detects media and code tasks", () => {
   assert.equal(inferModality("сгенерируй короткий музыкальный трек про кофе"), "music");
   assert.equal(inferModality("теперь сделай мне именно голосовым песню"), "music");
   assert.equal(inferModality("сгенерируй мне картинку по этому тексту"), "image");
+  assert.equal(inferModality("создай видео с говорящим аватаром про продукт"), "avatar_video");
+  assert.equal(inferModality("создай аватар для профиля"), "image");
   assert.equal(inferModality("озвучь этот текст голосом"), "voice");
   assert.equal(inferModality("сделай мне прям аудио"), "music");
   assert.equal(inferModality("Контекст диалога:\nсоздай видео про кофе\n\nПоследнее сообщение пользователя:\nсделай мне прям аудио"), "music");
@@ -119,8 +121,51 @@ test("provider router separates supported and regional country routes", async ()
       GEMINI_IMAGE_MODEL: "gemini-image",
       GEMINI_VIDEO_MODEL: "gemini-video",
       GEMINI_MUSIC_MODEL: "gemini-music",
+      HEYGEN_API_KEY: "heygen-key",
+      HEYGEN_AVATAR_VIDEO_MODEL: "heygen-avatar-video",
     },
     () => {
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          preferredModel: "text-primary",
+          selectedModelId: "anthropic:claude-opus-4-20250514",
+        }),
+        {
+          provider: "anthropic",
+          model: "claude-opus-4-20250514",
+          policyMode: "dev_allow_all",
+          reason: "User selected Claude Opus 4.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "video",
+          preferredModel: "video-primary",
+          agentId: "video",
+          selectedModelId: "anthropic:claude-opus-4-20250514",
+        }),
+        {
+          provider: "gemini",
+          model: "gemini-video",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: Google Gemini is available for KZ.",
+        }
+      );
+
+      assert.equal(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          preferredModel: "text-primary",
+          selectedModelId: "unknown:model",
+        }),
+        null
+      );
+
       assert.deepEqual(
         chooseProvider({
           country: "KZ",
@@ -132,6 +177,21 @@ test("provider router separates supported and regional country routes", async ()
           model: "openai-text",
           policyMode: "dev_allow_all",
           reason: "Dev policy: OpenAI is available for KZ.",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "avatar_video",
+          preferredModel: "avatar-video-primary",
+          agentId: "avatar",
+        }),
+        {
+          provider: "heygen",
+          model: "heygen-avatar-video",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: HeyGen Video Agent is available for KZ.",
         }
       );
 
@@ -554,6 +614,8 @@ test("database migrations include runtime columns for auth and subscriptions", a
   assert.match(sql, /create table if not exists plans/);
   assert.match(sql, /create table if not exists subscription_checkouts/);
   assert.match(sql, /provider_checkout_id/);
+  assert.match(sql, /customer_email/);
+  assert.match(sql, /customer_name/);
   assert.match(sql, /create table if not exists subscriptions/);
   assert.match(sql, /create table if not exists oauth_accounts/);
   assert.match(sql, /create table if not exists password_reset_tokens/);
@@ -970,6 +1032,199 @@ test("Gemini media provider cancels long running operations", async () => {
   });
 });
 
+test("HeyGen media provider starts and refreshes video agent sessions", async () => {
+  await withConfig(
+    {
+      HEYGEN_API_KEY: "heygen-key",
+      HEYGEN_AVATAR_ID: "avatar-1",
+      HEYGEN_VOICE_ID: "voice-1",
+      HEYGEN_STYLE_ID: "style-1",
+      HEYGEN_BRAND_KIT_ID: "brand-1",
+      HEYGEN_ORIENTATION: "portrait",
+    },
+    async () => {
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+      await withFetchStub(async (input, init) => {
+        calls.push({ url: String(input), init });
+        const url = new URL(String(input));
+
+        if (url.pathname === "/v3/video-agents" && init?.method === "POST") {
+          return jsonResponse({
+            data: {
+              session_id: "session-1",
+              status: "pending",
+            },
+          });
+        }
+
+        if (url.pathname === "/v3/video-agents/session-1") {
+          return jsonResponse({
+            data: {
+              session_id: "session-1",
+              status: "completed",
+              video_id: "video-1",
+            },
+          });
+        }
+
+        if (url.pathname === "/v3/videos/video-1") {
+          return jsonResponse({
+            data: {
+              status: "completed",
+              video_url: "https://files.heygen.ai/video-1.mp4",
+              duration: 12,
+            },
+          });
+        }
+
+        throw new Error(`Unexpected HeyGen test request: ${url.pathname}`);
+      }, async () => {
+        const provider = new HeyGenMediaGenerationProvider();
+        const startResult = await provider.generate({
+          jobId: "job-avatar-video",
+          provider: "heygen",
+          model: "heygen-avatar-video",
+          modality: "avatar_video",
+          prompt: "создай видео с говорящим аватаром",
+        });
+
+        assert.equal(startResult.status, "running");
+        assert.equal(startResult.operationName, "heygen-video-agent://session/session-1");
+        const operationName = startResult.operationName;
+        assert.ok(operationName);
+
+        const refreshResult = await provider.refresh(operationName);
+        assert.equal(refreshResult.status, "succeeded");
+        assert.equal(refreshResult.mimeType, "video/mp4");
+        assert.equal(refreshResult.providerUri, "https://files.heygen.ai/video-1.mp4");
+      });
+
+      assert.equal(calls.length, 3);
+      const startUrl = new URL(calls[0].url);
+      assert.equal(startUrl.origin, "https://api.heygen.com");
+      assert.equal(startUrl.pathname, "/v3/video-agents");
+      assert.equal(calls[0].init?.method, "POST");
+      assert.equal((calls[0].init?.headers as Record<string, string>)["X-Api-Key"], "heygen-key");
+      assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+        prompt: "создай видео с говорящим аватаром",
+        mode: "generate",
+        avatar_id: "avatar-1",
+        voice_id: "voice-1",
+        style_id: "style-1",
+        brand_kit_id: "brand-1",
+        orientation: "portrait",
+        callback_id: "job-avatar-video",
+        incognito_mode: true,
+      });
+
+      assert.equal(new URL(calls[1].url).pathname, "/v3/video-agents/session-1");
+      assert.equal(new URL(calls[2].url).pathname, "/v3/videos/video-1");
+    }
+  );
+});
+
+test("HeyGen media provider creates avatar video from a face image asset", async () => {
+  await withConfig(
+    {
+      HEYGEN_API_KEY: "heygen-key",
+      HEYGEN_VOICE_ID: "voice-1",
+    },
+    async () => {
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+      await withFetchStub(async (input, init) => {
+        calls.push({ url: String(input), init });
+        const url = new URL(String(input));
+
+        if (url.pathname === "/v3/assets" && init?.method === "POST") {
+          return jsonResponse({
+            data: {
+              asset_id: "asset-face-1",
+              mime_type: "image/jpeg",
+              size_bytes: 512,
+            },
+          });
+        }
+
+        if (url.pathname === "/v3/videos" && init?.method === "POST") {
+          return jsonResponse({
+            data: {
+              video_id: "video-face-1",
+              status: "pending",
+              output_format: "mp4",
+            },
+          });
+        }
+
+        if (url.pathname === "/v3/videos/video-face-1" && init?.method === "GET") {
+          return jsonResponse({
+            data: {
+              id: "video-face-1",
+              status: "completed",
+              video_url: "https://files.heygen.ai/video-face-1.mp4",
+            },
+          });
+        }
+
+        throw new Error(`Unexpected HeyGen image avatar test request: ${url.pathname}`);
+      }, async () => {
+        const provider = new HeyGenMediaGenerationProvider();
+        const startResult = await provider.generate({
+          jobId: "job-face-video",
+          provider: "heygen",
+          model: "heygen-video-agent-v3",
+          modality: "avatar_video",
+          prompt: "создай видео с моим лицом",
+          avatarVideo: {
+            referenceImage: {
+              dataBase64: Buffer.from("fake-jpeg").toString("base64"),
+              mimeType: "image/jpeg",
+              filename: "face.jpg",
+            },
+            script: "Привет, это мой AI-аватар.",
+            consentConfirmed: true,
+            avatarName: "Dias avatar",
+            aspectRatio: "auto",
+          },
+        });
+
+        assert.equal(startResult.status, "running");
+        assert.equal(startResult.operationName, "heygen-video://video/video-face-1");
+        const operationName = startResult.operationName;
+        assert.ok(operationName);
+
+        const refreshResult = await provider.refresh(operationName);
+        assert.equal(refreshResult.status, "succeeded");
+        assert.equal(refreshResult.mimeType, "video/mp4");
+        assert.equal(refreshResult.providerUri, "https://files.heygen.ai/video-face-1.mp4");
+      });
+
+      assert.equal(calls.length, 3);
+      assert.equal(new URL(calls[0].url).pathname, "/v3/assets");
+      assert.equal((calls[0].init?.headers as Record<string, string>)["X-Api-Key"], "heygen-key");
+      assert.equal(calls[0].init?.body instanceof FormData, true);
+
+      const videoBody = JSON.parse(String(calls[1].init?.body));
+      assert.deepEqual(videoBody, {
+        type: "image",
+        image: {
+          type: "asset_id",
+          asset_id: "asset-face-1",
+        },
+        script: "Привет, это мой AI-аватар.",
+        voice_id: "voice-1",
+        title: "Dias avatar · nomduchat",
+        resolution: "1080p",
+        aspect_ratio: "auto",
+        callback_id: "job-face-video",
+        output_format: "mp4",
+      });
+      assert.equal(new URL(calls[2].url).pathname, "/v3/videos/video-face-1");
+    }
+  );
+});
+
 test("chat completions include previous messages for follow-up context", async () => {
   await withConfig(
     {
@@ -1206,6 +1461,48 @@ test("subscription payment providers build Kaspi links and YooKassa payment requ
       );
     }
   );
+});
+
+test("transactional mailer sends account and subscription lifecycle emails", async () => {
+  const transport = new FakeMailingTransport();
+  const dependencies = createDependencies({ mailingTransport: transport });
+
+  const registration = await dependencies.auth.register({
+    email: "notify@example.com",
+    password: "secure-password",
+    name: "Notify User",
+  });
+  assert.equal(registration.ok, true);
+  if (!registration.ok) return;
+
+  assert.equal(transport.lastSend?.subject, "Добро пожаловать в nomduchat");
+  assert.equal(transport.lastSend?.contacts[0].email, "notify@example.com");
+
+  const checkout = await dependencies.subscriptions.createCheckout({
+    userId: registration.value.user.id,
+    planId: "base",
+    country: "KZ",
+    customerEmail: "notify@example.com",
+    customerName: "Notify User",
+  });
+  assert.equal(checkout.ok, true);
+  if (!checkout.ok) return;
+
+  assert.equal(checkout.value.checkout.customerEmail, "notify@example.com");
+  assert.equal(checkout.value.checkout.customerName, "Notify User");
+  assert.equal(transport.lastSend?.subject, "Оплата тарифа nomduchat");
+  assert.equal(transport.lastSend?.contacts[0].name, "Notify User");
+
+  const completion = await dependencies.subscriptions.completeMockCheckout({
+    checkoutId: checkout.value.checkout.id,
+    userId: registration.value.user.id,
+  });
+  assert.equal(completion.ok, true);
+  if (!completion.ok) return;
+
+  assert.equal(completion.value.checkout.creditsGranted, true);
+  assert.equal(transport.lastSend?.subject, "Тариф nomduchat активирован");
+  assert.equal(transport.lastSend?.contacts[0].email, "notify@example.com");
 });
 
 test("mailing service imports contacts, sends campaign, and syncs SMTP.BZ events", async () => {

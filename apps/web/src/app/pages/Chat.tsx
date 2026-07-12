@@ -20,22 +20,145 @@ import ShareSheet, { type SharePayload } from "../components/ShareSheet";
 import {
   cancelGenerationJob,
   getChatConversation,
+  getAiProviders,
   fetchGenerationArtifact,
   regenerateChatMessage,
   refreshGenerationJob,
   selectBestChatAnswer,
   sendChatMessage,
   toPublicApiError,
+  type AiModelOptionApiRecord,
   type MediaGenerationJobApiRecord,
 } from "../api";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme";
+import { readResponseStyle, responseStyleLabel, responseStyles, writeResponseStyle, type ResponseStyleId } from "../responsePreferences";
 import { formatFileSize, maxAttachedFileSize, maxAttachedFiles, readAttachment, speechLocale } from "./chat/attachments";
 import { GenerationJobCard, generationStatusText, mediaExtension, mediaTitle } from "./chat/generation";
 import { toApiAttachment, toAssistantMessage, toChatMessage } from "./chat/messageMappers";
 import type { AttachedFile, Message } from "./chat/types";
 
 const guestRequestStorageKey = "nomduchat-guest-chat-requests";
+const modelSelectionStorageKey = "nomduchat-chat-model-id";
+const fallbackModelOptions: AiModelOptionApiRecord[] = [
+  {
+    id: "openai:gpt-4.1",
+    providerCode: "openai",
+    providerName: "OpenAI",
+    label: "OpenAI GPT-4.1",
+    description: "Сильная универсальная модель для текста, файлов и кода.",
+    tier: "pro",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "openai:gpt-4.1-mini",
+    providerCode: "openai",
+    providerName: "OpenAI",
+    label: "OpenAI GPT-4.1 mini",
+    description: "Быстрый режим OpenAI для повседневных рабочих запросов.",
+    tier: "balanced",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "openai:gpt-4o",
+    providerCode: "openai",
+    providerName: "OpenAI",
+    label: "OpenAI GPT-4o",
+    description: "Мультимодальная модель OpenAI для текста и файлов.",
+    tier: "balanced",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "openai:o3",
+    providerCode: "openai",
+    providerName: "OpenAI",
+    label: "OpenAI o3",
+    description: "Режим рассуждений для сложного анализа и логики.",
+    tier: "pro",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "openai:o4-mini",
+    providerCode: "openai",
+    providerName: "OpenAI",
+    label: "OpenAI o4-mini",
+    description: "Быстрый reasoning-режим для кода, анализа и рабочих задач.",
+    tier: "fast",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "anthropic:claude-opus-4-20250514",
+    providerCode: "anthropic",
+    providerName: "Anthropic",
+    label: "Claude Opus 4",
+    description: "Сильный режим Claude для сложных рассуждений и кода.",
+    tier: "pro",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "anthropic:claude-sonnet-4-20250514",
+    providerCode: "anthropic",
+    providerName: "Anthropic",
+    label: "Claude Sonnet 4",
+    description: "Баланс качества, скорости и цены для рабочих запросов.",
+    tier: "balanced",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "anthropic:claude-3-7-sonnet-20250219",
+    providerCode: "anthropic",
+    providerName: "Anthropic",
+    label: "Claude 3.7 Sonnet",
+    description: "Сильный режим Claude для кода, анализа и документов.",
+    tier: "balanced",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "anthropic:claude-3-5-haiku-20241022",
+    providerCode: "anthropic",
+    providerName: "Anthropic",
+    label: "Claude 3.5 Haiku",
+    description: "Быстрый режим Claude для коротких ответов.",
+    tier: "fast",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "gemini:gemini-2.5-pro",
+    providerCode: "gemini",
+    providerName: "Google Gemini",
+    label: "Gemini 2.5 Pro",
+    description: "Pro-режим Gemini для анализа, текста и кода.",
+    tier: "pro",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "gemini:gemini-2.5-flash",
+    providerCode: "gemini",
+    providerName: "Google Gemini",
+    label: "Gemini 2.5 Flash",
+    description: "Быстрый режим Gemini для повседневных задач.",
+    tier: "balanced",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "gemini:gemini-2.5-flash-lite",
+    providerCode: "gemini",
+    providerName: "Google Gemini",
+    label: "Gemini 2.5 Flash-Lite",
+    description: "Экономичный режим Gemini для коротких запросов.",
+    tier: "fast",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "gemini:gemini-2.0-flash",
+    providerCode: "gemini",
+    providerName: "Google Gemini",
+    label: "Gemini 2.0 Flash",
+    description: "Стабильный быстрый режим Gemini для текста и файлов.",
+    tier: "fast",
+    modalities: ["text", "code", "file"],
+  },
+];
 
 export default function Chat() {
   const { language, t } = useLanguage();
@@ -55,6 +178,12 @@ export default function Chat() {
   const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string>>({});
   const [cancellingGenerationIds, setCancellingGenerationIds] = useState<Set<string>>(() => new Set());
   const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
+  const [modelOptions, setModelOptions] = useState<AiModelOptionApiRecord[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState(() => {
+    if (typeof window === "undefined") return "auto";
+    return window.localStorage.getItem(modelSelectionStorageKey) ?? "auto";
+  });
+  const [responseStyleId, setResponseStyleId] = useState<ResponseStyleId>(() => readResponseStyle());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -65,6 +194,26 @@ export default function Chat() {
   const conversationParam = searchParams.get("conversationId");
 
   const canSend = Boolean(inputValue.trim()) || attachedFiles.length > 0;
+  const selectedModelForRequest = selectedModelId === "auto" ? undefined : selectedModelId;
+  const displayModelOptions = modelOptions.length > 0 ? modelOptions : fallbackModelOptions;
+  const modelGroups = useMemo(() => {
+    const groups = new Map<string, { providerName: string; models: AiModelOptionApiRecord[] }>();
+
+    for (const option of displayModelOptions) {
+      const group = groups.get(option.providerCode) ?? {
+        providerName: option.providerName,
+        models: [],
+      };
+      group.models.push(option);
+      groups.set(option.providerCode, group);
+    }
+
+    return Array.from(groups.entries()).map(([providerCode, group]) => ({
+      providerCode,
+      providerName: group.providerName,
+      models: group.models,
+    }));
+  }, [displayModelOptions]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,6 +222,47 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    let active = true;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const loadProviders = () => {
+      getAiProviders()
+        .then((response) => {
+          if (!active) return;
+          setModelOptions(response.models ?? []);
+        })
+        .catch(() => {
+          if (!active) return;
+          setModelOptions([]);
+          retryTimer = setTimeout(loadProviders, 5_000);
+        });
+    };
+
+    loadProviders();
+
+    return () => {
+      active = false;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(modelSelectionStorageKey, selectedModelId);
+  }, [selectedModelId]);
+
+  useEffect(() => {
+    writeResponseStyle(responseStyleId);
+  }, [responseStyleId]);
+
+  useEffect(() => {
+    if (selectedModelId === "auto") return;
+    if (!displayModelOptions.some((option) => option.id === selectedModelId)) {
+      setSelectedModelId("auto");
+    }
+  }, [displayModelOptions, selectedModelId]);
 
   useEffect(() => {
     setMessages((prev) => {
@@ -271,6 +461,8 @@ export default function Chat() {
       const response = await sendChatMessage({
         message: messageText,
         conversationId,
+        selectedModelId: selectedModelForRequest,
+        responseStyle: responseStyleId,
         language: language === "kk" ? "kz" : language,
         attachments: filesForMessage.map(toApiAttachment),
       });
@@ -348,6 +540,8 @@ export default function Chat() {
     try {
       const response = await regenerateChatMessage({
         conversationId,
+        selectedModelId: selectedModelForRequest,
+        responseStyle: responseStyleId,
         language: language === "kk" ? "kz" : language,
       });
       setMessages((prev) => [...prev, toAssistantMessage(response, t.chat.regeneratedResponse)]);
@@ -427,7 +621,9 @@ export default function Chat() {
     event.target.value = "";
     if (selectedFilesLimited.length === 0) {
       if (oversizedFiles.length > 0) {
-        setUnavailableNotice(t.chat.fileTooLarge.replace("{maxSize}", formatFileSize(maxAttachedFileSize)));
+        setUnavailableNotice(
+          t.chat.fileTooLarge.replace("{maxSize}", formatFileSize(maxAttachedFileSize))
+        );
       }
       return;
     }
@@ -435,10 +631,11 @@ export default function Chat() {
     const files = await Promise.all(selectedFilesLimited.map(readAttachment));
     setAttachedFiles((prev) => [...prev, ...files].slice(0, maxAttachedFiles));
 
+    const hasReadableContent = files.some((file) => Boolean(file.content));
     const oversizedNotice = oversizedFiles.length
       ? t.chat.fileTooLarge.replace("{maxSize}", formatFileSize(maxAttachedFileSize))
       : null;
-    const fileNotice = files.some((file) => file.content) ? t.chat.fileReadLimit : t.chat.fileUnsupported;
+    const fileNotice = hasReadableContent ? t.chat.fileReadLimit : t.chat.fileUnsupported;
     setUnavailableNotice(oversizedNotice ?? fileNotice);
   };
 
@@ -486,6 +683,8 @@ export default function Chat() {
   };
 
   const showEmptyState = messages.length <= 1 && messages[0]?.id === "intro" && !conversationParam;
+  const modelSelectorTitle =
+    modelOptions.length === 0 ? "Локальный список моделей. Доступность проверит API." : "Модель ответа";
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#050505] relative">
@@ -495,15 +694,54 @@ export default function Chat() {
       <header className="h-14 border-b border-white/10 flex items-center justify-between gap-3 px-4 md:px-6 shrink-0 bg-[#0A0A0A]/80 backdrop-blur-md absolute top-0 w-full z-10">
         <div className="text-sm font-medium text-gray-300">nomduchat</div>
 
-        <button
-          type="button"
-          onClick={handleNewChat}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-gray-400 transition-colors hover:border-white/20 hover:text-white"
-          aria-label={t.chat.newChat}
-          title={t.chat.newChat}
-        >
-          <MessageSquarePlus className="h-4 w-4" strokeWidth={1.7} />
-        </button>
+        <div className="flex items-center gap-2">
+          <label className="sr-only" htmlFor="chat-model-selector">
+            Модель ответа
+          </label>
+          <label className="sr-only" htmlFor="chat-style-selector">
+            Стиль ответа
+          </label>
+          <select
+            id="chat-style-selector"
+            value={responseStyleId}
+            onChange={(event) => setResponseStyleId(event.target.value as ResponseStyleId)}
+            className="hidden h-9 w-[9.5rem] rounded-full border border-white/10 bg-[#111111] px-3 text-xs font-medium text-gray-300 outline-none transition-colors hover:border-white/20 hover:text-white focus:border-white/30 md:block"
+            title={`Стиль ответа: ${responseStyleLabel(responseStyleId)}`}
+          >
+            {responseStyles.map((style) => (
+              <option key={style.id} value={style.id}>
+                {style.label}
+              </option>
+            ))}
+          </select>
+          <select
+            id="chat-model-selector"
+            value={selectedModelId}
+            onChange={(event) => setSelectedModelId(event.target.value)}
+            className="h-9 w-[8.5rem] rounded-full border border-white/10 bg-[#111111] px-3 text-xs font-medium text-gray-300 outline-none transition-colors hover:border-white/20 hover:text-white focus:border-white/30 sm:w-[13rem]"
+            title={modelSelectorTitle}
+          >
+            <option value="auto">Авто</option>
+            {modelGroups.map((group) => (
+              <optgroup key={group.providerCode} label={group.providerName}>
+                {group.models.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-gray-400 transition-colors hover:border-white/20 hover:text-white"
+            aria-label={t.chat.newChat}
+            title={t.chat.newChat}
+          >
+            <MessageSquarePlus className="h-4 w-4" strokeWidth={1.7} />
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 overflow-y-auto pt-20 pb-40 px-4 md:px-8 custom-scrollbar">
@@ -541,7 +779,7 @@ export default function Chat() {
                       onShare={() => handleShareGenerationJob(msg.generationJob!, mediaObjectUrls[msg.generationJob!.id])}
                     />
                   ) : (
-                    msg.text
+                    <FormattedMessageText text={msg.text} sender={msg.sender} />
                   )}
                   {msg.attachments?.length ? (
                     <div className="mt-3 space-y-2">
@@ -705,4 +943,86 @@ export default function Chat() {
       </div>
     </div>
   );
+}
+
+function FormattedMessageText({ text, sender }: { text: string; sender: Message["sender"] }) {
+  const items = toReadableMessageItems(text);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className={`space-y-3 ${sender === "user" ? "text-white" : "text-gray-200"}`}>
+      {items.map((item, index) => {
+        if (item.type === "heading") {
+          return (
+            <h3 key={`${item.text}-${index}`} className="text-base font-medium text-white">
+              {item.text}
+            </h3>
+          );
+        }
+
+        if (item.type === "list") {
+          return (
+            <ol key={`${item.items.join("|")}-${index}`} className="space-y-1.5 pl-5">
+              {item.items.map((line, lineIndex) => (
+                <li key={`${line}-${lineIndex}`} className="list-decimal">
+                  {line}
+                </li>
+              ))}
+            </ol>
+          );
+        }
+
+        return (
+          <p key={`${item.text}-${index}`} className="whitespace-pre-wrap break-words">
+            {item.text}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+type ReadableMessageItem =
+  | { type: "heading"; text: string }
+  | { type: "paragraph"; text: string }
+  | { type: "list"; items: string[] };
+
+function toReadableMessageItems(text: string): ReadableMessageItem[] {
+  const items: ReadableMessageItem[] = [];
+  let listBuffer: string[] = [];
+
+  const flushList = () => {
+    if (listBuffer.length === 0) return;
+    items.push({ type: "list", items: listBuffer });
+    listBuffer = [];
+  };
+
+  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (/^#{1,6}\s+/.test(line)) {
+      flushList();
+      items.push({ type: "heading", text: cleanInlineMarkdown(line.replace(/^#{1,6}\s+/, "")) });
+      continue;
+    }
+
+    if (/^([-*•]|\d+[.)])\s+/.test(line)) {
+      listBuffer.push(cleanInlineMarkdown(line.replace(/^([-*•]|\d+[.)])\s+/, "")));
+      continue;
+    }
+
+    flushList();
+    items.push({ type: "paragraph", text: cleanInlineMarkdown(line) });
+  }
+
+  flushList();
+  return items;
+}
+
+function cleanInlineMarkdown(value: string) {
+  return value
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
 }

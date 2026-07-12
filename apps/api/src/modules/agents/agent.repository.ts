@@ -84,6 +84,19 @@ export const seedAgents: CreateAgentInput[] = [
     systemPrompt: "You are nomduchat Video, a short-form video and storyboard agent.",
   },
   {
+    id: "avatar",
+    name: "nomduchat Avatar Video",
+    category: "avatar",
+    description: "Agent for presenter-style avatar videos, talking avatars, and product explainers.",
+    inputTypes: ["text", "image", "video", "file"],
+    outputTypes: ["avatar_video", "video", "text"],
+    defaultModel: "avatar-video-primary",
+    fallbackModels: ["video-primary", "text-primary"],
+    priceMultiplier: 7,
+    systemPrompt:
+      "You are nomduchat Avatar Video, a presenter-style avatar video agent. Turn user prompts into clear short avatar video briefs with a natural speaker, concise script, and practical scene direction.",
+  },
+  {
     id: "music",
     name: "nomduchat Music",
     category: "music",
