@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
@@ -951,31 +951,95 @@ function FormattedMessageText({ text, sender }: { text: string; sender: Message[
   if (items.length === 0) return null;
 
   return (
-    <div className={`space-y-3 ${sender === "user" ? "text-white" : "text-gray-200"}`}>
+    <div className={`${sender === "user" ? "space-y-2.5 text-white" : "space-y-4 text-gray-200"}`}>
       {items.map((item, index) => {
         if (item.type === "heading") {
+          const headingClass =
+            item.level <= 2
+              ? "text-lg font-semibold leading-snug text-white"
+              : "text-base font-semibold leading-snug text-white";
+
           return (
-            <h3 key={`${item.text}-${index}`} className="text-base font-medium text-white">
-              {item.text}
+            <h3 key={`heading-${item.text}-${index}`} className={headingClass}>
+              {renderInlineMarkdown(item.text)}
             </h3>
           );
         }
 
         if (item.type === "list") {
+          const ListTag = item.ordered ? "ol" : "ul";
+
           return (
-            <ol key={`${item.items.join("|")}-${index}`} className="space-y-1.5 pl-5">
+            <ListTag
+              key={`list-${item.items.join("|")}-${index}`}
+              className={`space-y-1.5 pl-5 marker:text-gray-500 ${item.ordered ? "list-decimal" : "list-disc"}`}
+            >
               {item.items.map((line, lineIndex) => (
-                <li key={`${line}-${lineIndex}`} className="list-decimal">
-                  {line}
+                <li key={`${line}-${lineIndex}`} className="break-words pl-1 leading-relaxed">
+                  {renderInlineMarkdown(line)}
                 </li>
               ))}
-            </ol>
+            </ListTag>
           );
         }
 
+        if (item.type === "code") {
+          return (
+            <div key={`code-${index}`} className="overflow-hidden rounded-xl border border-white/10 bg-black/50">
+              {item.language ? (
+                <div className="border-b border-white/10 px-3 py-1.5 text-xs text-gray-500">{item.language}</div>
+              ) : null}
+              <pre className="overflow-x-auto p-3 text-sm leading-relaxed text-gray-200">
+                <code>{item.code}</code>
+              </pre>
+            </div>
+          );
+        }
+
+        if (item.type === "quote") {
+          return (
+            <blockquote key={`quote-${item.text}-${index}`} className="border-l-2 border-white/20 pl-4 text-gray-400">
+              {renderInlineMarkdown(item.text)}
+            </blockquote>
+          );
+        }
+
+        if (item.type === "table") {
+          return (
+            <div key={`table-${index}`} className="overflow-x-auto rounded-xl border border-white/10">
+              <table className="min-w-full border-collapse text-left text-sm">
+                <thead className="bg-white/[0.04] text-gray-300">
+                  <tr>
+                    {item.headers.map((header, headerIndex) => (
+                      <th key={`${header}-${headerIndex}`} className="border-b border-white/10 px-3 py-2 font-medium">
+                        {renderInlineMarkdown(header)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {item.rows.map((row, rowIndex) => (
+                    <tr key={`${row.join("|")}-${rowIndex}`} className="border-t border-white/5">
+                      {row.map((cell, cellIndex) => (
+                        <td key={`${cell}-${cellIndex}`} className="px-3 py-2 text-gray-300">
+                          {renderInlineMarkdown(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+
+        if (item.type === "rule") {
+          return <div key={`rule-${index}`} className="h-px bg-white/10" />;
+        }
+
         return (
-          <p key={`${item.text}-${index}`} className="whitespace-pre-wrap break-words">
-            {item.text}
+          <p key={`paragraph-${item.text}-${index}`} className="break-words leading-relaxed">
+            {renderInlineMarkdown(item.text)}
           </p>
         );
       })}
@@ -984,45 +1048,257 @@ function FormattedMessageText({ text, sender }: { text: string; sender: Message[
 }
 
 type ReadableMessageItem =
-  | { type: "heading"; text: string }
+  | { type: "heading"; level: number; text: string }
   | { type: "paragraph"; text: string }
-  | { type: "list"; items: string[] };
+  | { type: "list"; ordered: boolean; items: string[] }
+  | { type: "code"; language?: string; code: string }
+  | { type: "quote"; text: string }
+  | { type: "table"; headers: string[]; rows: string[][] }
+  | { type: "rule" };
 
 function toReadableMessageItems(text: string): ReadableMessageItem[] {
+  const normalizedText = normalizeReadableText(text);
+  const lines = normalizedText.replace(/\r\n/g, "\n").split("\n");
   const items: ReadableMessageItem[] = [];
-  let listBuffer: string[] = [];
+  let paragraphBuffer: string[] = [];
+  let listBuffer: Extract<ReadableMessageItem, { type: "list" }> | null = null;
+  let codeBuffer: string[] | null = null;
+  let codeLanguage: string | undefined;
 
-  const flushList = () => {
-    if (listBuffer.length === 0) return;
-    items.push({ type: "list", items: listBuffer });
-    listBuffer = [];
+  const flushParagraph = () => {
+    const paragraph = paragraphBuffer.join(" ").replace(/\s+/g, " ").trim();
+    if (paragraph) items.push({ type: "paragraph", text: paragraph });
+    paragraphBuffer = [];
   };
 
-  const lines = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  for (const line of lines) {
-    if (/^#{1,6}\s+/.test(line)) {
-      flushList();
-      items.push({ type: "heading", text: cleanInlineMarkdown(line.replace(/^#{1,6}\s+/, "")) });
+  const flushList = () => {
+    if (listBuffer && listBuffer.items.length > 0) {
+      items.push(listBuffer);
+    }
+    listBuffer = null;
+  };
+
+  const flushTextBlocks = () => {
+    flushParagraph();
+    flushList();
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const line = rawLine.trim();
+
+    if (codeBuffer) {
+      if (/^```/.test(line)) {
+        items.push({ type: "code", language: codeLanguage, code: codeBuffer.join("\n").replace(/\n+$/, "") });
+        codeBuffer = null;
+        codeLanguage = undefined;
+      } else {
+        codeBuffer.push(rawLine);
+      }
       continue;
     }
 
-    if (/^([-*•]|\d+[.)])\s+/.test(line)) {
-      listBuffer.push(cleanInlineMarkdown(line.replace(/^([-*•]|\d+[.)])\s+/, "")));
+    if (!line) {
+      flushTextBlocks();
+      continue;
+    }
+
+    const codeMatch = line.match(/^```([A-Za-z0-9_-]+)?\s*$/);
+    if (codeMatch) {
+      flushTextBlocks();
+      codeBuffer = [];
+      codeLanguage = codeMatch[1];
+      continue;
+    }
+
+    if (isTableStart(lines, index)) {
+      flushTextBlocks();
+      const headers = parseTableRow(lines[index]);
+      const rows: string[][] = [];
+      index += 2;
+      while (index < lines.length && lines[index].includes("|") && lines[index].trim()) {
+        rows.push(normalizeTableRow(parseTableRow(lines[index]), headers.length));
+        index += 1;
+      }
+      index -= 1;
+      if (headers.length > 0 && rows.length > 0) {
+        items.push({ type: "table", headers, rows });
+      }
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      flushTextBlocks();
+      items.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2].trim() });
+      continue;
+    }
+
+    if (/^([-*_])\1\1+$/.test(line)) {
+      flushTextBlocks();
+      items.push({ type: "rule" });
+      continue;
+    }
+
+    if (/^>\s?/.test(line)) {
+      flushTextBlocks();
+      const quoteLines = [line.replace(/^>\s?/, "").trim()];
+      while (index + 1 < lines.length && /^>\s?/.test(lines[index + 1].trim())) {
+        index += 1;
+        quoteLines.push(lines[index].trim().replace(/^>\s?/, "").trim());
+      }
+      items.push({ type: "quote", text: quoteLines.join(" ") });
+      continue;
+    }
+
+    const orderedListMatch = line.match(/^\d+[.)]\s+(.+)$/);
+    const unorderedListMatch = line.match(/^[-*•]\s+(.+)$/);
+    if (orderedListMatch || unorderedListMatch) {
+      flushParagraph();
+      const ordered = Boolean(orderedListMatch);
+      const listText = (orderedListMatch?.[1] ?? unorderedListMatch?.[1] ?? "").trim();
+      if (!listBuffer || listBuffer.ordered !== ordered) {
+        flushList();
+        listBuffer = { type: "list", ordered, items: [] };
+      }
+      listBuffer.items.push(listText);
       continue;
     }
 
     flushList();
-    items.push({ type: "paragraph", text: cleanInlineMarkdown(line) });
+    paragraphBuffer.push(line);
   }
 
-  flushList();
+  if (codeBuffer) {
+    items.push({ type: "code", language: codeLanguage, code: codeBuffer.join("\n").replace(/\n+$/, "") });
+  }
+
+  flushTextBlocks();
   return items;
 }
 
-function cleanInlineMarkdown(value: string) {
-  return value
-    .replace(/\*\*(.*?)\*\*/g, "$1")
-    .replace(/__(.*?)__/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .trim();
+function normalizeReadableText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  if (trimmed.includes("```") || trimmed.split("\n").filter((line) => line.trim()).length > 1) return trimmed;
+
+  const withDetectedBreaks = trimmed
+    .replace(/\s+((?:\d+[.)]|[-*•])\s+)/g, "\n$1")
+    .replace(/\s+(#{1,6}\s+)/g, "\n\n$1");
+
+  if (withDetectedBreaks.includes("\n") || withDetectedBreaks.length <= 360) return withDetectedBreaks;
+
+  const sentences =
+    withDetectedBreaks
+      .match(/[^.!?…]+[.!?…]+(?:\s+|$)|[^.!?…]+$/g)
+      ?.map((sentence) => sentence.trim())
+      .filter(Boolean) ?? [];
+
+  if (sentences.length <= 2) return withDetectedBreaks;
+
+  const paragraphs: string[] = [];
+  let buffer: string[] = [];
+  let bufferLength = 0;
+
+  for (const sentence of sentences) {
+    buffer.push(sentence);
+    bufferLength += sentence.length;
+    if (buffer.length >= 2 || bufferLength >= 280) {
+      paragraphs.push(buffer.join(" "));
+      buffer = [];
+      bufferLength = 0;
+    }
+  }
+
+  if (buffer.length > 0) paragraphs.push(buffer.join(" "));
+  return paragraphs.join("\n\n");
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[[^\]]+\]\([^)]+\))/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text))) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+
+    const token = match[0];
+    if (token.startsWith("**") || token.startsWith("__")) {
+      nodes.push(
+        <strong key={`${token}-${match.index}`} className="font-semibold text-white">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith("`")) {
+      nodes.push(
+        <code key={`${token}-${match.index}`} className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[0.92em] text-gray-100">
+          {token.slice(1, -1)}
+        </code>
+      );
+    } else {
+      const linkMatch = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      const label = linkMatch?.[1] ?? token;
+      const href = safeInlineHref(linkMatch?.[2]);
+      nodes.push(
+        href ? (
+          <a
+            key={`${token}-${match.index}`}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="text-white underline decoration-white/35 underline-offset-4 transition-colors hover:decoration-white"
+          >
+            {label}
+          </a>
+        ) : (
+          label
+        )
+      );
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function safeInlineHref(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:", "mailto:", "tel:"].includes(url.protocol) ? value : null;
+  } catch {
+    return value.startsWith("/") && !value.startsWith("//") ? value : null;
+  }
+}
+
+function isTableStart(lines: string[], index: number) {
+  return lines[index]?.includes("|") && isTableSeparator(lines[index + 1] ?? "");
+}
+
+function isTableSeparator(line: string) {
+  const cells = parseTableRow(line);
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function parseTableRow(line: string) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function normalizeTableRow(row: string[], length: number) {
+  if (row.length === length) return row;
+  if (row.length > length) return row.slice(0, length);
+  return [...row, ...Array.from({ length: length - row.length }, () => "")];
 }

@@ -40,9 +40,7 @@ export function buildConversationPrompt(previousMessages: ConversationMessage[],
 }
 
 export function applyResponseStyle(prompt: string, style: ResponseStyle | undefined) {
-  if (!style || style === "auto") return prompt;
-
-  return [responseStyleInstruction(style), "", "Запрос пользователя:", prompt].join("\n");
+  return [responseStyleInstruction(style ?? "auto"), "", "Запрос пользователя:", prompt].join("\n");
 }
 
 export function buildRoutingPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
@@ -178,19 +176,34 @@ function containsAny(value: string, needles: string[]) {
 }
 
 function responseStyleInstruction(style: ResponseStyle) {
+  const readableFormatInstruction = [
+    "Обязательный формат ответа:",
+    "- не выдавай ответ одним сплошным полотном;",
+    "- начинай с прямого ответа или главного вывода;",
+    "- дели текст на короткие абзацы по 1-3 предложения;",
+    "- когда есть шаги, причины, варианты или выводы, используй маркированные или нумерованные списки;",
+    "- добавляй короткие подзаголовки только если ответ состоит из нескольких смысловых блоков;",
+    "- код, команды, JSON и конфиги оформляй Markdown-блоками с тройными кавычками;",
+    "- не добавляй декоративные символы и лишние вступления.",
+  ].join("\n");
+
+  const withReadableFormat = (instruction: string) => `${instruction}\n${readableFormatInstruction}`;
+
   switch (style) {
     case "business":
-      return "Настройка ответа: деловой стиль. Отвечай структурно, конкретно, без лишней эмоциональности. Используй короткие абзацы и списки.";
+      return withReadableFormat("Настройка ответа: деловой стиль. Отвечай структурно, конкретно, без лишней эмоциональности.");
     case "business_visual":
-      return "Настройка ответа: деловой стиль с визуальными подсказками. Дай структурный ответ и отдельно предложи идеи картинок, схем, таблиц или визуальных блоков, если это уместно.";
+      return withReadableFormat(
+        "Настройка ответа: деловой стиль с визуальными подсказками. Дай структурный ответ и отдельно предложи идеи картинок, схем, таблиц или визуальных блоков, если это уместно."
+      );
     case "conversational":
-      return "Настройка ответа: разговорный стиль. Пиши проще и живее, без канцелярита, но сохраняй точность.";
+      return withReadableFormat("Настройка ответа: разговорный стиль. Пиши проще и живее, без канцелярита, но сохраняй точность.");
     case "brief":
-      return "Настройка ответа: краткий стиль. Сначала главный вывод, затем короткий список действий. Не растягивай ответ.";
+      return withReadableFormat("Настройка ответа: краткий стиль. Сначала главный вывод, затем короткий список действий. Не растягивай ответ.");
     case "detailed":
-      return "Настройка ответа: подробный стиль. Дай контекст, шаги, нюансы и практические рекомендации, но не добавляй воду.";
+      return withReadableFormat("Настройка ответа: подробный стиль. Дай контекст, шаги, нюансы и практические рекомендации, но не добавляй воду.");
     default:
-      return "Настройка ответа: авто.";
+      return withReadableFormat("Настройка ответа: авто. Выбери естественный формат под задачу пользователя.");
   }
 }
 

@@ -172,7 +172,7 @@ export class ChatService {
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt: buildConversationPrompt(previousMessages, applyResponseStyle(prompt, input.responseStyle)),
+      prompt: applyResponseStyle(buildConversationPrompt(previousMessages, prompt), input.responseStyle),
       route: routeResult.value,
     });
     if (!completionResult.ok) return completionResult;
@@ -285,9 +285,9 @@ export class ChatService {
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt: buildConversationPrompt(
-        conversation.messages.slice(0, lastUserMessageIndex),
-        applyResponseStyle(prompt, input.responseStyle ?? metadataResponseStyle)
+      prompt: applyResponseStyle(
+        buildConversationPrompt(conversation.messages.slice(0, lastUserMessageIndex), prompt),
+        input.responseStyle ?? metadataResponseStyle
       ),
       route: routeResult.value,
       stage: "regenerate_complete",
