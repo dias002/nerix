@@ -19,10 +19,21 @@ type PaidEmailInput = TransactionalContact & {
   periodEnd: string;
 };
 
+type UnpaidReminderEmailInput = TransactionalContact & {
+  day: 1 | 3;
+};
+
+type TariffEndingReminderEmailInput = TransactionalContact & {
+  planName: string;
+  periodEnd: string;
+};
+
 export interface TransactionalMailer {
   sendWelcome(input: TransactionalContact): Promise<void>;
   sendCheckoutCreated(input: CheckoutEmailInput): Promise<void>;
   sendSubscriptionPaid(input: PaidEmailInput): Promise<void>;
+  sendUnpaidSubscriptionReminder(input: UnpaidReminderEmailInput): Promise<void>;
+  sendTariffEndingReminder(input: TariffEndingReminderEmailInput): Promise<void>;
 }
 
 export class MailingTransactionalMailer implements TransactionalMailer {
@@ -80,6 +91,43 @@ export class MailingTransactionalMailer implements TransactionalMailer {
         url: `${config.WEB_APP_URL.replace(/\/$/, "")}/workspace/balance`,
       },
       tag: "subscription_paid",
+    });
+  }
+
+  async sendUnpaidSubscriptionReminder(input: UnpaidReminderEmailInput) {
+    await this.send({
+      contact: input,
+      subject: input.day === 1 ? "Продолжите настройку nomduchat" : "Тариф nomduchat еще не подключен",
+      title: input.day === 1 ? "Аккаунт готов к работе" : "Вы еще не выбрали тариф",
+      lines: [
+        input.day === 1
+          ? "Вы зарегистрировались в nomduchat, но тариф пока не подключен."
+          : "Прошло несколько дней после регистрации, а тариф все еще не активирован.",
+        "В тарифе открываются расширенные лимиты, изображения, видео, музыка, avatar-video и бизнес-инструменты.",
+      ],
+      cta: {
+        label: "Выбрать тариф",
+        url: `${config.WEB_APP_URL.replace(/\/$/, "")}/workspace/balance`,
+      },
+      tag: `subscription_unpaid_day_${input.day}`,
+    });
+  }
+
+  async sendTariffEndingReminder(input: TariffEndingReminderEmailInput) {
+    await this.send({
+      contact: input,
+      subject: "Скоро закончится период тарифа nomduchat",
+      title: "Период тарифа подходит к концу",
+      lines: [
+        `Тариф: ${input.planName}.`,
+        `Текущий период действует до ${input.periodEnd}.`,
+        "Проверьте автопродление и способ оплаты, чтобы доступ к расширенным возможностям не прерывался.",
+      ],
+      cta: {
+        label: "Открыть подписку",
+        url: `${config.WEB_APP_URL.replace(/\/$/, "")}/workspace/balance`,
+      },
+      tag: "subscription_period_ending",
     });
   }
 

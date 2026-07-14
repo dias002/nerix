@@ -12,7 +12,7 @@ import {
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 
-type OAuthProvider = "google" | "vk";
+type OAuthProvider = "google" | "vk" | "yandex";
 type AccountProvider = {
   id: string;
   label: string;
@@ -23,8 +23,8 @@ type AccountProvider = {
 const accountProviders = [
   { id: "google", label: "Google", oauthProvider: "google", unavailableCountries: ["RU"] },
   { id: "vk", label: "VK", oauthProvider: "vk" },
-  { id: "yandex", label: "Yandex" },
-  { id: "mailru", label: "Mail.ru" },
+  { id: "yandex", label: "Yandex", oauthProvider: "yandex" },
+  { id: "mailru", label: "Mail.ru через VK ID", oauthProvider: "vk" },
 ] satisfies AccountProvider[];
 
 export default function SettingsProfile() {

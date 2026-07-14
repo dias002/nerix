@@ -66,6 +66,11 @@ export default function Business() {
       text: "Можно запустить страницу под услугу, смотреть визиты, источники, популярные блоки и заявки прямо в кабинете.",
       icon: Globe,
     },
+    {
+      title: "API для коммерческого использования",
+      text: "Перспективный слой для компаний: запросы, история, роли, контроль рисков и подключение собственных сценариев через backend.",
+      icon: Database,
+    },
   ];
 
   return (
@@ -154,7 +159,7 @@ export default function Business() {
                 Поверх кабинета можно заказать бота, ассистента продаж или сайт, который сразу связан с обращениями, метриками и CRM.
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {businessProducts.map((item) => (
                 <article key={item.title} className="rounded-2xl border border-white/10 bg-[#080808]/84 p-5 backdrop-blur-md">
                   <div className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-gray-300">

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { ArrowLeft, Bot, Brain, Code2, FileText, Image, MessageSquare, Mic2, Music2, Sparkles, Video } from "lucide-react";
+import { ArrowLeft, Bot, Brain, Code2, FileText, Image, MessageSquare, Mic2, Music2, Presentation, Sparkles, Video } from "lucide-react";
 import { getAiProviders, type AiProviderApiRecord } from "../api";
 import { useLanguage } from "../i18n";
 
@@ -24,6 +24,12 @@ const modelGroups = [
     tags: ["OpenAI", "Anthropic", "Gemini"],
   },
   {
+    title: "Презентации",
+    detail: "Структура слайдов, pitch deck, тезисы, заметки спикера и визуальные идеи.",
+    icon: Presentation,
+    tags: ["OpenAI", "Anthropic", "Gemini"],
+  },
+  {
     title: "Изображения",
     detail: "Генерация визуалов, обложек, аватаров, концептов и промптов.",
     icon: Image,
@@ -37,9 +43,9 @@ const modelGroups = [
   },
   {
     title: "Музыка и аудио",
-    detail: "Музыкальные идеи, тексты песен, джинглы и аудио-сценарии.",
+    detail: "Музыкальные идеи, тексты песен, джинглы, Suno-ready промпты и аудио-сценарии.",
     icon: Music2,
-    tags: ["Gemini", "специализированные режимы"],
+    tags: ["Gemini", "Suno-ready", "специализированные режимы"],
   },
   {
     title: "Голос",

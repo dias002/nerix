@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const useRunningServers = process.env.NOMDUCHAT_E2E_RUNNING === "1";
+const baseURL = process.env.NOMDUCHAT_E2E_BASE_URL ?? "http://127.0.0.1:5173";
 
 export default defineConfig({
   testDir: "apps/web/e2e",
@@ -11,7 +12,7 @@ export default defineConfig({
   fullyParallel: true,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL,
     trace: "on-first-retry",
   },
   projects: [

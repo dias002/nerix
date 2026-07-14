@@ -8,7 +8,7 @@ import { useLanguage } from "../i18n";
 
 type AuthMode = "login" | "register";
 type BillingCountry = "KZ" | "RU";
-type OAuthProvider = "google" | "vk";
+type OAuthProvider = "google" | "vk" | "yandex";
 
 type SocialAuthProvider = {
   id: "google" | "vk" | "sber" | "yandex" | "mail";
@@ -305,8 +305,8 @@ function getSocialAuthProviders(
   if (country === "RU") {
     return [
       { id: "sber", label: "Sber ID", shortLabel: "S", status: "скоро" },
-      { id: "yandex", label: "Yandex ID", shortLabel: "Я", status: "скоро" },
-      { id: "mail", label: "Mail.ru", shortLabel: "@", status: "скоро" },
+      { id: "yandex", label: "Yandex ID", shortLabel: "Я", oauthProvider: "yandex" },
+      { id: "mail", label: "Mail.ru через VK ID", shortLabel: "@", oauthProvider: "vk" },
       { id: "vk", label: formatVkLabel(authLabels.vk), shortLabel: "VK", oauthProvider: "vk" },
     ];
   }

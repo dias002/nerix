@@ -43,6 +43,7 @@ import {
   MailingTransactionalMailer,
   type TransactionalMailer,
 } from "../modules/notifications/transactional-mailer.js";
+import { LifecycleNotificationsService } from "../modules/notifications/lifecycle-notifications.service.js";
 import {
   AbuseGuardService,
   createAbuseRateLimitRepository,
@@ -79,6 +80,7 @@ export type AppDependencies = {
   businessJobs: BusinessJobService;
   telegramBots: TelegramBotOrderService;
   admin: AdminService;
+  lifecycleNotifications: LifecycleNotificationsService;
   abuseGuard: AbuseGuardService;
 };
 
@@ -166,6 +168,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     telegramBots
   );
   const admin = new AdminService(database, agents);
+  const lifecycleNotifications = new LifecycleNotificationsService(database, transactionalMailer);
   const abuseGuard = options.abuseGuard ?? new AbuseGuardService(abuseRateLimitRepository);
 
   return {
@@ -186,6 +189,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     businessJobs,
     telegramBots,
     admin,
+    lifecycleNotifications,
     abuseGuard,
   };
 }

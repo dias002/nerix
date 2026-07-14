@@ -239,6 +239,15 @@ export default function Home() {
             <Link to="/legal/pricing" className="transition-colors hover:text-white">
               Каталог и цены
             </Link>
+            <Link to="/translate" className="transition-colors hover:text-white">
+              Переводчик
+            </Link>
+            <Link to="/blog" className="transition-colors hover:text-white">
+              Блог
+            </Link>
+            <Link to="/about-referral-program" className="transition-colors hover:text-white">
+              Реферальная программа
+            </Link>
             <Link to="/legal/cookies" className="transition-colors hover:text-white">
               Cookies
             </Link>

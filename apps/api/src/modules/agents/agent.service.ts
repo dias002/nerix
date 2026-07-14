@@ -102,6 +102,11 @@ export class AgentService {
       if (agent) return agent;
     }
 
+    if (containsAny(normalized, ["презентац", "слайды", "слайд", "pitch deck", "deck", "keynote", "powerpoint", "pptx"])) {
+      const agent = selectEnabledAgent("presentations");
+      if (agent) return agent;
+    }
+
     if (containsAny(normalized, ["документ", "файл", "pdf", "договор", "таблиц", "резюме", "summary"])) {
       const agent = selectEnabledAgent("documents");
       if (agent) return agent;

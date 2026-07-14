@@ -12,11 +12,12 @@ import {
   Wallet,
   Zap,
 } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 import { reachAnalyticsGoal } from "../analytics";
 import {
+  cancelCurrentSubscription,
   completeMockSubscription,
   createSubscriptionCheckout,
   getCurrentSubscription,
@@ -46,6 +47,7 @@ const ledgerFilters: Array<{ id: LedgerFilter; label: string }> = [
 export default function Balance() {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAuthenticated, refreshUser, user } = useAuth();
   const country = useMemo(() => {
     if (typeof window !== "undefined") {
@@ -64,6 +66,8 @@ export default function Balance() {
   const [checkoutNoticePlanId, setCheckoutNoticePlanId] = useState<PlanId | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [autoRenewalEnabled, setAutoRenewalEnabled] = useState(() => readAutoRenewalEnabled());
+  const [autoRenewalBusy, setAutoRenewalBusy] = useState(false);
+  const [autoRenewalError, setAutoRenewalError] = useState<string | null>(null);
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("all");
 
   useEffect(() => {
@@ -105,6 +109,21 @@ export default function Balance() {
       active = false;
     };
   }, [country, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentSubscription) return;
+
+    const enabled = currentSubscription.status === "active" && !currentSubscription.cancelAtPeriodEnd;
+    setAutoRenewalEnabled(enabled);
+    window.localStorage.setItem(autoRenewalStorageKey, String(enabled));
+  }, [currentSubscription?.cancelAtPeriodEnd, currentSubscription?.id, currentSubscription?.status, isAuthenticated]);
+
+  useEffect(() => {
+    if (location.hash !== "#token-history") return;
+    window.setTimeout(() => {
+      document.getElementById("token-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, [location.hash]);
 
   const capturedEntries = useMemo(
     () => ledger?.filter((entry) => entry.type === "capture") ?? [],
@@ -154,7 +173,7 @@ export default function Balance() {
       price: formatPrice(plan.price.amountMinor, plan.price.currency),
       credits: plan.monthlyCredits,
       note: translated?.note ?? plan.description,
-      examples: getPlanExamples(plan.id),
+      examples: getPlanExamples(plan.id, plan.monthlyCredits),
     };
   });
 
@@ -215,12 +234,48 @@ export default function Balance() {
     }
   };
 
-  const toggleAutoRenewal = () => {
-    setAutoRenewalEnabled((current) => {
-      const next = !current;
-      window.localStorage.setItem(autoRenewalStorageKey, String(next));
-      return next;
-    });
+  const toggleAutoRenewal = async () => {
+    setAutoRenewalError(null);
+
+    if (!isAuthenticated) {
+      setAutoRenewalEnabled((current) => {
+        const next = !current;
+        window.localStorage.setItem(autoRenewalStorageKey, String(next));
+        return next;
+      });
+      return;
+    }
+
+    if (!autoRenewalEnabled) {
+      if (currentSubscription?.cancelAtPeriodEnd || currentSubscription?.status === "cancelled") {
+        setAutoRenewalError("Повторное включение доступно через оформление нового периода подписки.");
+        return;
+      }
+
+      setAutoRenewalEnabled(true);
+      window.localStorage.setItem(autoRenewalStorageKey, "true");
+      return;
+    }
+
+    if (!currentSubscription || currentSubscription.status !== "active") {
+      setAutoRenewalEnabled(false);
+      window.localStorage.setItem(autoRenewalStorageKey, "false");
+      return;
+    }
+
+    setAutoRenewalBusy(true);
+
+    try {
+      const response = await cancelCurrentSubscription();
+      setCurrentSubscription(response.subscription);
+      setAutoRenewalEnabled(false);
+      window.localStorage.setItem(autoRenewalStorageKey, "false");
+      await refreshUser();
+    } catch (error) {
+      setAutoRenewalError(toPublicApiError(error, "Не удалось отключить автопродление. Попробуйте позже."));
+    } finally {
+      setAutoRenewalBusy(false);
+    }
   };
 
   return (
@@ -262,7 +317,7 @@ export default function Balance() {
           </div>
         )}
 
-        <section className="space-y-4">
+        <section id="token-history" className="scroll-mt-8 space-y-4">
           <h3 className="text-lg font-medium text-white">{t.balance.packagesTitle}</h3>
           {checkoutError ? (
             <p className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-relaxed text-red-100/80">
@@ -355,18 +410,24 @@ export default function Balance() {
                       </Link>
                       .
                     </p>
+                    {autoRenewalError ? (
+                      <p className="mt-3 rounded-xl border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs leading-relaxed text-red-100/80">
+                        {autoRenewalError}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={toggleAutoRenewal}
+                  disabled={autoRenewalBusy}
                   className={`inline-flex h-10 min-w-40 items-center justify-center rounded-full border px-4 text-sm transition-colors ${
                     autoRenewalEnabled
                       ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
                       : "border-white/10 bg-black text-gray-300 hover:border-white/20 hover:text-white"
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                  {autoRenewalEnabled ? "Включено" : "Отключено"}
+                  {autoRenewalBusy ? "Сохраняю..." : autoRenewalEnabled ? "Включено" : "Отключено"}
                 </button>
               </div>
             </div>
@@ -577,15 +638,24 @@ function planLabel(planId: PlanId) {
   return labels[planId] ?? planId;
 }
 
-function getPlanExamples(planId: PlanId) {
-  const examples: Record<PlanId, string[]> = {
-    base: ["ежедневный чат и учеба", "письма, планы и короткие тексты", "разбор небольших документов"],
-    ultra: ["частая работа с документами", "код, маркетинг и длинные ответы", "несколько рабочих задач в день"],
-    pro: ["командные сценарии", "большие документы и промпты", "регулярная генерация медиа"],
-    business: ["бизнес-кабинет и роли", "заявки, CRM-заметки и аналитика", "Telegram-бот и AI-сайт компании"],
-  };
+function getPlanExamples(planId: PlanId, credits: number) {
+  const examples = [
+    `до ${formatCredits(Math.max(1, Math.floor(credits / 25)))} текстовых запросов`,
+    `до ${formatCredits(Math.max(1, Math.floor(credits / 220)))} изображений`,
+    `до ${formatCredits(Math.max(1, Math.floor(credits / 1_200)))} коротких видео`,
+    `до ${formatCredits(Math.max(1, Math.floor(credits / 700)))} песен или аудио-идей`,
+    `до ${formatCredits(Math.max(1, Math.floor(credits / 1_800)))} avatar-video`,
+  ];
 
-  return examples[planId] ?? examples.base;
+  if (planId === "business") {
+    return [...examples, "помощь с внедрением бизнес-сценариев"];
+  }
+
+  if (planId === "pro") {
+    return [...examples, "регулярная генерация медиа для команды"];
+  }
+
+  return examples;
 }
 
 function providerLabel(provider: "kaspi" | "yookassa") {

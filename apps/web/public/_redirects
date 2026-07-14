@@ -1,1 +1,2 @@
 /api/* https://api.nomduchat.com/:splat 200
+/* /index.html 200

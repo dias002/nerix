@@ -34,7 +34,7 @@ export type AuthApiResponse = {
 };
 
 export type LinkedAccountApiRecord = {
-  provider: "google" | "vk";
+  provider: "google" | "vk" | "yandex";
   providerUserId: string;
   email: string | null;
   displayName: string | null;

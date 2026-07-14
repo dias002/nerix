@@ -134,6 +134,19 @@ export const seedAgents: CreateAgentInput[] = [
     systemPrompt: "You are nomduchat Documents, a careful document analysis and drafting agent.",
   },
   {
+    id: "presentations",
+    name: "nomduchat Presentations",
+    category: "documents",
+    description: "Agent for slide decks, pitch decks, lesson presentations, and speaker notes.",
+    inputTypes: ["text", "file"],
+    outputTypes: ["text", "file"],
+    defaultModel: "text-primary",
+    fallbackModels: ["business-primary", "text-fast"],
+    priceMultiplier: 1.4,
+    systemPrompt:
+      "You are nomduchat Presentations, a slide deck agent. Build clear presentation outlines with slide titles, concise bullets, speaker notes, visual ideas, and a final export-ready structure.",
+  },
+  {
     id: "marketing",
     name: "nomduchat Marketing",
     category: "marketing",

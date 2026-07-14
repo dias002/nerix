@@ -9,7 +9,7 @@ export type AuthUserRecord = UserRecord & {
   passwordHash: string;
 };
 
-export type OAuthProviderCode = "google" | "vk";
+export type OAuthProviderCode = "google" | "vk" | "yandex";
 
 export type OAuthUserProfile = {
   provider: OAuthProviderCode;
@@ -617,7 +617,7 @@ export class PostgresAuthRepository implements AuthRepository {
       `
         select provider, provider_user_id, email, display_name, created_at, updated_at
         from oauth_accounts
-        where user_id = $1 and provider in ('google', 'vk')
+        where user_id = $1 and provider in ('google', 'vk', 'yandex')
         order by provider asc, created_at asc
       `,
       [databaseUserId]

@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
-import { ArrowLeft, Eye, EyeOff, Globe, LoaderCircle, Lock, Mail, User } from "lucide-react";
+import { ArrowLeft, Camera, Eye, EyeOff, Globe, LoaderCircle, Lock, Mail, User, X } from "lucide-react";
 import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
 import TurnstileBox, { isTurnstileEnabled } from "../components/TurnstileBox";
@@ -8,7 +8,7 @@ import { useLanguage } from "../i18n";
 
 type AuthMode = "login" | "register";
 type BillingCountry = "KZ" | "RU";
-type OAuthProvider = "google" | "vk";
+type OAuthProvider = "google" | "vk" | "yandex";
 
 type SocialAuthProvider = {
   id: "google" | "vk" | "sber" | "yandex" | "mail";
@@ -34,6 +34,10 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState(invitedEmail);
   const [password, setPassword] = useState("");
+  const [registrationAvatar, setRegistrationAvatar] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem("nomduchat-registration-avatar");
+  });
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [authCountry, setAuthCountry] = useState<BillingCountry>(() => readStoredBillingCountry());
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
@@ -75,6 +79,10 @@ export default function AuthPage() {
           language: authLanguage,
           turnstileToken: turnstileToken ?? undefined,
         });
+        if (registrationAvatar) {
+          window.localStorage.setItem("nomduchat-profile-avatar-draft", registrationAvatar);
+          window.localStorage.removeItem("nomduchat-registration-avatar");
+        }
       } else {
         await login({ email, password });
       }
@@ -99,6 +107,31 @@ export default function AuthPage() {
       setError(toPublicApiError(err, t.auth.error));
       setPending(false);
     }
+  };
+
+  const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Выберите изображение для аватарки.");
+      return;
+    }
+
+    if (file.size > 1_500_000) {
+      setError("Фото для аватарки должно быть до 1.5 МБ.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      setRegistrationAvatar(reader.result);
+      window.localStorage.setItem("nomduchat-registration-avatar", reader.result);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -172,19 +205,56 @@ export default function AuthPage() {
 
             <div className="space-y-3">
               {mode === "register" ? (
-                <label className="block">
-                  <span className="mb-1.5 block text-xs text-gray-500">{t.auth.name}</span>
-                  <span className="flex items-center gap-2 rounded-xl border border-white/10 bg-black px-3 focus-within:border-white/25">
-                    <User className="h-4 w-4 text-gray-500" strokeWidth={1.7} />
-                    <input
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      autoComplete="name"
-                      className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-700"
-                      placeholder={t.auth.namePlaceholder}
-                    />
-                  </span>
-                </label>
+                <>
+                  <div className="rounded-xl border border-white/10 bg-black p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-white/[0.04]">
+                        {registrationAvatar ? (
+                          <img src={registrationAvatar} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <User className="h-5 w-5 text-gray-500" strokeWidth={1.7} />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-white">Аватар профиля</div>
+                        <div className="mt-0.5 text-xs text-gray-600">Фото появится в личном кабинете на этом устройстве.</div>
+                      </div>
+                      {registrationAvatar ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRegistrationAvatar(null);
+                            window.localStorage.removeItem("nomduchat-registration-avatar");
+                          }}
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+                          aria-label="Удалить аватар"
+                          title="Удалить аватар"
+                        >
+                          <X className="h-4 w-4" strokeWidth={1.7} />
+                        </button>
+                      ) : null}
+                    </div>
+                    <label className="mt-3 inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white">
+                      <Camera className="h-4 w-4" strokeWidth={1.7} />
+                      Выбрать фото
+                      <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs text-gray-500">{t.auth.name}</span>
+                    <span className="flex items-center gap-2 rounded-xl border border-white/10 bg-black px-3 focus-within:border-white/25">
+                      <User className="h-4 w-4 text-gray-500" strokeWidth={1.7} />
+                      <input
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        autoComplete="name"
+                        className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-700"
+                        placeholder={t.auth.namePlaceholder}
+                      />
+                    </span>
+                  </label>
+                </>
               ) : null}
 
               <label className="block">
@@ -313,8 +383,8 @@ function getSocialAuthProviders(
   if (country === "RU") {
     return [
       { id: "sber", label: "Sber ID", shortLabel: "S", status: "скоро" },
-      { id: "yandex", label: "Yandex ID", shortLabel: "Я", status: "скоро" },
-      { id: "mail", label: "Mail.ru", shortLabel: "@", status: "скоро" },
+      { id: "yandex", label: "Yandex ID", shortLabel: "Я", oauthProvider: "yandex" },
+      { id: "mail", label: "Mail.ru через VK ID", shortLabel: "@", oauthProvider: "vk" },
       { id: "vk", label: formatVkLabel(authLabels.vk), shortLabel: "VK", oauthProvider: "vk" },
     ];
   }

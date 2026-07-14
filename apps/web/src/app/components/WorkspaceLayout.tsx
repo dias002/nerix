@@ -1,8 +1,8 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
+import { AlertCircle, ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getCurrentSubscription, getPlans, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type UsageLimitsApiResponse } from "../api";
+import { getCurrentSubscription, getPlans, getSubscriptionCheckouts, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type SubscriptionCheckoutApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 import { getUnauthorizedWorkspaceRedirect, getWorkspaceAccess } from "../roleAccess";
@@ -16,8 +16,15 @@ export default function WorkspaceLayout() {
   const [usageLimits, setUsageLimits] = useState<UsageLimitsApiResponse | null>(null);
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscriptionApiResponse | null>(null);
+  const [failedRenewalCheckout, setFailedRenewalCheckout] = useState<SubscriptionCheckoutApiRecord | null>(null);
   const [plans, setPlans] = useState<PlanApiRecord[]>([]);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [renewalDialogOpen, setRenewalDialogOpen] = useState(false);
+  const [renewalNudgeHidden, setRenewalNudgeHidden] = useState(false);
+  const [profileAvatar] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return window.localStorage.getItem("nomduchat-profile-avatar-draft");
+  });
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("nomduchat-sidebar-collapsed") === "true";
@@ -120,23 +127,28 @@ export default function WorkspaceLayout() {
       setUsageLimits(null);
       setWallet(null);
       setCurrentSubscription(null);
+      setFailedRenewalCheckout(null);
       setPlans([]);
       return;
     }
 
     const country = user?.country === "RU" ? "RU" : "KZ";
 
-    Promise.allSettled([getUsageLimits(), getWallet(), getCurrentSubscription(), getPlans(country)])
-      .then(([usageResult, walletResult, subscriptionResult, plansResult]) => {
+    Promise.allSettled([getUsageLimits(), getWallet(), getCurrentSubscription(), getPlans(country), getSubscriptionCheckouts()])
+      .then(([usageResult, walletResult, subscriptionResult, plansResult, checkoutsResult]) => {
         setUsageLimits(usageResult.status === "fulfilled" ? usageResult.value : null);
         setWallet(walletResult.status === "fulfilled" ? walletResult.value : null);
         setCurrentSubscription(subscriptionResult.status === "fulfilled" ? subscriptionResult.value : null);
         setPlans(plansResult.status === "fulfilled" ? plansResult.value.plans : []);
+        setFailedRenewalCheckout(
+          checkoutsResult.status === "fulfilled" ? getLatestFailedCheckout(checkoutsResult.value.checkouts) : null
+        );
       })
       .catch(() => {
         setUsageLimits(null);
         setWallet(null);
         setCurrentSubscription(null);
+        setFailedRenewalCheckout(null);
         setPlans([]);
       });
   }, [access.isGuest, isAdminNavigation, user?.id, user?.activePlanId, user?.country, roleOverride]);
@@ -164,6 +176,18 @@ export default function WorkspaceLayout() {
 
     setOnboardingOpen(window.localStorage.getItem(onboardingStorageKey(user.id)) !== "dismissed");
   }, [isAuthenticated, user?.id]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id || !failedRenewalCheckout) {
+      setRenewalDialogOpen(false);
+      setRenewalNudgeHidden(false);
+      return;
+    }
+
+    const dismissed = window.localStorage.getItem(renewalFailureStorageKey(user.id, failedRenewalCheckout.id)) === "dismissed";
+    setRenewalDialogOpen(!dismissed);
+    setRenewalNudgeHidden(false);
+  }, [failedRenewalCheckout?.id, isAuthenticated, user?.id]);
 
   useEffect(() => {
     window.addEventListener("nomduchat-usage-updated", refreshUsageLimits);
@@ -436,7 +460,15 @@ export default function WorkspaceLayout() {
         <div className="p-4 border-t border-white/10">
           <div className={`flex items-center justify-center gap-3 py-2 ${sidebarCollapsed ? "" : "md:justify-start md:px-2"}`}>
             <div className="relative">
-              <CircleUser className="w-8 h-8 text-gray-300" strokeWidth={1.5} />
+              {profileAvatar ? (
+                <img
+                  src={profileAvatar}
+                  alt=""
+                  className="h-8 w-8 rounded-full border border-white/10 object-cover"
+                />
+              ) : (
+                <CircleUser className="w-8 h-8 text-gray-300" strokeWidth={1.5} />
+              )}
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-black"></div>
             </div>
             <div className={`${sidebarCollapsed ? "hidden" : "hidden md:block"} flex-1 min-w-0`}>
@@ -483,6 +515,22 @@ export default function WorkspaceLayout() {
           open={onboardingOpen}
           access={access}
           onClose={closeOnboarding}
+        />
+      ) : null}
+      {user && failedRenewalCheckout ? (
+        <RenewalFailureDialog
+          open={renewalDialogOpen}
+          checkout={failedRenewalCheckout}
+          onClose={() => {
+            window.localStorage.setItem(renewalFailureStorageKey(user.id, failedRenewalCheckout.id), "dismissed");
+            setRenewalDialogOpen(false);
+          }}
+        />
+      ) : null}
+      {user && failedRenewalCheckout && !renewalDialogOpen && !renewalNudgeHidden ? (
+        <RenewalFailureNudge
+          checkout={failedRenewalCheckout}
+          onClose={() => setRenewalNudgeHidden(true)}
         />
       ) : null}
     </div>
@@ -619,6 +667,118 @@ function onboardingStorageKey(userId: string) {
   return `nomduchat-workspace-onboarding:v1:${userId}`;
 }
 
+function renewalFailureStorageKey(userId: string, checkoutId: string) {
+  return `nomduchat-renewal-failure:v1:${userId}:${checkoutId}`;
+}
+
+function getLatestFailedCheckout(checkouts: SubscriptionCheckoutApiRecord[]) {
+  return checkouts
+    .filter((checkout) => checkout.status === "failed" || checkout.status === "cancelled")
+    .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())[0] ?? null;
+}
+
+function RenewalFailureDialog({
+  open,
+  checkout,
+  onClose,
+}: {
+  open: boolean;
+  checkout: SubscriptionCheckoutApiRecord;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/75 px-4 pb-4 pt-16 backdrop-blur-md sm:items-center sm:p-6">
+      <section className="relative w-full max-w-md rounded-2xl border border-red-400/20 bg-[#080808] p-5 text-white shadow-2xl shadow-black/60 sm:p-6">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label="Закрыть"
+          title="Закрыть"
+        >
+          <X className="h-5 w-5" strokeWidth={1.7} />
+        </button>
+
+        <div className="pr-10">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-red-400/20 bg-red-400/10 text-red-100">
+            <AlertCircle className="h-5 w-5" strokeWidth={1.8} />
+          </div>
+          <h2 className="text-2xl font-medium text-white">Не удалось продлить подписку</h2>
+          <p className="mt-3 text-sm leading-relaxed text-gray-400">
+            Платеж по тарифу {planLabel(checkout.planId)} не завершился. Проверьте карту или выберите другой способ оплаты.
+          </p>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-white/10 bg-black px-4 py-3 text-sm text-gray-400">
+          <div className="flex items-center justify-between gap-3">
+            <span>{planLabel(checkout.planId)}</span>
+            <span className="text-white">{formatCheckoutPrice(checkout.amountMinor, checkout.currency)}</span>
+          </div>
+          <div className="mt-2 truncate text-xs text-gray-600">ID: {checkout.providerCheckoutId}</div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-2">
+          <Link
+            to="/workspace/balance"
+            onClick={onClose}
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200"
+          >
+            Попробовать оплатить снова
+          </Link>
+          <Link
+            to="/support"
+            onClick={onClose}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 px-4 text-sm font-medium text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+          >
+            Написать в поддержку
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RenewalFailureNudge({
+  checkout,
+  onClose,
+}: {
+  checkout: SubscriptionCheckoutApiRecord;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed bottom-4 right-4 z-[70] w-[min(25rem,calc(100vw-2rem))] rounded-2xl border border-indigo-300/25 bg-indigo-500/95 p-3 text-white shadow-2xl shadow-black/50 backdrop-blur-md">
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+        aria-label="Скрыть"
+        title="Скрыть"
+      >
+        <X className="h-4 w-4" strokeWidth={1.8} />
+      </button>
+      <div className="flex items-center gap-3 pr-8">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
+          <CreditCard className="h-5 w-5" strokeWidth={1.7} />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-medium">Возобновите подписку</div>
+          <div className="mt-0.5 truncate text-xs text-white/75">
+            {planLabel(checkout.planId)} · {formatCheckoutPrice(checkout.amountMinor, checkout.currency)}
+          </div>
+        </div>
+        <Link
+          to="/workspace/balance"
+          className="ml-auto inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-white px-3 text-sm font-medium text-indigo-700 transition-colors hover:bg-indigo-50"
+        >
+          Возобновить
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function UsageLimitPanel({
   isGuest,
   usage,
@@ -730,4 +890,23 @@ function UsageLimitPanel({
 
 function formatCredits(value: number) {
   return new Intl.NumberFormat("ru-RU").format(Math.max(0, Math.round(value)));
+}
+
+function planLabel(planId: string) {
+  const labels: Record<string, string> = {
+    base: "Easy Start",
+    ultra: "Active Work",
+    pro: "Team Mode",
+    business: "Business Cabinet",
+  };
+  return labels[planId] ?? planId;
+}
+
+function formatCheckoutPrice(amountMinor: number, currency: "KZT" | "RUB") {
+  const amount = amountMinor / 100;
+  const formatted = new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 0,
+  }).format(amount);
+
+  return `${formatted} ${currency === "KZT" ? "₸" : "₽"}`;
 }

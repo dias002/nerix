@@ -35,6 +35,13 @@ export async function getSubscriptionCheckouts() {
   return request<{ checkouts: SubscriptionCheckoutApiRecord[] }>("/subscriptions/checkouts");
 }
 
+export async function cancelCurrentSubscription() {
+  return request<CurrentSubscriptionApiResponse>("/subscriptions/cancel", {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
 export async function createSubscriptionCheckout(input: { planId: PlanId; country?: "KZ" | "RU"; customerEmail?: string | null }) {
   return request<SubscriptionCheckoutApiResponse>("/subscriptions/checkout", {
     method: "POST",

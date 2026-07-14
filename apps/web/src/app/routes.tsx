@@ -1,5 +1,5 @@
 import { lazy } from "react";
-import { createBrowserRouter, type RouteObject } from "react-router";
+import { createBrowserRouter, Navigate, useParams, type RouteObject } from "react-router";
 import { RouteErrorBoundary } from "./components/RouteErrorBoundary";
 
 const Home = lazy(() => import("./pages/Home"));
@@ -8,6 +8,9 @@ const About = lazy(() => import("./pages/About"));
 const Faq = lazy(() => import("./pages/Faq"));
 const Contacts = lazy(() => import("./pages/Contacts"));
 const SeoArticles = lazy(() => import("./pages/SeoArticles"));
+const Translate = lazy(() => import("./pages/Translate"));
+const ReferralProgram = lazy(() => import("./pages/ReferralProgram"));
+const PublicAiTool = lazy(() => import("./pages/PublicAiTool"));
 const Business = lazy(() => import("./pages/Business"));
 const Requisites = lazy(() => import("./pages/Requisites"));
 const Legal = lazy(() => import("./pages/Legal"));
@@ -18,7 +21,7 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
 const Chat = lazy(() => import("./pages/Chat"));
-const AvatarComingSoon = lazy(() => import("./pages/AvatarComingSoon"));
+const AvatarStudio = lazy(() => import("./pages/AvatarStudio"));
 const Apps = lazy(() => import("./pages/Apps"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Agents = lazy(() => import("./pages/Agents"));
@@ -60,12 +63,52 @@ const routes: RouteObject[] = [
     Component: Contacts,
   },
   {
+    path: "/translate",
+    Component: Translate,
+  },
+  {
+    path: "/about-referral-program",
+    Component: ReferralProgram,
+  },
+  {
+    path: "/ai/flux-2",
+    Component: PublicAiTool,
+  },
+  {
+    path: "/tools/dizajn-interyera",
+    Component: PublicAiTool,
+  },
+  {
+    path: "/tools/humanizer",
+    Component: PublicAiTool,
+  },
+  {
     path: "/seo/articles",
     Component: SeoArticles,
   },
   {
     path: "/seo/articles/:slug",
     Component: SeoArticles,
+  },
+  {
+    path: "/blog",
+    Component: BlogRedirect,
+  },
+  {
+    path: "/blog/:slug",
+    Component: BlogRedirect,
+  },
+  {
+    path: "/chat",
+    Component: ChatRedirect,
+  },
+  {
+    path: "/chat/apps",
+    Component: AppsRedirect,
+  },
+  {
+    path: "/chat/projects",
+    Component: ProjectsRedirect,
   },
   {
     path: "/models",
@@ -169,7 +212,7 @@ const routes: RouteObject[] = [
     children: [
       { index: true, Component: Chat },
       { path: "chat", Component: Chat },
-      { path: "avatar", Component: AvatarComingSoon },
+      { path: "avatar", Component: AvatarStudio },
       { path: "apps", Component: Apps },
       { path: "projects", Component: Projects },
       { path: "history", Component: History },
@@ -209,4 +252,21 @@ function withRouteErrorBoundary(route: RouteObject): RouteObject {
     ErrorBoundary: RouteErrorBoundary,
     children: route.children?.map(withRouteErrorBoundary),
   };
+}
+
+function BlogRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={slug ? `/seo/articles/${slug}` : "/seo/articles"} replace />;
+}
+
+function ChatRedirect() {
+  return <Navigate to="/workspace/chat" replace />;
+}
+
+function AppsRedirect() {
+  return <Navigate to="/workspace/apps" replace />;
+}
+
+function ProjectsRedirect() {
+  return <Navigate to="/workspace/projects" replace />;
 }

@@ -57,11 +57,13 @@ export async function deleteCurrentUser(confirmation: string) {
   });
 }
 
-export async function startOAuth(provider: "google" | "vk", returnTo = "/workspace", country?: "KZ" | "RU") {
+export type OAuthProvider = "google" | "vk" | "yandex";
+
+export async function startOAuth(provider: OAuthProvider, returnTo = "/workspace", country?: "KZ" | "RU") {
   const query = new URLSearchParams({ returnTo });
   if (country) query.set("country", country);
 
-  return request<{ provider: "google" | "vk"; authorizationUrl: string }>(
+  return request<{ provider: OAuthProvider; authorizationUrl: string }>(
     `/auth/oauth/${provider}/start?${query.toString()}`
   );
 }
@@ -70,8 +72,8 @@ export async function getLinkedAccounts() {
   return request<{ accounts: LinkedAccountApiRecord[] }>("/auth/linked-accounts");
 }
 
-export async function unlinkLinkedAccount(provider: "google" | "vk") {
-  return request<{ provider: "google" | "vk"; unlinked: true; accounts: LinkedAccountApiRecord[] }>(
+export async function unlinkLinkedAccount(provider: OAuthProvider) {
+  return request<{ provider: OAuthProvider; unlinked: true; accounts: LinkedAccountApiRecord[] }>(
     `/auth/linked-accounts/${provider}/unlink`,
     {
       method: "POST",

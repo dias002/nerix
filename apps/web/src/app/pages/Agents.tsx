@@ -1,12 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { ArrowRight, Bot, Briefcase, Code, FileText, GraduationCap, Headphones, ImageIcon, Megaphone, Mic, Music2, Video } from "lucide-react";
+import { ArrowRight, Bot, Briefcase, Code, FileText, GraduationCap, Headphones, ImageIcon, Megaphone, Mic, Music2, Presentation, Video } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { getAgents } from "../api";
 
 const fallbackAgentIds = ["general", "business", "code", "study", "documents", "image", "video", "avatar", "music", "voice", "marketing", "support"];
 const fallbackAgentIcons = [Bot, Briefcase, Code, GraduationCap, FileText, ImageIcon, Video, Video, Music2, Mic, Megaphone, Headphones];
+const agentIconsById = new Map([
+  ["general", Bot],
+  ["business", Briefcase],
+  ["code", Code],
+  ["study", GraduationCap],
+  ["documents", FileText],
+  ["presentations", Presentation],
+  ["image", ImageIcon],
+  ["video", Video],
+  ["avatar", Video],
+  ["music", Music2],
+  ["voice", Mic],
+  ["marketing", Megaphone],
+  ["support", Headphones],
+]);
 
 export default function Agents() {
   const { t } = useLanguage();
@@ -24,13 +39,14 @@ export default function Agents() {
     return apiAgents.map((agent, index) => {
       const translationIndex = fallbackAgentIds.indexOf(agent.id);
       const fallback = translationIndex >= 0 ? t.agents.items[translationIndex] : undefined;
+      const icon = agentIconsById.get(agent.id) ?? fallbackAgentIcons[translationIndex >= 0 ? translationIndex : index % fallbackAgentIcons.length] ?? Bot;
       return {
         title: fallback?.title ?? agent.name,
         description: fallback?.description || agent.description || agent.name,
         strengths: fallback?.strengths ?? [],
         examples: fallback?.examples ?? [],
         id: agent.id,
-        icon: fallbackAgentIcons[translationIndex >= 0 ? translationIndex : index % fallbackAgentIcons.length] ?? Bot,
+        icon,
       };
     });
   }, [apiAgents, t.agents.items]);

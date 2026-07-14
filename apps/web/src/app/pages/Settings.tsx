@@ -15,6 +15,7 @@ import {
   Sun,
   Trash2,
   User,
+  Wallet,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { countryCodes, normalizeCountryCode, type CountryCode } from "@nomduchat/shared";
@@ -113,10 +114,17 @@ export default function Settings() {
           path: "/support",
         },
         {
+          id: "token-history",
+          label: "История токенов",
+          icon: Wallet,
+          value: "Списания, резервы, возвраты",
+          path: "/workspace/balance#token-history",
+        },
+        {
           id: "data-deletion",
-          label: "Удаление данных",
+          label: "Удаление аккаунта и чатов",
           icon: Trash2,
-          value: "Запрос на удаление аккаунта",
+          value: "Выгрузка и деактивация",
           path: "/data-deletion",
         },
       ],

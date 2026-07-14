@@ -226,6 +226,21 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    create table if not exists notification_events (
+      id uuid primary key default uuid_generate_v4(),
+      event_key text not null unique,
+      user_id uuid references users(id) on delete set null,
+      type text not null,
+      status text not null default 'pending',
+      metadata jsonb not null default '{}'::jsonb,
+      error_message text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      sent_at timestamptz
+    )
+  `);
+
+  await database.query(`
     create table if not exists feature_flags (
       id uuid primary key default uuid_generate_v4(),
       key text not null unique,

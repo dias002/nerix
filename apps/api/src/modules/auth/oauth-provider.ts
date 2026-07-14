@@ -39,17 +39,29 @@ type VkUserInfo = {
   };
 };
 
+type YandexUserInfo = {
+  id?: string;
+  login?: string;
+  display_name?: string;
+  real_name?: string;
+  first_name?: string;
+  last_name?: string;
+  default_email?: string;
+  emails?: string[];
+};
+
 export function supportedOAuthProviders() {
-  return ["google", "vk"] as const;
+  return ["google", "vk", "yandex"] as const;
 }
 
 export function isOAuthProvider(value: string): value is OAuthProviderCode {
-  return value === "google" || value === "vk";
+  return value === "google" || value === "vk" || value === "yandex";
 }
 
 export function isOAuthProviderConfigured(provider: OAuthProviderCode) {
   if (provider === "google") return Boolean(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET);
-  return Boolean(config.VK_CLIENT_ID && config.VK_CLIENT_SECRET);
+  if (provider === "vk") return Boolean(config.VK_CLIENT_ID && config.VK_CLIENT_SECRET);
+  return Boolean(config.YANDEX_CLIENT_ID && config.YANDEX_CLIENT_SECRET);
 }
 
 export function createOAuthAuthorizationUrl(input: { provider: OAuthProviderCode; returnTo?: string; country?: CountryCode }) {
@@ -72,6 +84,16 @@ export function createOAuthAuthorizationUrl(input: { provider: OAuthProviderCode
     url.searchParams.set("state", state);
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "select_account");
+    return url.toString();
+  }
+
+  if (input.provider === "yandex") {
+    const url = new URL("https://oauth.yandex.ru/authorize");
+    url.searchParams.set("client_id", config.YANDEX_CLIENT_ID!);
+    url.searchParams.set("redirect_uri", redirectUri("yandex"));
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("scope", "login:email login:info");
+    url.searchParams.set("state", state);
     return url.toString();
   }
 
@@ -100,7 +122,11 @@ export async function exchangeOAuthCode(input: {
   }
 
   const profile =
-    input.provider === "google" ? await exchangeGoogleCode(input.code) : await exchangeVkCode(input.code);
+    input.provider === "google"
+      ? await exchangeGoogleCode(input.code)
+      : input.provider === "yandex"
+        ? await exchangeYandexCode(input.code)
+        : await exchangeVkCode(input.code);
 
   return {
     profile: {
@@ -223,6 +249,51 @@ async function exchangeVkCode(code: string): Promise<OAuthUserProfile> {
   };
 }
 
+async function exchangeYandexCode(code: string): Promise<OAuthUserProfile> {
+  const token = await postForm<TokenResponse>("https://oauth.yandex.ru/token", {
+    code,
+    client_id: config.YANDEX_CLIENT_ID!,
+    client_secret: config.YANDEX_CLIENT_SECRET!,
+    redirect_uri: redirectUri("yandex"),
+    grant_type: "authorization_code",
+  });
+
+  if (!token.access_token) {
+    throw new DomainError("unauthorized", token.error_description ?? "Yandex OAuth token exchange failed.", 401);
+  }
+
+  const userInfoResponse = await fetch("https://login.yandex.ru/info?format=json", {
+    headers: {
+      Authorization: `OAuth ${token.access_token}`,
+    },
+  });
+
+  if (!userInfoResponse.ok) {
+    throw new DomainError("unauthorized", "Yandex OAuth profile request failed.", 401);
+  }
+
+  const userInfo = (await userInfoResponse.json()) as YandexUserInfo;
+  if (!userInfo.id) {
+    throw new DomainError("unauthorized", "Yandex OAuth profile is missing user id.", 401);
+  }
+
+  const name =
+    userInfo.display_name ||
+    userInfo.real_name ||
+    [userInfo.first_name, userInfo.last_name].filter(Boolean).join(" ").trim() ||
+    userInfo.login ||
+    "Yandex User";
+  return {
+    provider: "yandex",
+    providerUserId: userInfo.id,
+    email: userInfo.default_email ?? userInfo.emails?.[0] ?? null,
+    name,
+    country: "RU",
+    language: "ru",
+    rawProfile: userInfo as Record<string, unknown>,
+  };
+}
+
 async function postForm<T>(url: string, body: Record<string, string>) {
   const response = await fetch(url, {
     method: "POST",
@@ -249,7 +320,9 @@ function normalizeReturnTo(returnTo: string | undefined) {
 }
 
 function providerLabel(provider: OAuthProviderCode) {
-  return provider === "google" ? "Google" : "VK";
+  if (provider === "google") return "Google";
+  if (provider === "yandex") return "Yandex";
+  return "VK";
 }
 
 function safeEqual(left: string, right: string) {

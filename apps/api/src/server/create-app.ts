@@ -17,6 +17,7 @@ import { registerChatRoutes } from "../modules/chat/routes.js";
 import { registerGenerationRoutes } from "../modules/generation/routes.js";
 import { registerKnowledgeBaseRoutes } from "../modules/knowledge-base/routes.js";
 import { registerMailingRoutes } from "../modules/mailings/routes.js";
+import { registerNotificationRoutes } from "../modules/notifications/routes.js";
 import { registerSubscriptionRoutes } from "../modules/subscriptions/routes.js";
 import { registerTelegramBotRoutes } from "../modules/telegram-bots/routes.js";
 import { registerUserRoutes } from "../modules/users/routes.js";
@@ -84,6 +85,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<Fastify
   await registerChatRoutes(app, dependencies.chat, dependencies.auth, dependencies.abuseGuard);
   await registerGenerationRoutes(app, dependencies.generation, dependencies.auth, dependencies.abuseGuard);
   await registerMailingRoutes(app, dependencies.mailings, dependencies.auth, dependencies.abuseGuard);
+  await registerNotificationRoutes(app, dependencies.lifecycleNotifications);
 
   return app;
 }
