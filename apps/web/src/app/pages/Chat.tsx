@@ -478,6 +478,11 @@ export default function Chat() {
   const handleSend = async () => {
     if (!canSend) return;
 
+    if (!isAuthenticated) {
+      setIsAuthPromptOpen(true);
+      return;
+    }
+
     const messageText = inputValue.trim() || t.chat.filePrompt;
     const filesForMessage = attachedFiles;
     const userMessage: Message = {

@@ -260,7 +260,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
         </button>
 
         <p className="mt-3 text-center text-xs leading-relaxed text-gray-600">
-          Нажимая кнопку входа, регистрации или продолжения, вы принимаете{" "}
+          Нажимая кнопку входа или регистрации, вы принимаете{" "}
           <Link to="/legal/terms" className="text-gray-400 transition-colors hover:text-white">
             пользовательское соглашение
           </Link>
@@ -274,14 +274,6 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
           </Link>
           .
         </p>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl text-sm text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
-        >
-          {t.auth.continueWithoutAccount}
-        </button>
 
         <p className="mt-3 text-center text-xs leading-relaxed text-gray-600">
           <Link to="/auth?mode=register" className="text-gray-400 transition-colors hover:text-white">
