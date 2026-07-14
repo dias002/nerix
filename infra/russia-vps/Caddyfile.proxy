@@ -12,16 +12,16 @@ nomduchat.com, www.nomduchat.com {
 	}
 
 	handle_path /api/* {
-		reverse_proxy https://nomduchat-api.onrender.com {
-			header_up Host nomduchat-api.onrender.com
+		reverse_proxy https://nomduchat-api-prod.onrender.com {
+			header_up Host nomduchat-api-prod.onrender.com
 			header_up X-Forwarded-Host {host}
 			header_up X-Forwarded-Proto {scheme}
 		}
 	}
 
 	handle /health {
-		reverse_proxy https://nomduchat-api.onrender.com {
-			header_up Host nomduchat-api.onrender.com
+		reverse_proxy https://nomduchat-api-prod.onrender.com {
+			header_up Host nomduchat-api-prod.onrender.com
 			header_up X-Forwarded-Host {host}
 			header_up X-Forwarded-Proto {scheme}
 		}
@@ -45,8 +45,8 @@ api.nomduchat.com {
 		-Server
 	}
 
-	reverse_proxy https://nomduchat-api.onrender.com {
-		header_up Host nomduchat-api.onrender.com
+	reverse_proxy https://nomduchat-api-prod.onrender.com {
+		header_up Host nomduchat-api-prod.onrender.com
 		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto {scheme}
 	}
