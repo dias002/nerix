@@ -54,7 +54,7 @@ export async function request<T>(path: string, init: RequestInit = {}) {
 
   if (!response.ok) {
     const body = await safeJson<ApiErrorResponse>(response);
-    throw new Error(body?.error?.message ?? `nomduchat API request failed with ${response.status}.`);
+    throw createHttpError(response, body);
   }
 
   return response.json() as Promise<T>;
@@ -75,7 +75,7 @@ export async function requestBlob(path: string) {
 
   if (!response.ok) {
     const body = await safeJson<ApiErrorResponse>(response);
-    throw new Error(body?.error?.message ?? `nomduchat API request failed with ${response.status}.`);
+    throw createHttpError(response, body);
   }
 
   return response.blob();
@@ -121,6 +121,18 @@ function getOrCreateDeviceId() {
 
 function isNetworkFetchError(error: unknown) {
   return error instanceof TypeError || (error instanceof Error && /failed to fetch|network|load failed/i.test(error.message));
+}
+
+function createHttpError(response: Response, body: ApiErrorResponse | null) {
+  if (body?.error?.message) {
+    return new Error(body.error.message);
+  }
+
+  if (response.status >= 500) {
+    return new Error("nomduchat_api_unavailable");
+  }
+
+  return new Error(`nomduchat API request failed with ${response.status}.`);
 }
 
 async function safeJson<T>(response: Response) {
