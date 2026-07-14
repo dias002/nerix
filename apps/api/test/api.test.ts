@@ -1323,6 +1323,37 @@ test("POST /chat/messages returns a persisted local conversation response", asyn
   await app.close();
 });
 
+test("POST /chat/messages/stream emits start, delta, and done events", async () => {
+  const app = await createApp();
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/chat/messages/stream",
+    payload: {
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      selectedModelId: "mock-provider:configured",
+      message: "Проверь потоковый ответ",
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(String(response.headers["content-type"]), /text\/event-stream/);
+
+  const events = parseSseEvents(response.payload);
+  assert.equal(events[0].event, "start");
+  assert.equal(events.at(-1)?.event, "done");
+  assert.ok(events.slice(1, -1).every((event) => event.event === "delta"));
+  assert.equal(events[0].data.userMessage.role, "user");
+  assert.equal(events[0].data.route.model, "mock-text");
+  assert.match(events.slice(1, -1).map((event) => event.data.delta).join(""), /mock-ответ nomduchat/);
+  assert.equal(events.at(-1)?.data.assistantMessage.role, "assistant");
+  assert.equal(events.at(-1)?.data.answerVariant.status, "candidate");
+
+  await app.close();
+});
+
 test("free chat accounts have seven daily text requests and paid media gate", async () => {
   const app = await createApp();
 
@@ -2227,6 +2258,25 @@ test("telegram mini app draft generates bot elements from a short business brief
 
   await app.close();
 });
+
+function parseSseEvents(payload: string) {
+  return payload
+    .trim()
+    .split(/\r?\n\r?\n/)
+    .map((rawEvent) => {
+      const lines = rawEvent.split(/\r?\n/);
+      const event = lines.find((line) => line.startsWith("event:"))?.slice("event:".length).trim() ?? "";
+      const data = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice("data:".length).trimStart())
+        .join("\n");
+
+      return {
+        event,
+        data: JSON.parse(data),
+      };
+    });
+}
 
 async function withConfig<T>(patch: Partial<typeof config>, callback: () => T | Promise<T>) {
   const mutableConfig = config as unknown as Record<string, unknown>;

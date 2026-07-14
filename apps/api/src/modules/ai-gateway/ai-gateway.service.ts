@@ -4,7 +4,7 @@ import type { AgentService } from "../agents/agent.service.js";
 import type { BillingService } from "../billing/billing.service.js";
 import { inferModality } from "./modality-classifier.js";
 import { chooseProvider } from "./provider-router.js";
-import type { AiCompletionProvider } from "./completion-provider.js";
+import type { AiCompletionProvider, CompletionStreamCallbacks } from "./completion-provider.js";
 
 export class AiGatewayService {
   constructor(
@@ -63,6 +63,34 @@ export class AiGatewayService {
 
     return ok(
       await this.completionProvider.complete({
+        provider: input.provider,
+        model: input.model,
+        prompt: input.prompt,
+        systemPrompt: agentResult.value.systemPrompt,
+      })
+    );
+  }
+
+  async completeStreaming(input: {
+    provider: string;
+    model: string;
+    prompt: string;
+    agentId: string;
+    onDelta: CompletionStreamCallbacks["onDelta"];
+  }) {
+    const agentResult = await this.agents.requireAgent(input.agentId);
+    if (!agentResult.ok) return agentResult;
+
+    return ok(
+      await this.completionProvider.stream?.(
+        {
+          provider: input.provider,
+          model: input.model,
+          prompt: input.prompt,
+          systemPrompt: agentResult.value.systemPrompt,
+        },
+        { onDelta: input.onDelta }
+      ) ?? await this.completionProvider.complete({
         provider: input.provider,
         model: input.model,
         prompt: input.prompt,

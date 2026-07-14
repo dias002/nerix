@@ -60,6 +60,30 @@ export async function request<T>(path: string, init: RequestInit = {}) {
   return response.json() as Promise<T>;
 }
 
+export async function requestStream(path: string, init: RequestInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "application/json");
+  headers.set("Accept", "text/event-stream");
+  appendClientHeaders(headers);
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl}${path}`, {
+      ...init,
+      headers,
+    });
+  } catch (error) {
+    throw new Error(isNetworkFetchError(error) ? "nomduchat_api_unavailable" : "nomduchat_api_request_failed");
+  }
+
+  if (!response.ok) {
+    const body = await safeJson<ApiErrorResponse>(response);
+    throw createHttpError(response, body);
+  }
+
+  return response;
+}
+
 export async function requestBlob(path: string) {
   const headers = new Headers();
   appendClientHeaders(headers);

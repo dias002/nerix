@@ -19,6 +19,33 @@ import {
 } from "./prompt-builder.js";
 import { ChatUsagePolicy, type SubscriptionAccessService } from "./usage-policy.js";
 
+type ChatRouteMetadata = {
+  agentId: string;
+  taskType: string;
+  provider: string;
+  model: string;
+  policyMode: string;
+  estimatedCredits: number;
+  reserveCredits: number;
+  asyncJob: boolean;
+  modality: AiModality;
+  routingReason: string;
+};
+
+type ChatStreamCallbacks = {
+  onStart?: (payload: {
+    conversationId: string;
+    userMessage: ConversationMessage;
+    route: ChatRouteMetadata;
+    usage: {
+      estimatedCredits: number;
+      reserveCredits: number;
+      finalCredits: null;
+    };
+  }) => void | Promise<void>;
+  onDelta?: (delta: string) => void | Promise<void>;
+};
+
 export class ChatService {
   private readonly usagePolicy: ChatUsagePolicy;
 
@@ -174,6 +201,170 @@ export class ChatService {
       userMessageId: userMessage.id,
       prompt: applyResponseStyle(buildConversationPrompt(previousMessages, prompt), input.responseStyle),
       route: routeResult.value,
+    });
+    if (!completionResult.ok) return completionResult;
+
+    const assistantMessage = await this.conversations.appendMessage(conversation.id, {
+      role: "assistant",
+      content: completionResult.value.content,
+      metadata: {
+        route: routeResult.value,
+        providerUsage: completionResult.value.rawUsage,
+      },
+    });
+    if (!assistantMessage) {
+      return fail(new DomainError("internal_error", "Assistant message could not be stored.", 500));
+    }
+
+    const answerVariant = await this.conversations.recordAnswerVariant({
+      conversationId: conversation.id,
+      userMessageId: userMessage.id,
+      assistantMessageId: assistantMessage.id,
+      agentId: routeResult.value.agentId,
+      provider: routeResult.value.provider,
+      model: routeResult.value.model,
+      routeMetadata: routeResult.value,
+      providerUsage: completionResult.value.rawUsage ?? {},
+    });
+
+    return ok({
+      conversationId: conversation.id,
+      userMessage,
+      assistantMessage,
+      answerVariant,
+      route: routeResult.value,
+      usage: {
+        estimatedCredits: routeResult.value.estimatedCredits,
+        reserveCredits: routeResult.value.reserveCredits,
+        finalCredits: null,
+      },
+    });
+  }
+
+  async streamMessage(input: {
+    userId: string;
+    country?: CountryCode;
+    language?: Language;
+    conversationId?: string;
+    message: string;
+    agentId?: string;
+    selectedModelId?: string;
+    responseStyle?: ResponseStyle;
+    attachments?: ChatAttachment[];
+  }, callbacks: ChatStreamCallbacks = {}) {
+    const message = input.message.trim();
+    const attachments = normalizeAttachments(input.attachments);
+
+    if (!message) {
+      return fail(new DomainError("validation_failed", "Message is required.", 400));
+    }
+
+    const prompt = buildPrompt(message, attachments);
+    const existingConversation = input.conversationId
+      ? await this.conversations.findById(input.conversationId)
+      : null;
+    const routingPrompt = buildRoutingPrompt(existingConversation?.messages ?? [], prompt);
+
+    if (input.conversationId && !existingConversation) {
+      return fail(new DomainError("not_found", "Conversation was not found.", 404));
+    }
+
+    if (existingConversation && existingConversation.userId !== input.userId) {
+      return fail(new DomainError("unauthorized", "Conversation belongs to another user.", 401));
+    }
+
+    const routeAgentId = input.agentId ?? existingConversation?.agentId;
+
+    const routeResult = await this.aiGateway.route({
+      userId: input.userId,
+      country: input.country ?? "KZ",
+      language: input.language ?? "ru",
+      agentId: routeAgentId,
+      prompt: routingPrompt,
+      selectedModelId: input.selectedModelId,
+    });
+    if (!routeResult.ok) {
+      await this.conversations.recordAiError({
+        userId: input.userId,
+        conversationId: existingConversation?.id ?? null,
+        stage: "stream_route",
+        severity: "error",
+        errorCode: routeResult.error.code,
+        errorMessage: routeResult.error.message,
+        agentId: routeAgentId ?? null,
+        promptExcerpt: createPromptExcerpt(prompt),
+        requestPayload: {
+          country: input.country ?? "KZ",
+          language: input.language ?? "ru",
+          agentId: routeAgentId ?? null,
+        },
+      });
+      return routeResult;
+    }
+
+    const limitResult = await this.assertRequestAllowed({
+      userId: input.userId,
+      route: routeResult.value,
+    });
+    if (!limitResult.ok) return limitResult;
+
+    const conversation =
+      existingConversation ??
+      (await this.conversations.create({
+        userId: input.userId,
+        agentId: routeResult.value.agentId,
+        title: createConversationTitle(message),
+      }));
+
+    if (!conversation) {
+      return fail(new DomainError("not_found", "Conversation was not found.", 404));
+    }
+
+    const previousMessages = [...conversation.messages];
+    const userMessage = await this.conversations.appendMessage(conversation.id, {
+      role: "user",
+      content: message,
+      metadata: {
+        requestedAgentId: input.agentId,
+        requestedModelId: input.selectedModelId,
+        responseStyle: input.responseStyle ?? "auto",
+        attachments,
+      },
+    });
+    if (!userMessage) {
+      return fail(new DomainError("internal_error", "User message could not be stored.", 500));
+    }
+
+    await callbacks.onStart?.({
+      conversationId: conversation.id,
+      userMessage,
+      route: routeResult.value,
+      usage: {
+        estimatedCredits: routeResult.value.estimatedCredits,
+        reserveCredits: routeResult.value.reserveCredits,
+        finalCredits: null,
+      },
+    });
+
+    if (routeResult.value.asyncJob) {
+      return this.startMediaGeneration({
+        userId: input.userId,
+        country: input.country ?? "KZ",
+        language: input.language ?? "ru",
+        conversationId: conversation.id,
+        userMessageId: userMessage.id,
+        prompt: buildMediaGenerationPrompt(previousMessages, prompt),
+        route: routeResult.value,
+      });
+    }
+
+    const completionResult = await this.completeStreamingSafely({
+      userId: input.userId,
+      conversationId: conversation.id,
+      userMessageId: userMessage.id,
+      prompt: applyResponseStyle(buildConversationPrompt(previousMessages, prompt), input.responseStyle),
+      route: routeResult.value,
+      onDelta: callbacks.onDelta,
     });
     if (!completionResult.ok) return completionResult;
 
@@ -461,6 +652,65 @@ export class ChatService {
         stage: input.stage ?? "complete",
         severity: "critical",
         errorCode: "provider_exception",
+        errorMessage: message,
+        provider: input.route.provider,
+        model: input.route.model,
+        agentId: input.route.agentId,
+        promptExcerpt: createPromptExcerpt(input.prompt),
+      });
+
+      return fail(new DomainError("provider_unavailable", "AI provider is unavailable.", 503));
+    }
+  }
+
+  private async completeStreamingSafely(input: {
+    userId: string;
+    conversationId: string;
+    userMessageId: string;
+    prompt: string;
+    route: {
+      agentId: string;
+      provider: string;
+      model: string;
+    };
+    onDelta?: (delta: string) => void | Promise<void>;
+    stage?: string;
+  }) {
+    try {
+      const completionResult = await this.aiGateway.completeStreaming({
+        provider: input.route.provider,
+        model: input.route.model,
+        prompt: input.prompt,
+        agentId: input.route.agentId,
+        onDelta: input.onDelta ?? (() => undefined),
+      });
+
+      if (!completionResult.ok) {
+        await this.conversations.recordAiError({
+          userId: input.userId,
+          conversationId: input.conversationId,
+          messageId: input.userMessageId,
+          stage: input.stage ?? "stream_complete",
+          severity: "error",
+          errorCode: completionResult.error.code,
+          errorMessage: completionResult.error.message,
+          provider: input.route.provider,
+          model: input.route.model,
+          agentId: input.route.agentId,
+          promptExcerpt: createPromptExcerpt(input.prompt),
+        });
+      }
+
+      return completionResult;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "AI provider threw an unknown streaming error.";
+      await this.conversations.recordAiError({
+        userId: input.userId,
+        conversationId: input.conversationId,
+        messageId: input.userMessageId,
+        stage: input.stage ?? "stream_complete",
+        severity: "critical",
+        errorCode: "provider_stream_exception",
         errorMessage: message,
         provider: input.route.provider,
         model: input.route.model,

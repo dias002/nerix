@@ -731,6 +731,49 @@ test("AI completion providers use backend company keys for OpenAI, Anthropic, an
       instructions: "Ты ассистент nomduchat.",
       input: "Скажи коротко",
     });
+
+    const streamCalls: Array<{ url: string; init?: RequestInit }> = [];
+    const deltas: string[] = [];
+    await withFetchStub(async (input, init) => {
+      streamCalls.push({ url: String(input), init });
+      return new Response(
+        [
+          'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"OpenAI "}\n\n',
+          'event: response.output_text.delta\ndata: {"type":"response.output_text.delta","delta":"stream"}\n\n',
+          'event: response.completed\ndata: {"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":2}}}\n\n',
+        ].join(""),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "text/event-stream",
+          },
+        }
+      );
+    }, async () => {
+      const result = await new OpenAiCompletionProvider().stream({
+        provider: "openai",
+        model: "gpt-5.2",
+        prompt: "Скажи коротко",
+      }, {
+        onDelta(delta) {
+          deltas.push(delta);
+        },
+      });
+
+      assert.equal(result.content, "OpenAI stream");
+      assert.deepEqual(deltas, ["OpenAI ", "stream"]);
+      assert.deepEqual(result.rawUsage, {
+        input_tokens: 2,
+        output_tokens: 2,
+      });
+    });
+
+    assert.equal(streamCalls.length, 1);
+    const streamBody = JSON.parse(String(streamCalls[0].init?.body));
+    assert.equal(streamBody.stream, true);
+    assert.deepEqual(streamBody.stream_options, {
+      include_obfuscation: false,
+    });
   });
 
   await withConfig({ ANTHROPIC_API_KEY: "anthropic-key" }, async () => {

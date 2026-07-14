@@ -12,8 +12,13 @@ export type CompletionResult = {
   rawUsage?: Record<string, unknown>;
 };
 
+export type CompletionStreamCallbacks = {
+  onDelta: (delta: string) => void | Promise<void>;
+};
+
 export interface AiCompletionProvider {
   complete(input: CompletionInput): Promise<CompletionResult>;
+  stream?(input: CompletionInput, callbacks: CompletionStreamCallbacks): Promise<CompletionResult>;
 }
 
 export type CompletionProviderRegistry = Record<string, AiCompletionProvider>;
@@ -29,6 +34,12 @@ export class MockCompletionProvider implements AiCompletionProvider {
         "Это локальный mock-ответ nomduchat. Архитектура уже выбирает агента, провайдера, модель и считает примерный расход nomduchat-токенов.",
     };
   }
+
+  async stream(input: CompletionInput, callbacks: CompletionStreamCallbacks): Promise<CompletionResult> {
+    const result = await this.complete(input);
+    await emitTextDeltas(result.content, callbacks);
+    return result;
+  }
 }
 
 type OpenAiResponse = {
@@ -41,6 +52,16 @@ type OpenAiResponse = {
     }>;
   }>;
   usage?: Record<string, unknown>;
+};
+
+type OpenAiStreamEvent = {
+  type?: string;
+  delta?: string;
+  response?: OpenAiResponse;
+  error?: {
+    message?: string;
+    code?: string;
+  };
 };
 
 export class OpenAiCompletionProvider implements AiCompletionProvider {
@@ -71,6 +92,86 @@ export class OpenAiCompletionProvider implements AiCompletionProvider {
     return {
       content: extractOpenAiText(body),
       rawUsage: body.usage,
+    };
+  }
+
+  async stream(input: CompletionInput, callbacks: CompletionStreamCallbacks) {
+    if (!config.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is required for OpenAI completions.");
+    }
+
+    const response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: input.model,
+        instructions: input.systemPrompt || undefined,
+        input: input.prompt,
+        stream: true,
+        stream_options: {
+          include_obfuscation: false,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`OpenAI streaming response failed with ${response.status}: ${errorBody.slice(0, 500)}`);
+    }
+
+    if (!response.body) {
+      throw new Error("OpenAI streaming response did not include a body.");
+    }
+
+    let content = "";
+    let completedResponse: OpenAiResponse | undefined;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split(/\r?\n\r?\n/);
+      buffer = parts.pop() ?? "";
+
+      for (const part of parts) {
+        const event = parseOpenAiStreamEvent(part);
+        if (!event) continue;
+
+        if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+          content += event.delta;
+          await callbacks.onDelta(event.delta);
+          continue;
+        }
+
+        if (event.type === "response.completed") {
+          completedResponse = event.response;
+          continue;
+        }
+
+        if (event.type === "response.failed" || event.type === "error") {
+          throw new Error(event.error?.message ?? "OpenAI streaming response failed.");
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      const event = parseOpenAiStreamEvent(buffer);
+      if (event?.type === "response.completed") {
+        completedResponse = event.response;
+      }
+    }
+
+    const finalContent = content.trim() || (completedResponse ? extractOpenAiText(completedResponse) : "");
+    return {
+      content: finalContent || "nomduchat получил пустой ответ от AI-провайдера.",
+      rawUsage: completedResponse?.usage,
     };
   }
 }
@@ -215,6 +316,39 @@ export class BackendAiCompletionProvider implements AiCompletionProvider {
     }
   }
 
+  async stream(input: CompletionInput, callbacks: CompletionStreamCallbacks) {
+    try {
+      return await streamWithProvider(this.resolveProvider(input.provider), input, callbacks);
+    } catch (error) {
+      if (
+        input.provider === this.fallbackProviderCode ||
+        config.NODE_ENV === "production" ||
+        !config.AI_MOCK_PROVIDER_ENABLED
+      ) {
+        throw error;
+      }
+
+      const fallbackInput = {
+        ...input,
+        provider: this.fallbackProviderCode,
+        model: "mock-text",
+      };
+      const fallback = await streamWithProvider(this.resolveProvider(this.fallbackProviderCode), fallbackInput, callbacks);
+      const message = error instanceof Error ? error.message : "Unknown provider error.";
+
+      return {
+        ...fallback,
+        rawUsage: {
+          ...(fallback.rawUsage ?? {}),
+          fallbackProvider: this.fallbackProviderCode,
+          failedProvider: input.provider,
+          failedModel: input.model,
+          fallbackReason: message.slice(0, 500),
+        },
+      };
+    }
+  }
+
   private resolveProvider(code: string) {
     const provider = this.providers[code];
     if (!provider) {
@@ -223,6 +357,20 @@ export class BackendAiCompletionProvider implements AiCompletionProvider {
 
     return provider;
   }
+}
+
+async function streamWithProvider(
+  provider: AiCompletionProvider,
+  input: CompletionInput,
+  callbacks: CompletionStreamCallbacks
+) {
+  if (provider.stream) {
+    return provider.stream(input, callbacks);
+  }
+
+  const result = await provider.complete(input);
+  await emitTextDeltas(result.content, callbacks);
+  return result;
 }
 
 export function createCompletionProvider(): AiCompletionProvider {
@@ -247,6 +395,30 @@ function extractOpenAiText(response: OpenAiResponse) {
     ) ?? [];
 
   return parts.join("\n").trim() || "nomduchat получил пустой ответ от AI-провайдера.";
+}
+
+function parseOpenAiStreamEvent(rawEvent: string): OpenAiStreamEvent | null {
+  const data = rawEvent
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trimStart())
+    .join("\n")
+    .trim();
+
+  if (!data || data === "[DONE]") return null;
+
+  try {
+    return JSON.parse(data) as OpenAiStreamEvent;
+  } catch {
+    return null;
+  }
+}
+
+async function emitTextDeltas(text: string, callbacks: CompletionStreamCallbacks) {
+  for (let index = 0; index < text.length; index += 32) {
+    const chunk = text.slice(index, index + 32);
+    if (chunk) await callbacks.onDelta(chunk);
+  }
 }
 
 function extractAnthropicText(response: AnthropicResponse) {

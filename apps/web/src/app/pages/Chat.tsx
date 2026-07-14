@@ -31,7 +31,7 @@ import {
   regenerateChatMessage,
   refreshGenerationJob,
   selectBestChatAnswer,
-  sendChatMessage,
+  sendChatMessageStream,
   toPublicApiError,
   type AiModelOptionApiRecord,
   type MediaGenerationJobApiRecord,
@@ -214,7 +214,7 @@ export default function Chat() {
   const newChatParam = searchParams.get("new");
   const conversationParam = searchParams.get("conversationId");
 
-  const canSend = Boolean(inputValue.trim()) || attachedFiles.length > 0;
+  const canSend = (Boolean(inputValue.trim()) || attachedFiles.length > 0) && !isThinking;
   const selectedModelForRequest = selectedModelId === "auto" ? undefined : selectedModelId;
   const displayModelOptions = modelOptions.length > 0 ? modelOptions : fallbackModelOptions;
   const modelGroups = useMemo(() => {
@@ -499,17 +499,47 @@ export default function Chat() {
     setIsThinking(true);
 
     try {
-      const response = await sendChatMessage({
+      const assistantMessageId = `stream-${Date.now() + 1}`;
+      let hasStreamingMessage = false;
+
+      const response = await sendChatMessageStream({
         message: messageText,
         conversationId,
         selectedModelId: selectedModelForRequest,
         responseStyle: responseStyleId,
         language: language === "kk" ? "kz" : language,
         attachments: filesForMessage.map(toApiAttachment),
+      }, {
+        onStart: (event) => {
+          setConversationId(event.conversationId);
+        },
+        onDelta: (delta) => {
+          setIsThinking(false);
+          if (!hasStreamingMessage) {
+            hasStreamingMessage = true;
+            setMessages((prev) => [...prev, { id: assistantMessageId, text: delta, sender: "ai" }]);
+            return;
+          }
+
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantMessageId
+                ? { ...message, text: `${message.text}${delta}` }
+                : message
+            )
+          );
+        },
       });
 
       setConversationId(response.conversationId);
-      setMessages((prev) => [...prev, toAssistantMessage(response, t.chat.response)]);
+      const assistantMessage = toAssistantMessage(response, t.chat.response);
+      setMessages((prev) => {
+        if (hasStreamingMessage) {
+          return prev.map((message) => (message.id === assistantMessageId ? assistantMessage : message));
+        }
+
+        return [...prev, assistantMessage];
+      });
       window.dispatchEvent(new Event("nomduchat-usage-updated"));
     } catch (sendError) {
       const fallbackMessage: Message = {

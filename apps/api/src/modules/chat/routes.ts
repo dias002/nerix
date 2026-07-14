@@ -131,6 +131,71 @@ export async function registerChatRoutes(
     return sendResult(reply, result as Result<unknown>);
   });
 
+  app.post("/chat/messages/stream", async (request, reply) => {
+    const input = sendMessageSchema.safeParse(request.body);
+
+    if (!input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Message is required.",
+        },
+      });
+    }
+
+    const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
+    if (!user.ok) return sendResult(reply, user);
+
+    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId);
+    if (!allowed.ok) return sendResult(reply, allowed);
+
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    reply.raw.flushHeaders?.();
+
+    let closed = false;
+    request.raw.on("close", () => {
+      closed = true;
+    });
+
+    const writeEvent = (event: string, data: unknown) => {
+      if (closed || reply.raw.destroyed) return;
+      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const result = await chat.streamMessage(
+        { ...input.data, userId: user.value.userId },
+        {
+          onStart: (payload) => writeEvent("start", payload),
+          onDelta: (delta) => writeEvent("delta", { delta }),
+        }
+      );
+
+      if (!result.ok) {
+        writeEvent("error", {
+          code: result.error.code,
+          message: result.error.message,
+        });
+      } else {
+        writeEvent("done", result.value);
+      }
+    } catch (error) {
+      writeEvent("error", {
+        code: "internal_error",
+        message: error instanceof Error ? error.message : "Streaming response failed.",
+      });
+    } finally {
+      if (!closed && !reply.raw.destroyed) reply.raw.end();
+    }
+
+    return reply;
+  });
+
   app.post("/chat/messages/regenerate", async (request, reply) => {
     const input = regenerateMessageSchema.safeParse(request.body);
 
