@@ -28,11 +28,9 @@ nomduchat.com, www.nomduchat.com {
 	}
 
 	handle {
-		reverse_proxy https://nomduchat.pages.dev {
-			header_up Host nomduchat.pages.dev
-			header_up X-Forwarded-Host {host}
-			header_up X-Forwarded-Proto {scheme}
-		}
+		root * /var/www/nomduchat
+		try_files {path} /index.html
+		file_server
 	}
 }
 
