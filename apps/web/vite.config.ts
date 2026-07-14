@@ -17,7 +17,7 @@ function figmaAssetResolver() {
 }
 
 export default defineConfig({
-  base: process.env.GITHUB_PAGES === "true" ? "/nomduchat/" : "/",
+  base: resolveBasePath(),
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
@@ -35,3 +35,12 @@ export default defineConfig({
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
+
+function resolveBasePath() {
+  if (process.env.GITHUB_PAGES === "true") return "/nomduchat/";
+
+  const assetBaseUrl = process.env.VITE_ASSET_BASE_URL?.trim();
+  if (assetBaseUrl) return assetBaseUrl.endsWith("/") ? assetBaseUrl : `${assetBaseUrl}/`;
+
+  return "/";
+}

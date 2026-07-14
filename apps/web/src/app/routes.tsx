@@ -43,7 +43,7 @@ const SettingsProfile = lazy(() => import("./pages/SettingsProfile"));
 const SettingsAppearance = lazy(() => import("./pages/SettingsAppearance"));
 const SettingsNotifications = lazy(() => import("./pages/SettingsNotifications"));
 
-const basename = import.meta.env.BASE_URL === "/" ? undefined : import.meta.env.BASE_URL.replace(/\/$/, "");
+const basename = resolveRouterBasename(import.meta.env.BASE_URL);
 
 const routes: RouteObject[] = [
   {
@@ -245,6 +245,13 @@ export const router = createBrowserRouter(
   routes.map(withRouteErrorBoundary),
   { basename }
 );
+
+function resolveRouterBasename(baseUrl: string) {
+  if (baseUrl === "/" || /^https?:\/\//i.test(baseUrl)) return undefined;
+
+  const normalized = baseUrl.replace(/\/$/, "");
+  return normalized || undefined;
+}
 
 function withRouteErrorBoundary(route: RouteObject): RouteObject {
   return {
