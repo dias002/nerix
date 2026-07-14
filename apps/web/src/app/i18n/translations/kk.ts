@@ -5,6 +5,7 @@ export const kk = {
 	      chat: "Чат",
 	      avatar: "Аватар",
 	      apps: "Қолданбалар",
+      media: "Медиа",
 	      projects: "Жобалар",
 	      history: "Тарих",
       agents: "Агенттер",

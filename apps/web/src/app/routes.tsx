@@ -21,8 +21,9 @@ const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
 const Chat = lazy(() => import("./pages/Chat"));
-const AvatarStudio = lazy(() => import("./pages/AvatarStudio"));
+const AvatarComingSoon = lazy(() => import("./pages/AvatarComingSoon"));
 const Apps = lazy(() => import("./pages/Apps"));
+const Media = lazy(() => import("./pages/Media"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Agents = lazy(() => import("./pages/Agents"));
 const History = lazy(() => import("./pages/History"));
@@ -109,6 +110,10 @@ const routes: RouteObject[] = [
   {
     path: "/chat/projects",
     Component: ProjectsRedirect,
+  },
+  {
+    path: "/chat/media",
+    Component: MediaRedirect,
   },
   {
     path: "/models",
@@ -212,8 +217,9 @@ const routes: RouteObject[] = [
     children: [
       { index: true, Component: Chat },
       { path: "chat", Component: Chat },
-      { path: "avatar", Component: AvatarStudio },
+      { path: "avatar", Component: AvatarComingSoon },
       { path: "apps", Component: Apps },
+      { path: "media", Component: Media },
       { path: "projects", Component: Projects },
       { path: "history", Component: History },
       { path: "agents", Component: Agents },
@@ -276,4 +282,8 @@ function AppsRedirect() {
 
 function ProjectsRedirect() {
   return <Navigate to="/workspace/projects" replace />;
+}
+
+function MediaRedirect() {
+  return <Navigate to="/workspace/media" replace />;
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { Check, Copy, Languages, Send, Sparkles } from "lucide-react";
+import { ArrowRight, Bot, Check, Copy, FileText, ImageIcon, Languages, Palette, Send, Sparkles, UserRound, Video } from "lucide-react";
 
 type TargetLanguage = "ru" | "en" | "kk";
 type TranslationMode = "basic" | "ai";
@@ -12,6 +12,64 @@ const targetLanguages: Array<{ id: TargetLanguage; label: string }> = [
 ];
 
 const outputFormats = ["план", "пост", "письмо", "таблица", "инструкция", "промпт для изображения"];
+const appCatalog = [
+  {
+    title: "AI-перевод",
+    text: "Перевод текста с сохранением смысла, тона и структуры.",
+    status: "Готово",
+    icon: Languages,
+    prompt: "Переведи текст на английский. Сохрани смысл, структуру и тон. После перевода укажи спорные места.",
+  },
+  {
+    title: "Генератор промптов",
+    text: "Собирает четкий запрос для текста, изображения, видео или бизнес-задачи.",
+    status: "Готово",
+    icon: Sparkles,
+    prompt: "Помоги составить сильный промпт. Сначала задай 3 уточняющих вопроса, затем дай готовую версию.",
+  },
+  {
+    title: "Humanizer",
+    text: "Убирает сухие AI-формулировки и делает текст естественнее.",
+    status: "Страница",
+    icon: FileText,
+    href: "/tools/humanizer",
+  },
+  {
+    title: "SEO-статья",
+    text: "Структура, заголовки, читаемый текст и мета-описание.",
+    status: "Через чат",
+    icon: Bot,
+    prompt: "Подготовь SEO-статью: заголовок, план H2/H3, интро, основной текст, FAQ и meta description.",
+  },
+  {
+    title: "Интерьер",
+    text: "Промпт для дизайна комнаты, света, мебели и материалов.",
+    status: "Страница",
+    icon: Palette,
+    href: "/tools/dizajn-interyera",
+  },
+  {
+    title: "Изображения",
+    text: "Карточки, обложки, визуальные концепции и промпты для Flux.",
+    status: "Страница",
+    icon: ImageIcon,
+    href: "/ai/flux-2",
+  },
+  {
+    title: "Видео",
+    text: "Сценарий ролика, раскадровка, сцены и промпт для генерации.",
+    status: "Через чат",
+    icon: Video,
+    prompt: "Сделай сценарий короткого видео: хук, сцены, визуальный стиль, текст ведущего и CTA.",
+  },
+  {
+    title: "Аватар",
+    text: "Будущий продукт для персонального ведущего и avatar-video.",
+    status: "В разработке",
+    icon: UserRound,
+    href: "/workspace/avatar",
+  },
+];
 
 export default function Apps() {
   const navigate = useNavigate();
@@ -58,9 +116,41 @@ export default function Apps() {
         <div>
           <h2 className="text-2xl font-medium text-white">Приложения</h2>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
-            Быстрые инструменты поверх чата: перевод, генерация промптов и отправка результата в основной диалог.
+            Быстрые инструменты поверх чата: перевод, промпты, текст, изображения, видео и продуктовые сценарии.
           </p>
         </div>
+
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {appCatalog.map((app) => {
+            const Icon = app.icon;
+            const href = app.href ?? `/workspace/chat?prompt=${encodeURIComponent(app.prompt ?? "")}`;
+
+            return (
+              <Link
+                key={app.title}
+                to={href}
+                className="group flex min-h-56 flex-col rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black text-gray-200">
+                    <Icon className="h-5 w-5" strokeWidth={1.7} />
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-black px-2.5 py-1 text-xs text-gray-500">
+                    {app.status}
+                  </span>
+                </div>
+                <div className="mt-5 flex-1">
+                  <h3 className="text-base font-medium text-white">{app.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-gray-500">{app.text}</p>
+                </div>
+                <span className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors group-hover:text-white">
+                  Открыть
+                  <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+                </span>
+              </Link>
+            );
+          })}
+        </section>
 
         <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <article className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5">

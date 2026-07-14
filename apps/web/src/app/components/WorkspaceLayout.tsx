@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { AlertCircle, ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
+import { AlertCircle, ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, ImageIcon, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentSubscription, getPlans, getSubscriptionCheckouts, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type SubscriptionCheckoutApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
@@ -97,9 +97,11 @@ export default function WorkspaceLayout() {
       ];
   const workspaceNavItems = [
         { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: access.canUseChat },
-        { path: "/workspace/avatar", icon: UserRound, label: t.nav.avatar, visible: access.canUseChat },
-        { path: "/workspace/apps", icon: Grid2X2, label: t.nav.apps, visible: access.canUseChat },
+        { path: "/workspace/agents", icon: Bot, label: t.nav.agents, visible: access.canUseChat },
         { path: "/workspace/projects", icon: FolderKanban, label: t.nav.projects, visible: access.canUseChat },
+        { path: "/workspace/apps", icon: Grid2X2, label: t.nav.apps, visible: access.canUseChat },
+        { path: "/workspace/media", icon: ImageIcon, label: t.nav.media, visible: access.canUseChat },
+        { path: "/workspace/avatar", icon: UserRound, label: t.nav.avatar, visible: access.canUseChat },
         { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: access.canUseHistory },
         { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: access.canUseBusiness },
         { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: access.canUseBalance },
@@ -553,6 +555,36 @@ function WorkspaceOnboardingDialog({
       icon: MessageSquare,
       title: "Чат",
       text: "Основное место для вопросов, текстов, кода, документов и генерации. Опишите задачу обычными словами.",
+      visible: access.canUseChat,
+    },
+    {
+      icon: Bot,
+      title: "Агенты",
+      text: "Готовые режимы для текста, бизнеса, кода, учебы, документов, изображений, видео, голоса и поддержки.",
+      visible: access.canUseChat,
+    },
+    {
+      icon: FolderKanban,
+      title: "Проекты",
+      text: "Сохраняйте рабочие контексты и отправляйте их в чат, чтобы не собирать задачу заново.",
+      visible: access.canUseChat,
+    },
+    {
+      icon: Grid2X2,
+      title: "Приложения",
+      text: "Каталог быстрых инструментов: перевод, промпты, SEO, humanizer, изображения и бизнес-сценарии.",
+      visible: access.canUseChat,
+    },
+    {
+      icon: ImageIcon,
+      title: "Медиа",
+      text: "Отдельная точка для изображений, видео, музыки и озвучки. Сейчас сценарии ведут в чат и приложения.",
+      visible: access.canUseChat,
+    },
+    {
+      icon: UserRound,
+      title: "Аватар",
+      text: "Аватар-видео пока оформлено как продукт в разработке, без слабого временного прототипа.",
       visible: access.canUseChat,
     },
     {

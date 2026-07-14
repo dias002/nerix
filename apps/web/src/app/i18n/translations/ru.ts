@@ -5,6 +5,7 @@ export const ru = {
 	      chat: "Чат",
 	      avatar: "Аватар",
 	      apps: "Приложения",
+      media: "Медиа",
 	      projects: "Проекты",
 	      history: "История",
       agents: "Агенты",

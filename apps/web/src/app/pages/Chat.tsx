@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
+  ArrowRight,
+  Bot,
   Check,
   Copy,
   FileText,
+  FolderKanban,
+  Grid2X2,
+  ImageIcon,
   MessageSquarePlus,
   Mic,
   Paperclip,
@@ -12,6 +17,7 @@ import {
   Send,
   Share2,
   Star,
+  UserRound,
   X,
 } from "lucide-react";
 import { useLanguage } from "../i18n";
@@ -40,6 +46,20 @@ import type { AttachedFile, Message } from "./chat/types";
 
 const guestRequestStorageKey = "nomduchat-guest-chat-requests";
 const modelSelectionStorageKey = "nomduchat-chat-model-id";
+const agentStarterPrompts: Record<string, string> = {
+  general: "Помоги разобраться с задачей. Сначала уточни, что важно, затем предложи короткий план действий.",
+  business: "Разбери бизнес-задачу: цель, аудитория, оффер, следующий шаг и риски.",
+  code: "Помоги с кодом. Сначала найди проблему, затем предложи минимальное исправление и проверку.",
+  study: "Объясни тему простыми словами, затем дай пример и 3 вопроса для самопроверки.",
+  documents: "Проанализируй документ: сделай краткое резюме, выдели риски и предложи правки.",
+  image: "Собери промпт для изображения: стиль, композиция, объект, фон, свет и негативные ограничения.",
+  video: "Сделай сценарий короткого видео: хук, сцены, текст ведущего и финальный призыв.",
+  avatar: "Подготовь сценарий для avatar-video: кто говорит, тон, текст, фон и длительность.",
+  music: "Подготовь идею песни или джингла: настроение, жанр, куплет, припев и варианты названия.",
+  voice: "Подготовь текст для озвучки: темп, интонация, паузы и финальная версия дикторского текста.",
+  marketing: "Собери маркетинговый план: аудитория, сообщение, каналы, креативы и быстрый тест.",
+  support: "Подготовь ответ клиенту: спокойно, по делу, с решением и следующим шагом.",
+};
 const fallbackModelOptions: AiModelOptionApiRecord[] = [
   {
     id: "openai:gpt-4.1",
@@ -190,6 +210,7 @@ export default function Chat() {
   const voiceBaseInputRef = useRef("");
   const mediaObjectUrlsRef = useRef<Record<string, string>>({});
   const promptParam = searchParams.get("prompt");
+  const agentParam = searchParams.get("agent");
   const newChatParam = searchParams.get("new");
   const conversationParam = searchParams.get("conversationId");
 
@@ -220,6 +241,7 @@ export default function Chat() {
   };
 
   useEffect(() => {
+    if (messages.length <= 1 && messages[0]?.id === "intro") return;
     scrollToBottom();
   }, [messages]);
 
@@ -283,6 +305,20 @@ export default function Chat() {
       return next;
     }, { replace: true });
   }, [promptParam, setSearchParams]);
+
+  useEffect(() => {
+    if (!agentParam) return;
+
+    const starterPrompt = agentStarterPrompts[agentParam];
+    if (starterPrompt) {
+      setInputValue(starterPrompt);
+    }
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("agent");
+      return next;
+    }, { replace: true });
+  }, [agentParam, setSearchParams]);
 
   useEffect(() => {
     if (!newChatParam) return;
@@ -750,9 +786,58 @@ export default function Chat() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex min-h-[42vh] items-center justify-center text-4xl font-medium text-white md:text-5xl"
+              className="mx-auto flex min-h-[46vh] max-w-3xl flex-col justify-center py-8"
             >
-              nomduchat
+              <div className="text-center">
+                <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-gray-400">
+                  <Bot className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  AI workspace
+                </div>
+                <h1 className="text-3xl font-medium leading-tight text-white md:text-5xl">Что нужно сделать?</h1>
+                <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-gray-500">
+                  Пишите задачу обычными словами или выберите быстрый сценарий. nomduchat сохранит контекст в чате,
+                  а нужные инструменты лежат рядом в проектах, приложениях и медиа.
+                </p>
+              </div>
+
+              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  "Составь план запуска продукта",
+                  "Перепиши текст понятно и красиво",
+                  "Разбери документ и выдели главное",
+                ].map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => setInputValue(prompt)}
+                    className="min-h-24 rounded-xl border border-white/10 bg-[#0D0D0D] p-4 text-left text-sm leading-relaxed text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+                {[
+                  { to: "/workspace/agents", label: "Агенты", icon: Bot },
+                  { to: "/workspace/projects", label: "Проекты", icon: FolderKanban },
+                  { to: "/workspace/apps", label: "Приложения", icon: Grid2X2 },
+                  { to: "/workspace/media", label: "Медиа", icon: ImageIcon },
+                  { to: "/workspace/avatar", label: "Аватар", icon: UserRound },
+                ].map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className="group flex h-20 flex-col justify-between rounded-xl border border-white/10 bg-black px-3 py-3 text-sm text-gray-400 transition-colors hover:border-white/20 hover:text-white"
+                  >
+                    <item.icon className="h-4 w-4" strokeWidth={1.7} />
+                    <span className="flex items-center justify-between gap-2">
+                      {item.label}
+                      <ArrowRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" strokeWidth={1.8} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </motion.div>
           ) : null}
           {messages.filter((msg) => !(showEmptyState && msg.id === "intro")).map((msg) => (

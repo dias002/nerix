@@ -164,7 +164,9 @@ export default function Balance() {
     ...pack,
   }));
   const translationById = new Map(translatedPackages.map((pack) => [pack.id, pack]));
-  const subscriptionPackages = (plans ?? []).map((plan) => {
+  const plansForDisplay = plans && plans.length > 0 ? plans : fallbackPlans(country);
+  const showingFallbackPlans = !plans || plans.length === 0;
+  const subscriptionPackages = plansForDisplay.map((plan) => {
     const translated = translationById.get(plan.id);
     return {
       id: plan.id,
@@ -319,13 +321,18 @@ export default function Balance() {
 
         <section id="token-history" className="scroll-mt-8 space-y-4">
           <h3 className="text-lg font-medium text-white">{t.balance.packagesTitle}</h3>
+          {showingFallbackPlans ? (
+            <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-relaxed text-gray-400">
+              Показываем базовые тарифы из локального каталога. Актуальная оплата и статус подтянутся после ответа API.
+            </p>
+          ) : null}
           {checkoutError ? (
             <p className="rounded-2xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm leading-relaxed text-red-100/80">
               {checkoutError}
             </p>
           ) : null}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {subscriptionPackages.length > 0 ? subscriptionPackages.map((pack, index) => (
+            {subscriptionPackages.map((pack, index) => (
               <motion.div
                 key={pack.name}
                 initial={{ opacity: 0, y: 12 }}
@@ -378,15 +385,7 @@ export default function Balance() {
                   .
                 </p>
               </motion.div>
-            )) : plans === null ? (
-              <div className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 text-sm text-gray-500 md:col-span-2 xl:col-span-4">
-                Тарифы пока не загружены.
-              </div>
-            ) : plans.length === 0 ? (
-              <div className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 text-sm text-gray-500 md:col-span-2 xl:col-span-4">
-                Список тарифов пуст.
-              </div>
-            ) : null}
+            ))}
           </div>
         </section>
 
@@ -735,4 +734,54 @@ function formatPrice(amountMinor: number, currency: "KZT" | "RUB") {
 function readAutoRenewalEnabled() {
   if (typeof window === "undefined") return true;
   return window.localStorage.getItem(autoRenewalStorageKey) !== "false";
+}
+
+function fallbackPlans(country: "KZ" | "RU"): PlanApiRecord[] {
+  const provider = country === "KZ" ? "kaspi" : "yookassa";
+  const currency = country === "KZ" ? "KZT" : "RUB";
+  const amounts: Record<"KZ" | "RU", Record<PlanId, number>> = {
+    KZ: {
+      base: 5_990_00,
+      ultra: 11_990_00,
+      pro: 119_990_00,
+      business: 249_990_00,
+    },
+    RU: {
+      base: 990_00,
+      ultra: 1_990_00,
+      pro: 19_990_00,
+      business: 41_690_00,
+    },
+  };
+
+  return [
+    fallbackPlan("base", "Easy Start", 2_000, 8_000, "For steady everyday work."),
+    fallbackPlan("ultra", "Active Work", 5_000, 32_000, "For more active work across chat, documents, and code."),
+    fallbackPlan("pro", "Team Mode", 20_000, 64_000, "For teams and larger business tasks."),
+    fallbackPlan("business", "Business Cabinet", 50_000, 128_000, "Business workspace with roles, CRM analytics, and company context."),
+  ];
+
+  function fallbackPlan(
+    id: PlanId,
+    name: string,
+    monthlyCredits: number,
+    contextTokens: number,
+    description: string,
+  ): PlanApiRecord {
+    return {
+      id,
+      name,
+      monthlyCredits,
+      contextTokens,
+      description,
+      enabled: true,
+      price: {
+        country,
+        provider,
+        currency,
+        amountMinor: amounts[country][id],
+        priceSource: "mashagpt_benchmark_draft",
+      },
+    };
+  }
 }

@@ -5,6 +5,7 @@ export const en = {
 	      chat: "Chat",
 	      avatar: "Avatar",
 	      apps: "Apps",
+      media: "Media",
 	      projects: "Projects",
 	      history: "History",
       agents: "Agents",
