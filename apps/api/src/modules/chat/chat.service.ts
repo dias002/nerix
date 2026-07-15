@@ -149,6 +149,7 @@ export class ChatService {
 
     const limitResult = await this.assertRequestAllowed({
       userId: input.userId,
+      selectedModelId: input.selectedModelId,
       route: routeResult.value,
     });
     if (!limitResult.ok) return limitResult;
@@ -304,6 +305,7 @@ export class ChatService {
 
     const limitResult = await this.assertRequestAllowed({
       userId: input.userId,
+      selectedModelId: input.selectedModelId,
       route: routeResult.value,
     });
     if (!limitResult.ok) return limitResult;
@@ -464,6 +466,7 @@ export class ChatService {
 
     const limitResult = await this.assertRequestAllowed({
       userId: input.userId,
+      selectedModelId: input.selectedModelId ?? metadataModelId,
       route: routeResult.value,
     });
     if (!limitResult.ok) return limitResult;
@@ -808,7 +811,7 @@ export class ChatService {
     });
   }
 
-  private async assertRequestAllowed(input: { userId: string; route: { agentId: string; modality: string } }) {
+  private async assertRequestAllowed(input: { userId: string; selectedModelId?: string; route: { agentId: string; modality: string } }) {
     return this.usagePolicy.assertRequestAllowed(input);
   }
 }

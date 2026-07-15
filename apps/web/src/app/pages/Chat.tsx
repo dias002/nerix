@@ -35,6 +35,7 @@ import {
   toPublicApiError,
   type AiModelOptionApiRecord,
   type MediaGenerationJobApiRecord,
+  type PlanId,
 } from "../api";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme";
@@ -60,7 +61,7 @@ const agentStarterPrompts: Record<string, string> = {
   marketing: "Собери маркетинговый план: аудитория, сообщение, каналы, креативы и быстрый тест.",
   support: "Подготовь ответ клиенту: спокойно, по делу, с решением и следующим шагом.",
 };
-const fallbackModelOptions: AiModelOptionApiRecord[] = [
+const fallbackModelOptions: AiModelOptionApiRecord[] = withModelAccess([
   {
     id: "openai:gpt-4.1",
     providerCode: "openai",
@@ -77,6 +78,16 @@ const fallbackModelOptions: AiModelOptionApiRecord[] = [
     label: "OpenAI GPT-4.1 mini",
     description: "Быстрый режим OpenAI для повседневных рабочих запросов.",
     tier: "balanced",
+    modalities: ["text", "code", "file"],
+  },
+  {
+    id: "openai:gpt-4o-mini",
+    providerCode: "openai",
+    providerName: "OpenAI",
+    label: "OpenAI GPT-4o mini",
+    description: "Экономичный режим OpenAI для быстрых ответов.",
+    tier: "fast",
+    minPlanId: null,
     modalities: ["text", "code", "file"],
   },
   {
@@ -178,11 +189,56 @@ const fallbackModelOptions: AiModelOptionApiRecord[] = [
     tier: "fast",
     modalities: ["text", "code", "file"],
   },
-];
+]);
+
+function withModelAccess(
+  options: Array<Omit<AiModelOptionApiRecord, "minPlanId" | "minPlanName"> & { minPlanId?: PlanId | null }>
+): AiModelOptionApiRecord[] {
+  return options.map((option) => {
+    const minPlanId = "minPlanId" in option ? option.minPlanId ?? null : minimumPlanForModelTier(option.tier);
+    return {
+      ...option,
+      minPlanId,
+      minPlanName: planDisplayName(minPlanId),
+    };
+  });
+}
+
+function minimumPlanForModelTier(tier: AiModelOptionApiRecord["tier"]): PlanId | null {
+  if (tier === "fast") return "base";
+  if (tier === "balanced") return "ultra";
+  return "pro";
+}
+
+function planDisplayName(planId: PlanId | null) {
+  if (planId === null) return "Free";
+  if (planId === "base") return "Easy Start";
+  if (planId === "ultra") return "Active Work";
+  if (planId === "pro") return "Team Mode";
+  return "Business Cabinet";
+}
+
+function canUseModelOption(option: AiModelOptionApiRecord, currentPlanId: PlanId | string | null | undefined) {
+  if (!option.minPlanId) return true;
+  return planRank(currentPlanId) >= planRank(option.minPlanId);
+}
+
+function modelOptionLabel(option: AiModelOptionApiRecord, currentPlanId: PlanId | string | null | undefined) {
+  if (canUseModelOption(option, currentPlanId)) return option.label;
+  return `${option.label} — с ${option.minPlanName}`;
+}
+
+function planRank(planId: PlanId | string | null | undefined) {
+  if (planId === "base") return 1;
+  if (planId === "ultra") return 2;
+  if (planId === "pro") return 3;
+  if (planId === "business") return 4;
+  return 0;
+}
 
 export default function Chat() {
   const { language, t } = useLanguage();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const { theme } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -214,9 +270,15 @@ export default function Chat() {
   const newChatParam = searchParams.get("new");
   const conversationParam = searchParams.get("conversationId");
 
-  const canSend = (Boolean(inputValue.trim()) || attachedFiles.length > 0) && !isThinking;
-  const selectedModelForRequest = selectedModelId === "auto" ? undefined : selectedModelId;
+  const currentPlanId = user?.activePlanId ?? null;
   const displayModelOptions = modelOptions.length > 0 ? modelOptions : fallbackModelOptions;
+  const selectedModelOption = useMemo(
+    () => displayModelOptions.find((option) => option.id === selectedModelId) ?? null,
+    [displayModelOptions, selectedModelId]
+  );
+  const selectedModelLocked = Boolean(selectedModelOption && !canUseModelOption(selectedModelOption, currentPlanId));
+  const canSend = (Boolean(inputValue.trim()) || attachedFiles.length > 0) && !isThinking && !selectedModelLocked;
+  const selectedModelForRequest = selectedModelId === "auto" || selectedModelLocked ? undefined : selectedModelId;
   const modelGroups = useMemo(() => {
     const groups = new Map<string, { providerName: string; models: AiModelOptionApiRecord[] }>();
 
@@ -281,10 +343,13 @@ export default function Chat() {
 
   useEffect(() => {
     if (selectedModelId === "auto") return;
-    if (!displayModelOptions.some((option) => option.id === selectedModelId)) {
+    if (isAuthenticated && !user) return;
+
+    const selectedOption = displayModelOptions.find((option) => option.id === selectedModelId);
+    if (!selectedOption || !canUseModelOption(selectedOption, currentPlanId)) {
       setSelectedModelId("auto");
     }
-  }, [displayModelOptions, selectedModelId]);
+  }, [currentPlanId, displayModelOptions, isAuthenticated, selectedModelId, user]);
 
   useEffect(() => {
     setMessages((prev) => {
@@ -755,7 +820,11 @@ export default function Chat() {
 
   const showEmptyState = messages.length <= 1 && messages[0]?.id === "intro" && !conversationParam;
   const modelSelectorTitle =
-    modelOptions.length === 0 ? "Локальный список моделей. Доступность проверит API." : "Модель ответа";
+    selectedModelLocked && selectedModelOption
+      ? `Модель ${selectedModelOption.label} доступна с тарифа ${selectedModelOption.minPlanName}.`
+      : modelOptions.length === 0
+        ? "Локальный список моделей. Доступность проверит API."
+        : "Модель ответа";
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#050505] relative">
@@ -789,17 +858,21 @@ export default function Chat() {
             id="chat-model-selector"
             value={selectedModelId}
             onChange={(event) => setSelectedModelId(event.target.value)}
-            className="h-9 w-[8.5rem] rounded-full border border-white/10 bg-[#111111] px-3 text-xs font-medium text-gray-300 outline-none transition-colors hover:border-white/20 hover:text-white focus:border-white/30 sm:w-[13rem]"
+            className="h-9 w-[9.5rem] rounded-full border border-white/10 bg-[#111111] px-3 text-xs font-medium text-gray-300 outline-none transition-colors hover:border-white/20 hover:text-white focus:border-white/30 sm:w-[18rem]"
             title={modelSelectorTitle}
           >
             <option value="auto">Авто</option>
             {modelGroups.map((group) => (
               <optgroup key={group.providerCode} label={group.providerName}>
-                {group.models.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
+                {group.models.map((option) => {
+                  const isLocked = !canUseModelOption(option, currentPlanId);
+
+                  return (
+                    <option key={option.id} value={option.id} disabled={isLocked}>
+                      {modelOptionLabel(option, currentPlanId)}
+                    </option>
+                  );
+                })}
               </optgroup>
             ))}
           </select>

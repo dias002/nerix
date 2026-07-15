@@ -1,4 +1,6 @@
 import { DomainError, fail, ok } from "../../domain/result.js";
+import { getSelectableModelAccess } from "../ai-gateway/provider-registry.js";
+import type { PlanId } from "../subscriptions/subscription.types.js";
 import type { ConversationRepository } from "./conversation.repository.js";
 
 const freeDailyTextLimit = 7;
@@ -53,8 +55,20 @@ export class ChatUsagePolicy {
     });
   }
 
-  async assertRequestAllowed(input: { userId: string; route: { agentId: string; modality: string } }) {
+  async assertRequestAllowed(input: { userId: string; selectedModelId?: string; route: { agentId: string; modality: string } }) {
     const access = await this.getSubscriptionAccess(input.userId);
+
+    const modelAccess = getSelectedModelAccess(input.selectedModelId, input.route.modality);
+    if (modelAccess?.minPlanId && !hasPlanAccess(access.planId, modelAccess.minPlanId)) {
+      return fail(
+        new DomainError(
+          "subscription_required",
+          `Модель ${modelAccess.label} доступна с тарифа ${modelAccess.minPlanName}. Выберите Auto или OpenAI GPT-4o mini, либо подключите подходящую подписку.`,
+          402
+        )
+      );
+    }
+
     if (access.hasActiveSubscription) return ok({ allowed: true });
 
     if (paidOnlyModalities.has(input.route.modality) || paidOnlyAgentIds.has(input.route.agentId)) {
@@ -103,4 +117,25 @@ export class ChatUsagePolicy {
 function startOfUtcDayIso() {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+}
+
+function getSelectedModelAccess(selectedModelId: string | undefined, modality: string) {
+  if (!selectedModelId || !isSelectableModality(modality)) return null;
+  return getSelectableModelAccess({ selectedModelId, modality });
+}
+
+function isSelectableModality(value: string): value is "text" | "code" | "file" {
+  return value === "text" || value === "code" || value === "file";
+}
+
+function hasPlanAccess(currentPlanId: string | null, requiredPlanId: PlanId) {
+  return planRank(currentPlanId) >= planRank(requiredPlanId);
+}
+
+function planRank(planId: string | null) {
+  if (planId === "base") return 1;
+  if (planId === "ultra") return 2;
+  if (planId === "pro") return 3;
+  if (planId === "business") return 4;
+  return 0;
 }

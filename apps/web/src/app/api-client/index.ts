@@ -401,6 +401,8 @@ export type AiModelOptionApiRecord = {
   label: string;
   description: string;
   tier: "fast" | "balanced" | "pro";
+  minPlanId: PlanId | null;
+  minPlanName: string;
   modalities: AiModality[];
 };
 

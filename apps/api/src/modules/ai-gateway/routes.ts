@@ -48,13 +48,15 @@ export async function registerAiGatewayRoutes(
           modalities,
           reason,
         })),
-        models: getSelectableModels().map(({ id, providerCode, providerName, label, description, tier, modalities }) => ({
+        models: getSelectableModels().map(({ id, providerCode, providerName, label, description, tier, minPlanId, minPlanName, modalities }) => ({
           id,
           providerCode,
           providerName,
           label,
           description,
           tier,
+          minPlanId,
+          minPlanName,
           modalities,
         })),
       })

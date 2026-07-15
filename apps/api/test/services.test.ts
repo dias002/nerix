@@ -27,6 +27,7 @@ import { InMemoryBusinessJobRepository } from "../src/modules/business-jobs/busi
 import { ChatService } from "../src/modules/chat/chat.service.js";
 import { InMemoryConversationRepository } from "../src/modules/chat/conversation.repository.js";
 import { applyResponseStyle } from "../src/modules/chat/prompt-builder.js";
+import { ChatUsagePolicy } from "../src/modules/chat/usage-policy.js";
 import { GeminiMediaGenerationProvider, HeyGenMediaGenerationProvider } from "../src/modules/generation/media-provider.js";
 import { InMemoryMailingRepository } from "../src/modules/mailings/mailing.repository.js";
 import { MailingService, parseContacts } from "../src/modules/mailings/mailing.service.js";
@@ -354,6 +355,74 @@ test("provider router separates supported and regional country routes", async ()
           reason: "Dev policy: OpenAI is available for KZ.",
         }
       );
+    }
+  );
+});
+
+test("chat usage policy gates manually selected text models by subscription plan", async () => {
+  const conversations = {
+    countFreeTextRequestsSince: async (_userId: string, _since: string) => 0,
+  };
+  const subscriptions = (planId: string | null) => ({
+    currentSubscription: async () => ({
+      ok: true as const,
+      value: {
+        subscription: planId
+          ? {
+              planId,
+              status: "active",
+            }
+          : null,
+      },
+    }),
+  });
+  const route = { agentId: "general", modality: "text" };
+
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: false,
+      OPENAI_API_KEY: "openai-key",
+      OPENAI_TEXT_MODEL: "gpt-4o-mini",
+      OPENAI_CODE_MODEL: "gpt-4o-mini",
+    },
+    async () => {
+      const freePolicy = new ChatUsagePolicy(conversations, subscriptions(null));
+      const freeMiniResponse = await freePolicy.assertRequestAllowed({
+        userId: "free-user",
+        selectedModelId: "openai:gpt-4o-mini",
+        route,
+      });
+      assert.equal(freeMiniResponse.ok, true);
+
+      const freeFastResponse = await freePolicy.assertRequestAllowed({
+        userId: "free-user",
+        selectedModelId: "openai:o4-mini",
+        route,
+      });
+      assert.equal(freeFastResponse.ok, false);
+      if (!freeFastResponse.ok) {
+        assert.equal(freeFastResponse.error.code, "subscription_required");
+        assert.match(freeFastResponse.error.message, /Easy Start/);
+      }
+
+      const basePolicy = new ChatUsagePolicy(conversations, subscriptions("base"));
+      const baseFastResponse = await basePolicy.assertRequestAllowed({
+        userId: "base-user",
+        selectedModelId: "openai:o4-mini",
+        route,
+      });
+      assert.equal(baseFastResponse.ok, true);
+
+      const baseBalancedResponse = await basePolicy.assertRequestAllowed({
+        userId: "base-user",
+        selectedModelId: "openai:gpt-4.1-mini",
+        route,
+      });
+      assert.equal(baseBalancedResponse.ok, false);
+      if (!baseBalancedResponse.ok) {
+        assert.equal(baseBalancedResponse.error.code, "subscription_required");
+        assert.match(baseBalancedResponse.error.message, /Active Work/);
+      }
     }
   );
 });

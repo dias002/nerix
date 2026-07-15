@@ -1,5 +1,6 @@
 import type { AiModality } from "@nomduchat/shared";
 import { config } from "../../config.js";
+import type { PlanId } from "../subscriptions/subscription.types.js";
 
 export type ProviderCode = "mock-provider" | "openai" | "anthropic" | "gemini" | "heygen";
 
@@ -21,6 +22,8 @@ export type SelectableAiModel = {
   label: string;
   description: string;
   tier: "fast" | "balanced" | "pro";
+  minPlanId: PlanId | null;
+  minPlanName: string;
   modalities: AiModality[];
   modelByModality: Partial<Record<AiModality, string>>;
 };
@@ -133,10 +136,27 @@ export function getSelectableModels(modality?: AiModality): SelectableAiModel[] 
 
       return {
         ...model,
+        minPlanId: "minPlanId" in model ? model.minPlanId ?? null : minimumPlanForTier(model),
+        minPlanName: planName("minPlanId" in model ? model.minPlanId ?? null : minimumPlanForTier(model)),
         providerName: provider.name,
       };
     })
     .filter((model): model is SelectableAiModel => Boolean(model));
+}
+
+export function getSelectableModelAccess(input: {
+  selectedModelId?: string;
+  modality: AiModality;
+}): Pick<SelectableAiModel, "id" | "label" | "minPlanId" | "minPlanName"> | null {
+  const option = getSelectableModels(input.modality).find((model) => model.id === input.selectedModelId);
+  if (!option) return null;
+
+  return {
+    id: option.id,
+    label: option.label,
+    minPlanId: option.minPlanId,
+    minPlanName: option.minPlanName,
+  };
 }
 
 export function resolveSelectableModel(input: {
@@ -165,7 +185,9 @@ export function supportsManualModelSelection(modality: AiModality) {
   return selectableTextModalities.includes(modality);
 }
 
-function buildSelectableModelCatalog(): Array<Omit<SelectableAiModel, "providerName">> {
+function buildSelectableModelCatalog(): Array<
+  Omit<SelectableAiModel, "providerName" | "minPlanId" | "minPlanName"> & { minPlanId?: PlanId | null }
+> {
   return [
     {
       id: "mock-provider:configured",
@@ -173,6 +195,7 @@ function buildSelectableModelCatalog(): Array<Omit<SelectableAiModel, "providerN
       label: "Local Mock",
       description: "Локальный тестовый ответ без внешних AI API.",
       tier: "fast",
+      minPlanId: null,
       modalities: selectableTextModalities,
       modelByModality: {
         text: "mock-text",
@@ -238,6 +261,7 @@ function buildSelectableModelCatalog(): Array<Omit<SelectableAiModel, "providerN
       label: "OpenAI GPT-4o mini",
       description: "Экономичный режим OpenAI для быстрых ответов.",
       tier: "fast",
+      minPlanId: null,
       modalities: selectableTextModalities,
       modelByModality: {
         text: "gpt-4o-mini",
@@ -402,4 +426,18 @@ function buildSelectableModelCatalog(): Array<Omit<SelectableAiModel, "providerN
       },
     },
   ];
+}
+
+function minimumPlanForTier(model: { tier: SelectableAiModel["tier"] }): PlanId | null {
+  if (model.tier === "fast") return "base";
+  if (model.tier === "balanced") return "ultra";
+  return "pro";
+}
+
+function planName(planId: PlanId | null) {
+  if (planId === null) return "Free";
+  if (planId === "base") return "Easy Start";
+  if (planId === "ultra") return "Active Work";
+  if (planId === "pro") return "Team Mode";
+  return "Business Cabinet";
 }
