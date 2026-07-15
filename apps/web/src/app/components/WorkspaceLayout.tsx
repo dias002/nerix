@@ -65,6 +65,12 @@ export default function WorkspaceLayout() {
             adminTab !== "ai-budget",
         },
         {
+          path: "/workspace/chat",
+          icon: MessageSquare,
+          label: "Тестовый чат",
+          visible: true,
+        },
+        {
           path: "/workspace/admin/control",
           icon: SlidersHorizontal,
           label: t.nav.control,

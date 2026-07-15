@@ -32,7 +32,26 @@ export class ChatUsagePolicy {
     private readonly subscriptions?: SubscriptionAccessService
   ) {}
 
-  async getUsageLimits(userId: string) {
+  async getUsageLimits(userId: string, options: { isAdmin?: boolean } = {}) {
+    if (options.isAdmin) {
+      return ok({
+        planId: "admin",
+        hasActiveSubscription: true,
+        text: {
+          dailyLimit: null,
+          usedToday: null,
+          remainingToday: null,
+        },
+        media: {
+          image: true,
+          video: true,
+          avatarVideo: true,
+          music: true,
+          voice: true,
+        },
+      });
+    }
+
     const access = await this.getSubscriptionAccess(userId);
     const dailyTextUsed = await this.conversations.countFreeTextRequestsSince(userId, startOfUtcDayIso());
     const dailyTextRemaining = Math.max(0, freeDailyTextLimit - dailyTextUsed);
@@ -55,7 +74,9 @@ export class ChatUsagePolicy {
     });
   }
 
-  async assertRequestAllowed(input: { userId: string; selectedModelId?: string; route: { agentId: string; modality: string } }) {
+  async assertRequestAllowed(input: { userId: string; selectedModelId?: string; route: { agentId: string; modality: string }; isAdmin?: boolean }) {
+    if (input.isAdmin) return ok({ allowed: true });
+
     const access = await this.getSubscriptionAccess(input.userId);
 
     const modelAccess = getSelectedModelAccess(input.selectedModelId, input.route.modality);

@@ -1,7 +1,11 @@
+import type { WalletBalance } from "@nomduchat/shared";
 import { DomainError, fail, ok } from "../../domain/result.js";
 import { estimateTextCredits, reserveCredits } from "../../domain/credits.js";
 import type { AgentService } from "../agents/agent.service.js";
 import type { WalletRepository } from "./wallet.repository.js";
+
+const unmeteredWalletCredits = 1_000_000_000;
+const unmeteredReservationPrefix = "admin-unmetered:";
 
 export class BillingService {
   constructor(
@@ -9,7 +13,9 @@ export class BillingService {
     private readonly agents: AgentService
   ) {}
 
-  async getWallet(userId = "local-user") {
+  async getWallet(userId = "local-user", options: { isAdmin?: boolean } = {}) {
+    if (options.isAdmin) return ok(unmeteredWallet(userId));
+
     const wallet = await this.walletRepository.getWallet(userId);
 
     if (!wallet) {
@@ -53,9 +59,17 @@ export class BillingService {
     return ok(wallet);
   }
 
-  async reserve(input: { userId: string; prompt: string; agentId?: string; referenceId: string }) {
+  async reserve(input: { userId: string; prompt: string; agentId?: string; referenceId: string; unmetered?: boolean }) {
     const estimateResult = await this.estimate(input);
     if (!estimateResult.ok) return estimateResult;
+
+    if (input.unmetered) {
+      return ok({
+        reservationId: `${unmeteredReservationPrefix}${input.referenceId}`,
+        wallet: unmeteredWallet(input.userId),
+        estimate: estimateResult.value,
+      });
+    }
 
     const reservation = await this.walletRepository.reserve(
       input.userId,
@@ -74,6 +88,8 @@ export class BillingService {
   }
 
   async capture(input: { userId: string; reservationId: string; finalCredits: number }) {
+    if (isUnmeteredReservation(input.reservationId)) return ok(unmeteredWallet(input.userId));
+
     const wallet = await this.walletRepository.capture(input.userId, input.reservationId, input.finalCredits);
 
     if (!wallet) {
@@ -84,6 +100,8 @@ export class BillingService {
   }
 
   async refund(input: { userId: string; reservationId: string; credits: number }) {
+    if (isUnmeteredReservation(input.reservationId)) return ok(unmeteredWallet(input.userId));
+
     const wallet = await this.walletRepository.refund(input.userId, input.reservationId, input.credits);
 
     if (!wallet) {
@@ -98,4 +116,17 @@ export class BillingService {
       entries: await this.walletRepository.ledger(userId),
     });
   }
+}
+
+function unmeteredWallet(userId: string): WalletBalance {
+  return {
+    userId,
+    availableCredits: unmeteredWalletCredits,
+    reservedCredits: 0,
+    currency: "NOMDUCHAT",
+  };
+}
+
+function isUnmeteredReservation(reservationId: string) {
+  return reservationId.startsWith(unmeteredReservationPrefix);
 }

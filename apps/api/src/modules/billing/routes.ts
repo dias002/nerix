@@ -15,7 +15,7 @@ export async function registerBillingRoutes(app: FastifyInstance, billing: Billi
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
-    return sendResult(reply, await billing.getWallet(user.value.userId));
+    return sendResult(reply, await billing.getWallet(user.value.userId, { isAdmin: user.value.isAdmin }));
   });
 
   app.get("/billing/ledger", async (request, reply) => {

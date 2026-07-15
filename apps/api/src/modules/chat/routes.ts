@@ -69,7 +69,7 @@ export async function registerChatRoutes(
     const user = await resolveRequestUserId(request, auth);
     if (!user.ok) return sendResult(reply, user);
 
-    return sendResult(reply, await chat.getUsageLimits(user.value.userId));
+    return sendResult(reply, await chat.getUsageLimits(user.value.userId, { isAdmin: user.value.isAdmin }));
   });
 
   app.get("/chat/conversations", async (request, reply) => {
@@ -124,10 +124,10 @@ export async function registerChatRoutes(
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
 
-    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId);
+    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId, user.value.isAdmin);
     if (!allowed.ok) return sendResult(reply, allowed);
 
-    const result = await chat.sendMessage({ ...input.data, userId: user.value.userId });
+    const result = await chat.sendMessage({ ...input.data, userId: user.value.userId, isAdmin: user.value.isAdmin });
     return sendResult(reply, result as Result<unknown>);
   });
 
@@ -146,7 +146,7 @@ export async function registerChatRoutes(
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
 
-    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId);
+    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId, user.value.isAdmin);
     if (!allowed.ok) return sendResult(reply, allowed);
 
     reply.raw.writeHead(200, {
@@ -169,7 +169,7 @@ export async function registerChatRoutes(
 
     try {
       const result = await chat.streamMessage(
-        { ...input.data, userId: user.value.userId },
+        { ...input.data, userId: user.value.userId, isAdmin: user.value.isAdmin },
         {
           onStart: (payload) => writeEvent("start", payload),
           onDelta: (delta) => writeEvent("delta", { delta }),
@@ -211,10 +211,10 @@ export async function registerChatRoutes(
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
 
-    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId);
+    const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId, user.value.isAdmin);
     if (!allowed.ok) return sendResult(reply, allowed);
 
-    return sendResult(reply, await chat.regenerateLastAnswer({ ...input.data, userId: user.value.userId }));
+    return sendResult(reply, await chat.regenerateLastAnswer({ ...input.data, userId: user.value.userId, isAdmin: user.value.isAdmin }));
   });
 
   app.post("/chat/answers/:assistantMessageId/select", async (request, reply) => {
@@ -274,8 +274,11 @@ async function assertFreeUserAiRequestAllowed(
   request: Parameters<AbuseGuardService["assertFreeAiRequestAllowed"]>[0],
   chat: ChatService,
   abuseGuard: AbuseGuardService,
-  userId: string
+  userId: string,
+  isAdmin = false
 ) {
+  if (isAdmin) return { ok: true as const, value: { allowed: true } };
+
   const limits = await chat.getUsageLimits(userId);
   if (!limits.ok || limits.value.hasActiveSubscription) return limits.ok ? { ok: true as const, value: { allowed: true } } : limits;
 

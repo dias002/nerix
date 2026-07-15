@@ -36,7 +36,7 @@ export function getWorkspaceAccess(user: UserApiRecord | null): WorkspaceAccess 
     isGuest,
     isAdmin,
     isOwner,
-    canUseChat: !isAdmin || isOwner,
+    canUseChat: true,
     canUseHistory: !isAdmin || isOwner,
     canUseBalance: !isAdmin || isOwner,
     canUseSettings: Boolean(user),
@@ -59,6 +59,7 @@ export function getUnauthorizedWorkspaceRedirect(pathname: string, access: Works
 
     const adminPathAllowed =
       isWorkspacePath(pathname, "/workspace/admin") ||
+      isWorkspacePath(pathname, "/workspace/chat") ||
       isWorkspacePath(pathname, "/workspace/mailings") ||
       isWorkspacePath(pathname, "/workspace/settings");
 

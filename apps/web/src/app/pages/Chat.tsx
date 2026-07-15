@@ -222,13 +222,22 @@ function planDisplayName(planId: PlanId | null) {
   return "Business Cabinet";
 }
 
-function canUseModelOption(option: AiModelOptionApiRecord, currentPlanId: PlanId | string | null | undefined) {
+function canUseModelOption(
+  option: AiModelOptionApiRecord,
+  currentPlanId: PlanId | string | null | undefined,
+  hasAdminModelAccess = false,
+) {
+  if (hasAdminModelAccess) return true;
   if (!option.minPlanId) return true;
   return planRank(currentPlanId) >= planRank(option.minPlanId);
 }
 
-function modelOptionLabel(option: AiModelOptionApiRecord, currentPlanId: PlanId | string | null | undefined) {
-  if (canUseModelOption(option, currentPlanId)) return option.label;
+function modelOptionLabel(
+  option: AiModelOptionApiRecord,
+  currentPlanId: PlanId | string | null | undefined,
+  hasAdminModelAccess = false,
+) {
+  if (canUseModelOption(option, currentPlanId, hasAdminModelAccess)) return option.label;
   return `${option.label} — с ${option.minPlanName}`;
 }
 
@@ -275,12 +284,13 @@ export default function Chat() {
   const conversationParam = searchParams.get("conversationId");
 
   const currentPlanId = user?.activePlanId ?? null;
+  const hasAdminModelAccess = Boolean(user?.permissions.adminPanel || user?.email?.trim().toLowerCase() === "dias.sunnatilla@gmail.com");
   const displayModelOptions = modelOptions.length > 0 ? modelOptions : fallbackModelOptions;
   const selectedModelOption = useMemo(
     () => displayModelOptions.find((option) => option.id === selectedModelId) ?? null,
     [displayModelOptions, selectedModelId]
   );
-  const selectedModelLocked = Boolean(selectedModelOption && !canUseModelOption(selectedModelOption, currentPlanId));
+  const selectedModelLocked = Boolean(selectedModelOption && !canUseModelOption(selectedModelOption, currentPlanId, hasAdminModelAccess));
   const canSend = (Boolean(inputValue.trim()) || attachedFiles.length > 0) && !isThinking && !selectedModelLocked;
   const selectedModelForRequest = selectedModelId === "auto" || selectedModelLocked ? undefined : selectedModelId;
   const modelGroups = useMemo(() => {
@@ -350,10 +360,10 @@ export default function Chat() {
     if (isAuthenticated && !user) return;
 
     const selectedOption = displayModelOptions.find((option) => option.id === selectedModelId);
-    if (!selectedOption || !canUseModelOption(selectedOption, currentPlanId)) {
+    if (!selectedOption || !canUseModelOption(selectedOption, currentPlanId, hasAdminModelAccess)) {
       setSelectedModelId("auto");
     }
-  }, [currentPlanId, displayModelOptions, isAuthenticated, selectedModelId, user]);
+  }, [currentPlanId, displayModelOptions, hasAdminModelAccess, isAuthenticated, selectedModelId, user]);
 
   useEffect(() => {
     setMessages((prev) => {
@@ -826,6 +836,8 @@ export default function Chat() {
   const modelSelectorTitle =
     selectedModelLocked && selectedModelOption
       ? `Модель ${selectedModelOption.label} доступна с тарифа ${selectedModelOption.minPlanName}.`
+      : hasAdminModelAccess
+        ? "Админ-доступ: доступны все модели."
       : modelOptions.length === 0
         ? "Локальный список моделей. Доступность проверит API."
         : "Модель ответа";
@@ -869,11 +881,11 @@ export default function Chat() {
             {modelGroups.map((group) => (
               <optgroup key={group.providerCode} label={group.providerName}>
                 {group.models.map((option) => {
-                  const isLocked = !canUseModelOption(option, currentPlanId);
+                  const isLocked = !canUseModelOption(option, currentPlanId, hasAdminModelAccess);
 
                   return (
                     <option key={option.id} value={option.id} disabled={isLocked}>
-                      {modelOptionLabel(option, currentPlanId)}
+                      {modelOptionLabel(option, currentPlanId, hasAdminModelAccess)}
                     </option>
                   );
                 })}

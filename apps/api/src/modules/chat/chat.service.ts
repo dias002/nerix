@@ -82,8 +82,8 @@ export class ChatService {
     });
   }
 
-  async getUsageLimits(userId: string) {
-    return this.usagePolicy.getUsageLimits(userId);
+  async getUsageLimits(userId: string, options: { isAdmin?: boolean } = {}) {
+    return this.usagePolicy.getUsageLimits(userId, options);
   }
 
   async sendMessage(input: {
@@ -96,6 +96,7 @@ export class ChatService {
     selectedModelId?: string;
     responseStyle?: ResponseStyle;
     attachments?: ChatAttachment[];
+    isAdmin?: boolean;
   }) {
     const message = input.message.trim();
     const attachments = normalizeAttachments(input.attachments);
@@ -151,6 +152,7 @@ export class ChatService {
       userId: input.userId,
       selectedModelId: input.selectedModelId,
       route: routeResult.value,
+      isAdmin: input.isAdmin,
     });
     if (!limitResult.ok) return limitResult;
 
@@ -190,6 +192,7 @@ export class ChatService {
         userMessageId: userMessage.id,
         prompt: buildMediaGenerationPrompt(previousMessages, prompt),
         route: routeResult.value,
+        isAdmin: input.isAdmin,
       });
       if (!mediaResult.ok) return mediaResult;
 
@@ -252,6 +255,7 @@ export class ChatService {
     selectedModelId?: string;
     responseStyle?: ResponseStyle;
     attachments?: ChatAttachment[];
+    isAdmin?: boolean;
   }, callbacks: ChatStreamCallbacks = {}) {
     const message = input.message.trim();
     const attachments = normalizeAttachments(input.attachments);
@@ -307,6 +311,7 @@ export class ChatService {
       userId: input.userId,
       selectedModelId: input.selectedModelId,
       route: routeResult.value,
+      isAdmin: input.isAdmin,
     });
     if (!limitResult.ok) return limitResult;
 
@@ -357,6 +362,7 @@ export class ChatService {
         userMessageId: userMessage.id,
         prompt: buildMediaGenerationPrompt(previousMessages, prompt),
         route: routeResult.value,
+        isAdmin: input.isAdmin,
       });
     }
 
@@ -415,6 +421,7 @@ export class ChatService {
     agentId?: string;
     selectedModelId?: string;
     responseStyle?: ResponseStyle;
+    isAdmin?: boolean;
   }) {
     const conversation = await this.conversations.findById(input.conversationId);
 
@@ -468,6 +475,7 @@ export class ChatService {
       userId: input.userId,
       selectedModelId: input.selectedModelId ?? metadataModelId,
       route: routeResult.value,
+      isAdmin: input.isAdmin,
     });
     if (!limitResult.ok) return limitResult;
 
@@ -744,6 +752,7 @@ export class ChatService {
       policyMode: string;
       routingReason: string;
     };
+    isAdmin?: boolean;
   }) {
     if (!this.generation) {
       return fail(new DomainError("provider_unavailable", "Media generation service is not configured.", 503));
@@ -756,6 +765,7 @@ export class ChatService {
       agentId: input.route.agentId,
       modality: input.route.modality,
       prompt: input.prompt,
+      isAdmin: input.isAdmin,
     });
     if (!generationResult.ok) return generationResult;
 
@@ -811,7 +821,7 @@ export class ChatService {
     });
   }
 
-  private async assertRequestAllowed(input: { userId: string; selectedModelId?: string; route: { agentId: string; modality: string } }) {
+  private async assertRequestAllowed(input: { userId: string; selectedModelId?: string; route: { agentId: string; modality: string }; isAdmin?: boolean }) {
     return this.usagePolicy.assertRequestAllowed(input);
   }
 }

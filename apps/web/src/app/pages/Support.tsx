@@ -1,5 +1,6 @@
 import { Link } from "react-router";
-import { ArrowLeft, CreditCard, LifeBuoy, Mail, RefreshCcw, ShieldCheck } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeft, Check, Copy, CreditCard, LifeBuoy, Mail, RefreshCcw, ShieldCheck } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
 
 const supportEmail = "admin@nomduchat.com";
@@ -23,6 +24,14 @@ const supportTopics = [
 ];
 
 export default function Support() {
+  const [copied, setCopied] = useState(false);
+
+  const copyEmail = async () => {
+    await navigator.clipboard?.writeText(supportEmail);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  };
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-black text-white">
       <StarsBackground />
@@ -54,13 +63,23 @@ export default function Support() {
           <p className="mt-5 max-w-3xl text-base leading-relaxed text-gray-400 md:text-lg">
             Напишите с email аккаунта и приложите ID платежа, если вопрос связан с оплатой. Так мы быстрее найдем операцию.
           </p>
-          <a
-            href={`mailto:${supportEmail}?subject=${encodeURIComponent("Поддержка nomduchat")}`}
-            className="mt-7 inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
-          >
-            <Mail className="h-4 w-4" strokeWidth={1.8} />
-            {supportEmail}
-          </a>
+          <div className="mt-7 flex flex-col gap-2 sm:flex-row">
+            <a
+              href={`mailto:${supportEmail}?subject=${encodeURIComponent("Поддержка nomduchat")}`}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
+            >
+              <Mail className="h-4 w-4" strokeWidth={1.8} />
+              {supportEmail}
+            </a>
+            <button
+              type="button"
+              onClick={copyEmail}
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-6 py-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+            >
+              {copied ? <Check className="h-4 w-4" strokeWidth={1.8} /> : <Copy className="h-4 w-4" strokeWidth={1.8} />}
+              {copied ? "Скопировано" : "Копировать email"}
+            </button>
+          </div>
         </section>
 
         <section className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3">

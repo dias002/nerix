@@ -65,10 +65,12 @@ export async function registerGenerationRoutes(
     const user = await resolveRequestUserId(request, auth, input.data.userId ?? "local-user");
     if (!user.ok) return sendResult(reply, user);
 
-    const allowed = await abuseGuard.assertExpensiveActionAllowed(request, user.value.userId, "generation");
-    if (!allowed.ok) return sendResult(reply, allowed);
+    if (!user.value.isAdmin) {
+      const allowed = await abuseGuard.assertExpensiveActionAllowed(request, user.value.userId, "generation");
+      if (!allowed.ok) return sendResult(reply, allowed);
+    }
 
-    return sendResult(reply, await generation.createJob({ ...input.data, userId: user.value.userId }));
+    return sendResult(reply, await generation.createJob({ ...input.data, userId: user.value.userId, isAdmin: user.value.isAdmin }));
   });
 
   app.get("/generation/jobs/:jobId", async (request, reply) => {

@@ -70,6 +70,8 @@ export default function Business() {
       title: "API для коммерческого использования",
       text: "Перспективный слой для компаний: запросы, история, роли, контроль рисков и подключение собственных сценариев через backend.",
       icon: Database,
+      href: "/support",
+      cta: "Обсудить API",
     },
   ];
 
@@ -167,6 +169,15 @@ export default function Business() {
                   </div>
                   <h3 className="text-lg font-medium text-white">{item.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-gray-500">{item.text}</p>
+                  {item.href ? (
+                    <Link
+                      to={item.href}
+                      className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-gray-300 transition-colors hover:text-white"
+                    >
+                      {item.cta ?? "Открыть"}
+                      <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+                    </Link>
+                  ) : null}
                 </article>
               ))}
             </div>

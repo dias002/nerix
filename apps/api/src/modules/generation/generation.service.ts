@@ -68,6 +68,7 @@ export class GenerationService {
     modality?: AiModality;
     prompt: string;
     avatarVideo?: AvatarVideoGenerationInput;
+    isAdmin?: boolean;
   }) {
     const prompt = input.prompt.trim();
     if (!prompt) {
@@ -96,7 +97,7 @@ export class GenerationService {
       return fail(new DomainError("validation_failed", "Confirm that you own this face image or have permission to use it.", 400));
     }
 
-    const access = await this.getSubscriptionAccess(input.userId);
+    const access = input.isAdmin ? { hasActiveSubscription: true } : await this.getSubscriptionAccess(input.userId);
     if (!access.hasActiveSubscription) {
       return fail(
         new DomainError(
@@ -113,6 +114,7 @@ export class GenerationService {
       prompt,
       agentId: routeResult.value.agentId,
       referenceId: jobId,
+      unmetered: input.isAdmin,
     });
     if (!reservation.ok) return reservation;
 
@@ -491,6 +493,14 @@ function publicMediaErrorMessage(error: unknown) {
 
   if (normalized.includes("google_ai_api_key")) {
     return "Gemini ключ для медиа-генерации не настроен. Кредиты nomduchat возвращены.";
+  }
+
+  if (
+    normalized.includes("gemini video generation failed with 404") ||
+    normalized.includes("not found for api version") ||
+    normalized.includes("predictlongrunning")
+  ) {
+    return "Видео-модель Gemini настроена неверно или временно недоступна. Кредиты nomduchat возвращены.";
   }
 
   if (normalized.includes("media provider") && normalized.includes("not supported")) {

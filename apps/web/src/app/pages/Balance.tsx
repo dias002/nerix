@@ -462,13 +462,13 @@ export default function Balance() {
                 Здесь видны созданные оплаты, их статус и данные для поддержки.
               </p>
             </div>
-            <a
-              href="mailto:admin@nomduchat.com?subject=Вопрос%20по%20оплате%20nomduchat"
+            <Link
+              to="/support"
               className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
             >
               <Mail className="h-4 w-4" strokeWidth={1.7} />
               Поддержка
-            </a>
+            </Link>
           </div>
           <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0A0A0A]">
             {checkouts && checkouts.length > 0 ? checkouts.slice(0, 6).map((checkout, index) => (
@@ -507,21 +507,31 @@ export default function Balance() {
                   {checkout.status === "pending" && !checkout.checkoutUrl.startsWith("nomduchat://mock-checkout") ? (
                     <a
                       href={checkout.checkoutUrl}
+                      rel="noreferrer"
                       className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200"
                     >
                       Продолжить оплату
                       <ExternalLink className="h-4 w-4" strokeWidth={1.7} />
                     </a>
                   ) : null}
-                  <a
-                    href={`mailto:admin@nomduchat.com?subject=${encodeURIComponent(`Платеж ${checkout.providerCheckoutId}`)}&body=${encodeURIComponent(
-                      `Здравствуйте. Нужна помощь по платежу ${checkout.providerCheckoutId}. Тариф: ${checkout.planId}. Статус: ${checkout.status}.`
-                    )}`}
+                  {checkout.status === "failed" || checkout.status === "cancelled" ? (
+                    <button
+                      type="button"
+                      onClick={() => handleSubscribe(checkout.planId)}
+                      disabled={pendingPlanId === checkout.planId}
+                      className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <CreditCard className="h-4 w-4" strokeWidth={1.7} />
+                      {pendingPlanId === checkout.planId ? "Создаю..." : "Новый платеж"}
+                    </button>
+                  ) : null}
+                  <Link
+                    to="/support"
                     className="inline-flex items-center justify-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
                   >
                     <Mail className="h-4 w-4" strokeWidth={1.7} />
-                    Написать
-                  </a>
+                    Поддержка
+                  </Link>
                 </div>
               </div>
             )) : checkouts === null ? (

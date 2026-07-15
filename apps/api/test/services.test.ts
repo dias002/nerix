@@ -18,6 +18,7 @@ import {
   OpenAiCompletionProvider,
 } from "../src/modules/ai-gateway/completion-provider.js";
 import { inferModality } from "../src/modules/ai-gateway/modality-classifier.js";
+import { getConfiguredProviders } from "../src/modules/ai-gateway/provider-registry.js";
 import { chooseProvider } from "../src/modules/ai-gateway/provider-router.js";
 import { hashPassword, verifyPassword } from "../src/modules/auth/password.js";
 import { signAccessToken, verifyAccessToken } from "../src/modules/auth/token.js";
@@ -359,6 +360,14 @@ test("provider router separates supported and regional country routes", async ()
   );
 });
 
+test("Gemini video provider defaults to a real Veo model when env is missing", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key", GEMINI_VIDEO_MODEL: undefined }, () => {
+    const geminiProvider = getConfiguredProviders().find((provider) => provider.code === "gemini");
+
+    assert.equal(geminiProvider?.modelByModality.video, "veo-3.1-lite-generate-preview");
+  });
+});
+
 test("chat usage policy gates manually selected text models by subscription plan", async () => {
   const conversations = {
     countFreeTextRequestsSince: async (_userId: string, _since: string) => 0,
@@ -429,6 +438,22 @@ test("chat usage policy gates manually selected text models by subscription plan
       if (!baseBalancedResponse.ok) {
         assert.equal(baseBalancedResponse.error.code, "subscription_required");
         assert.match(baseBalancedResponse.error.message, /Active Work/);
+      }
+
+      const adminResponse = await freePolicy.assertRequestAllowed({
+        userId: "admin-user",
+        selectedModelId: "openai:gpt-4.1",
+        route,
+        isAdmin: true,
+      });
+      assert.equal(adminResponse.ok, true);
+
+      const adminLimits = await freePolicy.getUsageLimits("admin-user", { isAdmin: true });
+      assert.equal(adminLimits.ok, true);
+      if (adminLimits.ok) {
+        assert.equal(adminLimits.value.hasActiveSubscription, true);
+        assert.equal(adminLimits.value.text.dailyLimit, null);
+        assert.equal(adminLimits.value.media.video, true);
       }
     }
   );
@@ -563,6 +588,34 @@ test("billing service reserves, captures, and refunds credits", async () => {
     refunded.value.availableCredits,
     walletBefore.value.availableCredits - reservation.value.estimate.estimatedCredits
   );
+
+  const adminWallet = await dependencies.billing.getWallet("admin-user", { isAdmin: true });
+  assert.equal(adminWallet.ok, true);
+  if (!adminWallet.ok) return;
+  assert.equal(adminWallet.value.availableCredits, 1_000_000_000);
+
+  const adminReservation = await dependencies.billing.reserve({
+    userId: "admin-user",
+    prompt: "Сделай тестовую генерацию",
+    agentId: "general",
+    referenceId: "admin-test-request",
+    unmetered: true,
+  });
+  assert.equal(adminReservation.ok, true);
+  if (!adminReservation.ok) return;
+  assert.match(adminReservation.value.reservationId, /^admin-unmetered:/);
+  assert.equal(adminReservation.value.wallet.availableCredits, 1_000_000_000);
+
+  const adminCapture = await dependencies.billing.capture({
+    userId: "admin-user",
+    reservationId: adminReservation.value.reservationId,
+    finalCredits: adminReservation.value.estimate.estimatedCredits,
+  });
+  assert.equal(adminCapture.ok, true);
+  if (adminCapture.ok) {
+    assert.equal(adminCapture.value.availableCredits, 1_000_000_000);
+    assert.equal(adminCapture.value.reservedCredits, 0);
+  }
 });
 
 test("generation service creates media jobs, stores artifacts, and can be started from chat", async () => {
@@ -1141,6 +1194,33 @@ test("Gemini media provider starts video without unsupported numberOfVideos para
         resolution: "720p",
       },
     });
+  });
+});
+
+test("Gemini media provider normalizes placeholder video model before request", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({
+        name: "operations/video-test",
+      });
+    }, async () => {
+      const videoResult = await new GeminiMediaGenerationProvider().generate({
+        jobId: "job-video",
+        provider: "gemini",
+        model: "gemini-video-configured",
+        modality: "video",
+        prompt: "создай короткое видео",
+      });
+
+      assert.equal(videoResult.status, "running");
+    });
+
+    assert.equal(calls.length, 1);
+    const url = new URL(calls[0].url);
+    assert.equal(url.pathname, "/v1beta/models/veo-3.1-lite-generate-preview:predictLongRunning");
   });
 });
 

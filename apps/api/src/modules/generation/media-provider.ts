@@ -50,6 +50,7 @@ export interface MediaGenerationProvider {
 const heygenBaseUrl = "https://api.heygen.com";
 const heygenVideoAgentOperationPrefix = "heygen-video-agent://session/";
 const heygenVideoOperationPrefix = "heygen-video://video/";
+const defaultGeminiVideoModel = "veo-3.1-lite-generate-preview";
 
 export class MockMediaGenerationProvider implements MediaGenerationProvider {
   async generate(input: MediaGenerationProviderInput) {
@@ -243,8 +244,9 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
   }
 
   private async startVideo(input: MediaGenerationProviderInput) {
+    const model = normalizeGeminiVideoModel(input.model);
     const url = new URL(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(input.model)}:predictLongRunning`
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:predictLongRunning`
     );
     url.searchParams.set("key", config.GOOGLE_AI_API_KEY ?? "");
 
@@ -780,6 +782,15 @@ function defaultMimeTypeForModality(modality: AiModality) {
   if (modality === "voice") return "audio/wav";
   if (modality === "video" || modality === "avatar_video") return "video/mp4";
   return undefined;
+}
+
+function normalizeGeminiVideoModel(value: string | undefined) {
+  const model = value?.trim().replace(/^models\//, "");
+  if (!model || model === "gemini-video-configured" || model === "video-primary") {
+    return defaultGeminiVideoModel;
+  }
+
+  return model;
 }
 
 function extractErrorMessage(error: object) {

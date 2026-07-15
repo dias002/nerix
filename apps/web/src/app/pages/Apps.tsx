@@ -74,7 +74,7 @@ const appCatalog = [
 export default function Apps() {
   const navigate = useNavigate();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [translationText, setTranslationText] = useState("Привет! Подготовь короткое описание проекта.");
+  const [translationText, setTranslationText] = useState("");
   const [targetLanguage, setTargetLanguage] = useState<TargetLanguage>("en");
   const [translationMode, setTranslationMode] = useState<TranslationMode>("basic");
   const [promptGoal, setPromptGoal] = useState("Сделать продающее описание сервиса nomduchat");
@@ -112,47 +112,72 @@ export default function Apps() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#050505] p-6 md:p-12">
-      <div className="mx-auto max-w-6xl space-y-8">
-        <div>
-          <h2 className="text-2xl font-medium text-white">Приложения</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-gray-500">
-            Быстрые инструменты поверх чата: перевод, промпты, текст, изображения, видео и продуктовые сценарии.
-          </p>
-        </div>
+      <div className="mx-auto grid max-w-6xl gap-6 xl:grid-cols-[18rem_1fr]">
+        <aside className="space-y-5">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-600">Tools</p>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Приложения</h2>
+            <p className="mt-3 text-sm leading-relaxed text-gray-500">
+              Быстрые рабочие инструменты поверх чата: перевод, промпты, текст, изображения и видео.
+            </p>
+          </div>
 
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {appCatalog.map((app) => {
-            const Icon = app.icon;
-            const href = app.href ?? `/workspace/chat?prompt=${encodeURIComponent(app.prompt ?? "")}`;
+          <div className="rounded-xl border border-white/10 bg-[#0D0D0D] p-3">
+            <div className="space-y-1">
+              {appCatalog.slice(0, 5).map((app) => {
+                const Icon = app.icon;
+                const href = app.href ?? `/workspace/chat?prompt=${encodeURIComponent(app.prompt ?? "")}`;
 
-            return (
-              <Link
-                key={app.title}
-                to={href}
-                className="group flex min-h-56 flex-col rounded-2xl border border-white/10 bg-[#0D0D0D] p-5 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-black text-gray-200">
+                return (
+                  <Link
+                    key={app.title}
+                    to={href}
+                    className="group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-gray-400 transition-colors hover:bg-white/[0.04] hover:text-white"
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-gray-500 transition-colors group-hover:text-white" strokeWidth={1.7} />
+                    <span className="min-w-0 flex-1 truncate">{app.title}</span>
+                    <span className="text-[11px] text-gray-600">{app.status}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
+
+        <main className="space-y-5">
+          <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {appCatalog.map((app) => {
+              const Icon = app.icon;
+              const href = app.href ?? `/workspace/chat?prompt=${encodeURIComponent(app.prompt ?? "")}`;
+
+              return (
+                <Link
+                  key={app.title}
+                  to={href}
+                  className="group grid min-h-36 grid-cols-[auto_1fr] gap-4 rounded-xl border border-white/10 bg-[#0D0D0D] p-4 transition-colors hover:border-white/20 hover:bg-white/[0.05]"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-black text-gray-200">
                     <Icon className="h-5 w-5" strokeWidth={1.7} />
                   </div>
-                  <span className="rounded-full border border-white/10 bg-black px-2.5 py-1 text-xs text-gray-500">
-                    {app.status}
-                  </span>
-                </div>
-                <div className="mt-5 flex-1">
-                  <h3 className="text-base font-medium text-white">{app.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-gray-500">{app.text}</p>
-                </div>
-                <span className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors group-hover:text-white">
-                  Открыть
-                  <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
-                </span>
-              </Link>
-            );
-          })}
-        </section>
+                  <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="truncate text-base font-semibold text-white">{app.title}</h3>
+                      <span className="shrink-0 rounded-full border border-white/10 bg-black px-2 py-0.5 text-[11px] text-gray-500">
+                        {app.status}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-relaxed text-gray-500">{app.text}</p>
+                    <span className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-gray-400 transition-colors group-hover:text-white">
+                      Открыть
+                      <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </section>
 
-        <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <article className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5">
             <div className="flex items-center gap-3">
               <Languages className="h-5 w-5 text-gray-300" strokeWidth={1.7} />
@@ -243,9 +268,9 @@ export default function Apps() {
               onOpenChat={() => openChat(generatedPrompt)}
             />
           </article>
-        </section>
+          </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-5">
+          <section className="rounded-xl border border-white/10 bg-[#0D0D0D] p-5">
           <h3 className="text-lg font-medium text-white">Готовые сценарии</h3>
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
             {[
@@ -266,7 +291,8 @@ export default function Apps() {
               </button>
             ))}
           </div>
-        </section>
+          </section>
+        </main>
       </div>
     </div>
   );

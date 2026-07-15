@@ -1,30 +1,40 @@
 import type { FastifyRequest } from "fastify";
 import { DomainError, fail, ok, type Result } from "../domain/result.js";
 import type { AuthService } from "../modules/auth/auth.service.js";
+import { isAdminEmail } from "../modules/users/admin-access.js";
 
 export type LocalRoleOverride = "user" | "business_owner" | "business_employee" | "admin";
+export type ResolvedRequestUser = {
+  userId: string;
+  email?: string | null;
+  name?: string | null;
+  isAdmin: boolean;
+};
 
 export async function resolveRequestUserId(
   request: FastifyRequest,
   auth: AuthService,
   fallbackUserId = "local-user"
-): Promise<Result<{ userId: string; email?: string | null; name?: string | null }>> {
+): Promise<Result<ResolvedRequestUser>> {
   const accessToken = readBearerToken(request.headers.authorization);
+  const localRoleOverride = readLocalRoleOverride(request);
   if (!accessToken) {
     if (process.env.NODE_ENV === "production") {
       return fail(new DomainError("unauthorized", "Authentication is required.", 401));
     }
 
-    return ok({ userId: fallbackUserId });
+    return ok({ userId: fallbackUserId, isAdmin: localRoleOverride === "admin" });
   }
 
   const currentUser = await auth.me(accessToken);
   if (!currentUser.ok) return currentUser;
+  const user = currentUser.value.user;
 
   return ok({
-    userId: currentUser.value.user.id,
-    email: currentUser.value.user.email,
-    name: currentUser.value.user.name,
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    isAdmin: Boolean(user.permissions.adminPanel || isAdminEmail(user.email) || localRoleOverride === "admin"),
   });
 }
 
