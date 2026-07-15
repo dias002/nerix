@@ -501,10 +501,12 @@ function publicMediaErrorMessage(error: unknown) {
 
   if (
     normalized.includes("gemini video generation failed with 404") ||
+    normalized.includes("gemini image generation failed with 404") ||
     normalized.includes("not found for api version") ||
+    normalized.includes("not found. did you mean") ||
     normalized.includes("predictlongrunning")
   ) {
-    return "Видео-модель Gemini настроена неверно или временно недоступна. Кредиты nomduchat возвращены.";
+    return "Медиа-модель Gemini настроена неверно или временно недоступна. Кредиты nomduchat возвращены.";
   }
 
   if (normalized.includes("media provider") && normalized.includes("not supported")) {

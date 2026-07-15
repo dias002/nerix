@@ -368,6 +368,14 @@ test("Gemini video provider defaults to a real Veo model when env is missing", a
   });
 });
 
+test("Gemini image provider defaults to a real Nano Banana model when env is missing", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key", GEMINI_IMAGE_MODEL: undefined }, () => {
+    const geminiProvider = getConfiguredProviders().find((provider) => provider.code === "gemini");
+
+    assert.equal(geminiProvider?.modelByModality.image, "gemini-3.1-flash-image");
+  });
+});
+
 test("chat usage policy gates manually selected text models by subscription plan", async () => {
   const conversations = {
     countFreeTextRequestsSince: async (_userId: string, _since: string) => 0,
@@ -1169,6 +1177,35 @@ test("Gemini media provider sends interaction payloads without unsupported confi
       model: "lyria-test",
       input: "сделай голосовую песню",
     });
+  });
+});
+
+test("Gemini media provider normalizes placeholder image model before request", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({
+        output_image: {
+          mime_type: "image/png",
+          data: Buffer.from("placeholder image").toString("base64"),
+        },
+      });
+    }, async () => {
+      const imageResult = await new GeminiMediaGenerationProvider().generate({
+        jobId: "job-image",
+        provider: "gemini",
+        model: "gemini-image-configured",
+        modality: "image",
+        prompt: "сгенерируй картинку по тексту",
+      });
+
+      assert.equal(imageResult.status, "succeeded");
+    });
+
+    assert.equal(calls.length, 1);
+    const body = JSON.parse(String(calls[0].init?.body));
+    assert.equal(body.model, "gemini-3.1-flash-image");
   });
 });
 

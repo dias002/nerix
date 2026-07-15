@@ -30,6 +30,7 @@ export type SelectableAiModel = {
 
 const allModalities: AiModality[] = ["text", "code", "image", "video", "avatar_video", "music", "voice", "file"];
 const selectableTextModalities: AiModality[] = ["text", "code", "file"];
+const defaultGeminiImageModel = "gemini-3.1-flash-image";
 const defaultGeminiVideoModel = "veo-3.1-lite-generate-preview";
 
 export function getProviderPolicyMode(): ProviderPolicyMode {
@@ -94,7 +95,7 @@ export function getConfiguredProviders(): ProviderConfig[] {
       modelByModality: {
         text: config.GEMINI_TEXT_MODEL || "gemini-2.5-flash",
         code: config.GEMINI_CODE_MODEL || config.GEMINI_TEXT_MODEL || "gemini-2.5-flash",
-        image: config.GEMINI_IMAGE_MODEL || "gemini-image-configured",
+        image: normalizeGeminiImageModel(config.GEMINI_IMAGE_MODEL),
         video: normalizeGeminiVideoModel(config.GEMINI_VIDEO_MODEL),
         music: config.GEMINI_MUSIC_MODEL || "gemini-music-configured",
         file: config.GEMINI_TEXT_MODEL || "gemini-2.5-flash",
@@ -452,6 +453,15 @@ function normalizeGeminiVideoModel(value: string | undefined) {
   const model = value?.trim().replace(/^models\//, "");
   if (!model || model === "gemini-video-configured" || model === "video-primary") {
     return defaultGeminiVideoModel;
+  }
+
+  return model;
+}
+
+function normalizeGeminiImageModel(value: string | undefined) {
+  const model = value?.trim().replace(/^models\//, "");
+  if (!model || model === "gemini-image-configured" || model === "image-primary") {
+    return defaultGeminiImageModel;
   }
 
   return model;
