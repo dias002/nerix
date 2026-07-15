@@ -90,7 +90,7 @@ function preferredProviderOrder(input: {
     input.taskType === "knowledge_search" ||
     input.taskType === "internal_analysis"
   ) {
-    return ["anthropic", "openai", "gemini", "mock-provider"];
+    return ["openai", "anthropic", "gemini", "mock-provider"];
   }
 
   if (input.taskType === "chat_reply" || input.taskType === "customer_support") {
@@ -109,7 +109,7 @@ function preferredProviderOrder(input: {
   }
 
   if (isBusinessRoute(input)) {
-    return ["anthropic", "openai", "gemini", "mock-provider"];
+    return ["openai", "anthropic", "gemini", "mock-provider"];
   }
 
   return ["openai", "anthropic", "gemini", "mock-provider"];

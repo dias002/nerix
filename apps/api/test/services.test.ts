@@ -246,10 +246,10 @@ test("provider router separates supported and regional country routes", async ()
           preferredModel: "text-primary",
         }),
         {
-          provider: "anthropic",
-          model: "anthropic-text",
+          provider: "openai",
+          model: "gpt-4o-mini",
           policyMode: "dev_allow_all",
-          reason: "Dev policy: Anthropic is available for KZ.",
+          reason: "Dev policy: OpenAI is available for KZ.",
         }
       );
 
