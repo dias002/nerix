@@ -330,6 +330,32 @@ test("provider router separates supported and regional country routes", async ()
       );
     }
   );
+
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: false,
+      OPENAI_API_KEY: "openai-key",
+      OPENAI_TEXT_MODEL: "openai-heavy-configured",
+      ANTHROPIC_API_KEY: undefined,
+      GOOGLE_AI_API_KEY: undefined,
+    },
+    () => {
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          taskType: "website_copy",
+          preferredModel: "text-primary",
+        }),
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
+          policyMode: "dev_allow_all",
+          reason: "Dev policy: OpenAI is available for KZ.",
+        }
+      );
+    }
+  );
 });
 
 test("knowledge base entries feed business website jobs within a workspace", async () => {

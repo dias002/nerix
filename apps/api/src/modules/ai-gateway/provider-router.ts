@@ -122,7 +122,6 @@ function isBusinessRoute(input: { preferredModel: string; agentId?: string }) {
 function chooseAutoModel(input: { modality: AiModality; taskType?: AiTaskType }, providerCode: ProviderCode) {
   if (providerCode !== "openai") return null;
   if (input.modality !== "text") return null;
-  if (input.taskType !== "chat_reply" && input.taskType !== "customer_support") return null;
 
   return "gpt-4o-mini";
 }
