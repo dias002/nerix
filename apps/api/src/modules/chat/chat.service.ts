@@ -758,15 +758,40 @@ export class ChatService {
       return fail(new DomainError("provider_unavailable", "Media generation service is not configured.", 503));
     }
 
-    const generationResult = await this.generation.createJob({
-      userId: input.userId,
-      country: input.country,
-      language: input.language,
-      agentId: input.route.agentId,
-      modality: input.route.modality,
-      prompt: input.prompt,
-      isAdmin: input.isAdmin,
-    });
+    let generationResult;
+    try {
+      generationResult = await this.generation.createJob({
+        userId: input.userId,
+        country: input.country,
+        language: input.language,
+        agentId: input.route.agentId,
+        modality: input.route.modality,
+        prompt: input.prompt,
+        isAdmin: input.isAdmin,
+      });
+    } catch (error) {
+      await this.conversations.recordAiError({
+        userId: input.userId,
+        conversationId: input.conversationId,
+        messageId: input.userMessageId,
+        stage: "media_generation_start",
+        severity: "critical",
+        errorCode: "media_generation_exception",
+        errorMessage: error instanceof Error ? error.message : "Media generation threw an unknown error.",
+        provider: input.route.provider,
+        model: input.route.model,
+        agentId: input.route.agentId,
+        promptExcerpt: createPromptExcerpt(input.prompt),
+      });
+
+      return fail(
+        new DomainError(
+          "internal_error",
+          "Не удалось запустить медиа-генерацию. Попробуйте еще раз позже.",
+          500
+        )
+      );
+    }
     if (!generationResult.ok) return generationResult;
 
     const job = generationResult.value.job;
