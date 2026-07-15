@@ -1219,6 +1219,9 @@ function toReadableMessageItems(text: string): ReadableMessageItem[] {
     }
 
     if (!line) {
+      if (listBuffer && nextTextLineContinuesList(lines, index + 1, listBuffer.ordered)) {
+        continue;
+      }
       flushTextBlocks();
       continue;
     }
@@ -1332,6 +1335,17 @@ function normalizeReadableText(text: string) {
 
   if (buffer.length > 0) paragraphs.push(buffer.join(" "));
   return paragraphs.join("\n\n");
+}
+
+function nextTextLineContinuesList(lines: string[], startIndex: number, ordered: boolean) {
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+
+    return ordered ? /^\d+[.)]\s+/.test(line) : /^[-*•]\s+/.test(line);
+  }
+
+  return false;
 }
 
 function renderInlineMarkdown(text: string): ReactNode[] {
