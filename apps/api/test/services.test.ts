@@ -634,6 +634,25 @@ test("generation service creates media jobs, stores artifacts, and can be starte
     if (blockedGenerationResponse.ok) return;
     assert.equal(blockedGenerationResponse.error.code, "subscription_required");
 
+    const adminGenerationResponse = await dependencies.generation.createJob({
+      userId: "admin-user",
+      country: "KZ",
+      language: "ru",
+      modality: "image",
+      prompt: "собери промпт для изображения продукта",
+      isAdmin: true,
+    });
+    assert.equal(adminGenerationResponse.ok, true);
+    if (!adminGenerationResponse.ok) return;
+    assert.equal(adminGenerationResponse.value.job.status, "succeeded");
+    assert.equal(adminGenerationResponse.value.job.reservedCredits, 0);
+    assert.equal(adminGenerationResponse.value.job.finalCredits, 0);
+    assert.equal(adminGenerationResponse.value.job.reservationId, undefined);
+    assert.deepEqual(adminGenerationResponse.value.usage, {
+      reserveCredits: 0,
+      finalCredits: 0,
+    });
+
     const checkoutResponse = await dependencies.subscriptions.createCheckout({
       userId: "local-user",
       planId: "base",

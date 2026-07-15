@@ -117,6 +117,10 @@ export class GenerationService {
       unmetered: input.isAdmin,
     });
     if (!reservation.ok) return reservation;
+    const unmetered = input.isAdmin === true;
+    const reservedCredits = unmetered ? 0 : reservation.value.estimate.reserveCredits;
+    const reservationId = unmetered ? undefined : reservation.value.reservationId;
+    const finalCredits = unmetered ? 0 : reservation.value.estimate.estimatedCredits;
 
     let job = await this.generationRepository.createJob({
       id: jobId,
@@ -126,8 +130,8 @@ export class GenerationService {
       prompt,
       provider: routeResult.value.provider,
       model: routeResult.value.model,
-      reservedCredits: reservation.value.estimate.reserveCredits,
-      reservationId: reservation.value.reservationId,
+      reservedCredits,
+      reservationId,
       metadata: {
         route: routeResult.value,
         avatarVideo: sanitizeAvatarVideoMetadata(input.avatarVideo),
@@ -162,14 +166,14 @@ export class GenerationService {
         return ok({
           job: runningJob,
           route: routeResult.value,
-          usage: buildUsage(reservation.value.estimate.reserveCredits, null),
+          usage: buildUsage(reservedCredits, null),
         });
       }
 
       const finalized = await this.finalizeSucceededJob({
         userId: input.userId,
         job,
-        finalCredits: reservation.value.estimate.estimatedCredits,
+        finalCredits,
         mimeType: providerResult.mimeType ?? defaultMimeType(routeResult.value.modality),
         base64Data: providerResult.base64Data,
         providerUri: providerResult.providerUri,
@@ -182,7 +186,7 @@ export class GenerationService {
       return ok({
         job: finalized,
         route: routeResult.value,
-        usage: buildUsage(reservation.value.estimate.reserveCredits, finalized.finalCredits ?? null),
+        usage: buildUsage(reservedCredits, finalized.finalCredits ?? null),
       });
     } catch (error) {
       const failed = await this.refundFailedJob({
@@ -194,7 +198,7 @@ export class GenerationService {
       return ok({
         job: failed,
         route: routeResult.value,
-        usage: buildUsage(reservation.value.estimate.reserveCredits, 0),
+        usage: buildUsage(reservedCredits, 0),
       });
     }
   }
