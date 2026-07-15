@@ -209,6 +209,7 @@ function buildSelectableModelCatalog(): Array<
       label: `OpenAI default (${config.OPENAI_TEXT_MODEL || "backend"})`,
       description: "Модель OpenAI из backend-настроек Render.",
       tier: "balanced",
+      minPlanId: minimumPlanForConfiguredOpenAiModel(config.OPENAI_TEXT_MODEL),
       modalities: selectableTextModalities,
       modelByModality: {
         text: config.OPENAI_TEXT_MODEL,
@@ -432,6 +433,18 @@ function minimumPlanForTier(model: { tier: SelectableAiModel["tier"] }): PlanId 
   if (model.tier === "fast") return "base";
   if (model.tier === "balanced") return "ultra";
   return "pro";
+}
+
+function minimumPlanForConfiguredOpenAiModel(model: string | undefined): PlanId | null | undefined {
+  const normalizedModel = model?.toLowerCase();
+  if (!normalizedModel) return undefined;
+  if (normalizedModel === "gpt-4o-mini" || normalizedModel.startsWith("gpt-4o-mini-")) return null;
+  if (normalizedModel === "o4-mini" || normalizedModel.startsWith("o4-mini-")) return "base";
+  if (normalizedModel === "gpt-4.1-mini" || normalizedModel.startsWith("gpt-4.1-mini-")) return "ultra";
+  if (normalizedModel === "gpt-4o" || normalizedModel.startsWith("gpt-4o-")) return "ultra";
+  if (normalizedModel === "gpt-4.1" || normalizedModel.startsWith("gpt-4.1-")) return "pro";
+  if (normalizedModel === "o3" || normalizedModel.startsWith("o3-")) return "pro";
+  return undefined;
 }
 
 function planName(planId: PlanId | null) {

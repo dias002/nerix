@@ -394,6 +394,13 @@ test("chat usage policy gates manually selected text models by subscription plan
       });
       assert.equal(freeMiniResponse.ok, true);
 
+      const freeConfiguredResponse = await freePolicy.assertRequestAllowed({
+        userId: "free-user",
+        selectedModelId: "openai:configured",
+        route,
+      });
+      assert.equal(freeConfiguredResponse.ok, true);
+
       const freeFastResponse = await freePolicy.assertRequestAllowed({
         userId: "free-user",
         selectedModelId: "openai:o4-mini",

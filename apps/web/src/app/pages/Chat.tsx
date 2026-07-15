@@ -195,7 +195,7 @@ function withModelAccess(
   options: Array<Omit<AiModelOptionApiRecord, "minPlanId" | "minPlanName"> & { minPlanId?: PlanId | null }>
 ): AiModelOptionApiRecord[] {
   return options.map((option) => {
-    const minPlanId = "minPlanId" in option ? option.minPlanId ?? null : minimumPlanForModelTier(option.tier);
+    const minPlanId = "minPlanId" in option ? option.minPlanId ?? null : minimumPlanForModelOption(option);
     return {
       ...option,
       minPlanId,
@@ -204,9 +204,13 @@ function withModelAccess(
   });
 }
 
-function minimumPlanForModelTier(tier: AiModelOptionApiRecord["tier"]): PlanId | null {
-  if (tier === "fast") return "base";
-  if (tier === "balanced") return "ultra";
+function minimumPlanForModelOption(option: Pick<AiModelOptionApiRecord, "id" | "label" | "tier">): PlanId | null {
+  const normalizedLabel = option.label.toLowerCase();
+  if (option.id === "openai:gpt-4o-mini") return null;
+  if (option.id === "openai:configured" && normalizedLabel.includes("gpt-4o-mini")) return null;
+  if (option.id === "openai:configured" && normalizedLabel.includes("o4-mini")) return "base";
+  if (option.tier === "fast") return "base";
+  if (option.tier === "balanced") return "ultra";
   return "pro";
 }
 
