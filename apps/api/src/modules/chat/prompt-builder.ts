@@ -1,3 +1,4 @@
+import type { Language } from "@nomduchat/shared";
 import type { ConversationMessage } from "./conversation.types.js";
 
 export type ChatAttachment = {
@@ -39,8 +40,14 @@ export function buildConversationPrompt(previousMessages: ConversationMessage[],
   ].join("\n");
 }
 
-export function applyResponseStyle(prompt: string, style: ResponseStyle | undefined) {
-  return [responseStyleInstruction(style ?? "auto"), "", "Запрос пользователя:", prompt].join("\n");
+export function applyResponseStyle(prompt: string, style: ResponseStyle | undefined, language?: Language) {
+  return [
+    responseLanguageInstruction(language ?? "ru"),
+    responseStyleInstruction(style ?? "auto"),
+    "",
+    "Запрос пользователя:",
+    prompt,
+  ].join("\n");
 }
 
 export function buildRoutingPrompt(previousMessages: ConversationMessage[], currentPrompt: string) {
@@ -205,6 +212,35 @@ function responseStyleInstruction(style: ResponseStyle) {
     default:
       return withReadableFormat("Настройка ответа: авто. Выбери естественный формат под задачу пользователя.");
   }
+}
+
+function responseLanguageInstruction(language: Language) {
+  const base = "Если пользователь явно просит ответить на другом языке или просит перевод, выполни его языковую просьбу.";
+
+  if (language === "kz") {
+    return [
+      "Язык ответа: қазақ тілі.",
+      "По умолчанию отвечай на казахском языке, используя современную казахскую кириллицу и естественные формулировки.",
+      "Не переходи на русский или английский без прямой просьбы пользователя.",
+      base,
+    ].join("\n");
+  }
+
+  if (language === "en") {
+    return [
+      "Response language: English.",
+      "By default, answer in clear natural English.",
+      "Do not switch to Russian or Kazakh unless the user explicitly asks.",
+      base,
+    ].join("\n");
+  }
+
+  return [
+    "Язык ответа: русский.",
+    "По умолчанию отвечай на русском языке.",
+    "Не переходи на английский или казахский без прямой просьбы пользователя.",
+    base,
+  ].join("\n");
 }
 
 function isAttachmentLike(value: unknown): value is ChatAttachment {

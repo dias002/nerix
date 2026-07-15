@@ -199,7 +199,7 @@ export class ChatService {
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt: applyResponseStyle(buildConversationPrompt(previousMessages, prompt), input.responseStyle),
+      prompt: applyResponseStyle(buildConversationPrompt(previousMessages, prompt), input.responseStyle, input.language ?? "ru"),
       route: routeResult.value,
     });
     if (!completionResult.ok) return completionResult;
@@ -362,7 +362,7 @@ export class ChatService {
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt: applyResponseStyle(buildConversationPrompt(previousMessages, prompt), input.responseStyle),
+      prompt: applyResponseStyle(buildConversationPrompt(previousMessages, prompt), input.responseStyle, input.language ?? "ru"),
       route: routeResult.value,
       onDelta: callbacks.onDelta,
     });
@@ -478,7 +478,8 @@ export class ChatService {
       userMessageId: userMessage.id,
       prompt: applyResponseStyle(
         buildConversationPrompt(conversation.messages.slice(0, lastUserMessageIndex), prompt),
-        input.responseStyle ?? metadataResponseStyle
+        input.responseStyle ?? metadataResponseStyle,
+        input.language ?? "ru"
       ),
       route: routeResult.value,
       stage: "regenerate_complete",

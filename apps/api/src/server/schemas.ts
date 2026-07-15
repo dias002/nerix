@@ -9,5 +9,6 @@ export const countrySchema = z
     message: "Unsupported country code.",
   });
 
-export const languageSchema = z.enum(["ru", "kz", "en"]);
-
+export const languageSchema = z
+  .enum(["ru", "kz", "kk", "en"])
+  .transform((value) => (value === "kk" ? "kz" : value));

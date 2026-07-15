@@ -26,6 +26,7 @@ import { InMemoryWalletRepository } from "../src/modules/billing/wallet.reposito
 import { InMemoryBusinessJobRepository } from "../src/modules/business-jobs/business-job.repository.js";
 import { ChatService } from "../src/modules/chat/chat.service.js";
 import { InMemoryConversationRepository } from "../src/modules/chat/conversation.repository.js";
+import { applyResponseStyle } from "../src/modules/chat/prompt-builder.js";
 import { GeminiMediaGenerationProvider, HeyGenMediaGenerationProvider } from "../src/modules/generation/media-provider.js";
 import { InMemoryMailingRepository } from "../src/modules/mailings/mailing.repository.js";
 import { MailingService, parseContacts } from "../src/modules/mailings/mailing.service.js";
@@ -60,6 +61,17 @@ test("modality classifier detects media and code tasks", () => {
   assert.equal(inferModality("создай видео ролик"), "video");
   assert.equal(inferModality("сделай видео на 3 секунды про кофе"), "video");
   assert.equal(inferModality("обычный вопрос"), "text");
+});
+
+test("chat prompt builder enforces selected answer language", () => {
+  const kazakhPrompt = applyResponseStyle("Сәлем, қысқа жауап бер.", "auto", "kz");
+
+  assert.match(kazakhPrompt, /Язык ответа: қазақ тілі/);
+  assert.match(kazakhPrompt, /казахском языке/);
+  assert.match(kazakhPrompt, /Не переходи на русский/);
+
+  const englishPrompt = applyResponseStyle("Give a short answer.", "auto", "en");
+  assert.match(englishPrompt, /Response language: English/);
 });
 
 test("provider router separates supported and regional country routes", async () => {
