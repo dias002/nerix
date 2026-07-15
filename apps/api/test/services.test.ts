@@ -171,10 +171,26 @@ test("provider router separates supported and regional country routes", async ()
           country: "KZ",
           modality: "text",
           preferredModel: "text-primary",
+          selectedModelId: "openai:configured",
         }),
         {
           provider: "openai",
           model: "openai-text",
+          policyMode: "dev_allow_all",
+          reason: "User selected OpenAI default (openai-text).",
+        }
+      );
+
+      assert.deepEqual(
+        chooseProvider({
+          country: "KZ",
+          modality: "text",
+          taskType: "chat_reply",
+          preferredModel: "text-primary",
+        }),
+        {
+          provider: "openai",
+          model: "gpt-4o-mini",
           policyMode: "dev_allow_all",
           reason: "Dev policy: OpenAI is available for KZ.",
         }
@@ -235,7 +251,7 @@ test("provider router separates supported and regional country routes", async ()
         }),
         {
           provider: "openai",
-          model: "openai-text",
+          model: "gpt-4o-mini",
           policyMode: "dev_allow_all",
           reason: "Dev policy: OpenAI is available for KZ.",
         }

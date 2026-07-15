@@ -72,8 +72,8 @@ const envSchema = z.object({
     .default("false")
     .transform(parseBooleanFlag),
   OPENAI_API_KEY: z.string().optional(),
-  OPENAI_TEXT_MODEL: z.string().default("gpt-5.2"),
-  OPENAI_CODE_MODEL: z.string().default("gpt-5.2"),
+  OPENAI_TEXT_MODEL: z.string().default("gpt-4o-mini"),
+  OPENAI_CODE_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_IMAGE_MODEL: z.string().optional(),
   OPENAI_VOICE_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),

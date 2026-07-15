@@ -2149,7 +2149,7 @@ function sortOrder(planId: PlanId) {
 }
 
 function defaultProviderModel(code: string) {
-  if (code === "openai") return "gpt-5.2";
+  if (code === "openai") return "gpt-4o-mini";
   if (code === "anthropic") return "anthropic-text-configured";
   if (code === "gemini") return "gemini-text-configured";
   return "mock-text";

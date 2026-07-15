@@ -51,7 +51,7 @@ export function chooseProvider(input: {
       .find(Boolean) ??
     providers.find((candidate) => candidate.code !== "mock-provider") ??
     providers[0];
-  const model = provider.modelByModality[input.modality] ?? input.preferredModel;
+  const model = chooseAutoModel(input, provider.code) ?? provider.modelByModality[input.modality] ?? input.preferredModel;
 
   return {
     provider: provider.code,
@@ -117,4 +117,12 @@ function preferredProviderOrder(input: {
 
 function isBusinessRoute(input: { preferredModel: string; agentId?: string }) {
   return input.agentId === "business" || input.preferredModel === "business-primary";
+}
+
+function chooseAutoModel(input: { modality: AiModality; taskType?: AiTaskType }, providerCode: ProviderCode) {
+  if (providerCode !== "openai") return null;
+  if (input.modality !== "text") return null;
+  if (input.taskType !== "chat_reply" && input.taskType !== "customer_support") return null;
+
+  return "gpt-4o-mini";
 }
