@@ -315,7 +315,7 @@ export default function Chat() {
       getAiProviders()
         .then((response) => {
           if (!active) return;
-          setModelOptions(response.models ?? []);
+          setModelOptions(withModelAccess(response.models ?? []));
         })
         .catch(() => {
           if (!active) return;
