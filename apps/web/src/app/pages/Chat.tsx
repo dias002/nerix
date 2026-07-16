@@ -964,20 +964,27 @@ export default function Chat() {
               </div>
             </motion.div>
           ) : null}
-          {messages.filter((msg) => !(showEmptyState && msg.id === "intro")).map((msg) => (
+          {messages.filter((msg) => !(showEmptyState && msg.id === "intro")).map((msg) => {
+            const isGenerationMessage = Boolean(msg.generationJob);
+
+            return (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               key={msg.id}
               className={`group flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
             >
-              <div className={`${msg.generationJob ? "w-full max-w-[42rem]" : "max-w-[85%]"}`}>
+              <div className={`${isGenerationMessage ? "w-full max-w-[46rem]" : "max-w-[85%]"}`}>
                 <div
-                  className={`rounded-2xl px-5 py-3.5 text-[15px] leading-relaxed border ${
-                    msg.sender === "user"
-                      ? "bg-[#1A1A1A] border-white/10 text-white"
-                      : "bg-transparent border-transparent text-gray-200"
-                  }`}
+                  className={
+                    isGenerationMessage
+                      ? "text-[15px] leading-relaxed"
+                      : `rounded-2xl border px-5 py-3.5 text-[15px] leading-relaxed ${
+                          msg.sender === "user"
+                            ? "border-white/10 bg-[#1A1A1A] text-white"
+                            : "border-transparent bg-transparent text-gray-200"
+                        }`
+                  }
                 >
                   {msg.generationJob ? (
                     <GenerationJobCard
@@ -1003,7 +1010,7 @@ export default function Chat() {
                   ) : null}
                 </div>
 
-                {msg.sender === "ai" && msg.id !== "intro" && (
+                {msg.sender === "ai" && msg.id !== "intro" && !msg.generationJob && (
                   <div className="mt-2 flex items-center gap-1">
                     <button
                       type="button"
@@ -1049,7 +1056,8 @@ export default function Chat() {
                 )}
               </div>
             </motion.div>
-          ))}
+            );
+          })}
           {isThinking && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}

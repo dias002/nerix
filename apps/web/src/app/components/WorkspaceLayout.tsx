@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { AlertCircle, ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, ChevronRight, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, ImageIcon, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
+import { AlertCircle, ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, ImageIcon, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentSubscription, getPlans, getSubscriptionCheckouts, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type SubscriptionCheckoutApiRecord, type UsageLimitsApiResponse } from "../api";
 import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
@@ -237,19 +237,31 @@ export default function WorkspaceLayout() {
       >
         {/* Logo */}
         <div className="px-3 py-7">
-          <div className={`flex items-center ${sidebarCollapsed ? "justify-center" : "justify-center md:justify-between"}`}>
-            <Link to="/" className="block text-xl font-medium text-white text-center transition-colors hover:text-gray-300 md:text-left">
-              <span className={sidebarCollapsed ? "inline" : "md:hidden"}>N</span>
-              <span className={`${sidebarCollapsed ? "hidden" : "hidden md:inline"}`}>
-                {t.product}
-                {showBusinessBrand ? (
-                  <span className="ml-2 rounded-full border border-white/10 px-2 py-0.5 align-middle text-[11px] font-medium uppercase tracking-[0.12em] text-gray-400">
-                    Business
-                  </span>
-                ) : null}
-              </span>
-            </Link>
-            {!sidebarCollapsed ? (
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] transition-colors hover:border-white/20 hover:bg-white/[0.06]"
+              aria-label="Показать меню"
+              title="Показать меню"
+            >
+              <img src="/favicon.png" alt="" className="h-6 w-6 rounded-md object-cover" />
+            </button>
+          ) : (
+            <div className="flex items-center justify-center md:justify-between">
+              <Link to="/" className="block text-xl font-medium text-white text-center transition-colors hover:text-gray-300 md:text-left">
+                <span className="md:hidden">
+                  <img src="/favicon.png" alt={t.product} className="mx-auto h-8 w-8 rounded-lg object-cover" />
+                </span>
+                <span className="hidden md:inline">
+                  {t.product}
+                  {showBusinessBrand ? (
+                    <span className="ml-2 rounded-full border border-white/10 px-2 py-0.5 align-middle text-[11px] font-medium uppercase tracking-[0.12em] text-gray-400">
+                      Business
+                    </span>
+                  ) : null}
+                </span>
+              </Link>
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(true)}
@@ -259,19 +271,8 @@ export default function WorkspaceLayout() {
               >
                 <PanelLeftClose className="h-5 w-5" strokeWidth={1.5} />
               </button>
-            ) : null}
-          </div>
-          {sidebarCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(false)}
-              className="mt-5 flex h-9 w-full items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
-              aria-label="Показать меню"
-              title="Показать меню"
-            >
-              <ChevronRight className="h-5 w-5" strokeWidth={1.5} />
-            </button>
-          ) : null}
+            </div>
+          )}
           {!sidebarCollapsed ? (
             <button
               type="button"
@@ -286,78 +287,80 @@ export default function WorkspaceLayout() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-2">
-          <ul className="space-y-1">
-            {navItems.filter((item) => item.visible).map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item);
-              return (
-                <li key={item.path}>
-                  <Link
-                    to={item.path}
-                    className={`
-                      flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg transition-colors
-                      ${sidebarCollapsed ? "" : "md:justify-start"}
-                      ${
-                        active
-                          ? "bg-white/10 text-white"
-                          : "text-gray-400 hover:text-white hover:bg-white/5"
-                      }
-                    `}
-                    title={sidebarCollapsed ? item.label : undefined}
-                  >
-                    <Icon className="w-5 h-5" strokeWidth={1.5} />
-                    <span className={`${sidebarCollapsed ? "hidden" : "hidden md:inline"} text-sm font-medium`}>
-                      {item.label}
-                    </span>
-                  </Link>
-                  {!sidebarCollapsed && item.path === "/workspace/business" ? (
-                    <div
-                      aria-hidden={!businessMenuOpen}
-                      className={`hidden overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out md:block ${
-                        businessMenuOpen ? "max-h-72 translate-y-0 opacity-100" : "max-h-0 -translate-y-1 opacity-0"
-                      }`}
+        {!sidebarCollapsed ? (
+          <nav className="flex-1 px-3 py-2">
+            <ul className="space-y-1">
+              {navItems.filter((item) => item.visible).map((item) => {
+                const Icon = item.icon;
+                const active = isActive(item);
+                return (
+                  <li key={item.path}>
+                    <Link
+                      to={item.path}
+                      className={`
+                        flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg transition-colors md:justify-start
+                        ${
+                          active
+                            ? "bg-white/10 text-white"
+                            : "text-gray-400 hover:text-white hover:bg-white/5"
+                        }
+                      `}
                     >
-                      <ul className="mt-1 space-y-1 border-l border-white/10 pl-4">
-                        {businessNavItems.filter((subItem) => subItem.visible).map((subItem, index) => {
-                          const SubIcon = subItem.icon;
-                          const subActive =
-                            subItem.path === "/workspace/business"
-                              ? location.pathname === "/workspace/business"
-                              : location.pathname === subItem.path || location.pathname.startsWith(`${subItem.path}/`);
+                      <Icon className="w-5 h-5" strokeWidth={1.5} />
+                      <span className="hidden text-sm font-medium md:inline">
+                        {item.label}
+                      </span>
+                    </Link>
+                    {item.path === "/workspace/business" ? (
+                      <div
+                        aria-hidden={!businessMenuOpen}
+                        className={`hidden overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out md:block ${
+                          businessMenuOpen ? "max-h-72 translate-y-0 opacity-100" : "max-h-0 -translate-y-1 opacity-0"
+                        }`}
+                      >
+                        <ul className="mt-1 space-y-1 border-l border-white/10 pl-4">
+                          {businessNavItems.filter((subItem) => subItem.visible).map((subItem, index) => {
+                            const SubIcon = subItem.icon;
+                            const subActive =
+                              subItem.path === "/workspace/business"
+                                ? location.pathname === "/workspace/business"
+                                : location.pathname === subItem.path || location.pathname.startsWith(`${subItem.path}/`);
 
-                          return (
-                            <li
-                              key={subItem.path}
-                              className="transition-[opacity,transform] duration-300 ease-out"
-                              style={{
-                                transitionDelay: businessMenuOpen ? `${index * 35}ms` : "0ms",
-                                opacity: businessMenuOpen ? 1 : 0,
-                                transform: businessMenuOpen ? "translateX(0)" : "translateX(-6px)",
-                              }}
-                            >
-                              <Link
-                                to={subItem.path}
-                                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors ${
-                                  subActive
-                                    ? "bg-white/10 text-white"
-                                    : "text-gray-500 hover:bg-white/5 hover:text-white"
-                                }`}
+                            return (
+                              <li
+                                key={subItem.path}
+                                className="transition-[opacity,transform] duration-300 ease-out"
+                                style={{
+                                  transitionDelay: businessMenuOpen ? `${index * 35}ms` : "0ms",
+                                  opacity: businessMenuOpen ? 1 : 0,
+                                  transform: businessMenuOpen ? "translateX(0)" : "translateX(-6px)",
+                                }}
                               >
-                                <SubIcon className="h-4 w-4" strokeWidth={1.5} />
-                                <span className="truncate">{subItem.label}</span>
-                              </Link>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+                                <Link
+                                  to={subItem.path}
+                                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors ${
+                                    subActive
+                                      ? "bg-white/10 text-white"
+                                      : "text-gray-500 hover:bg-white/5 hover:text-white"
+                                  }`}
+                                >
+                                  <SubIcon className="h-4 w-4" strokeWidth={1.5} />
+                                  <span className="truncate">{subItem.label}</span>
+                                </Link>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        ) : (
+          <div className="flex-1" />
+        )}
 
         {!sidebarCollapsed && !isAdminNavigation && access.canUseBalance ? (
           <div className="hidden px-3 pb-3 md:block">
@@ -371,7 +374,7 @@ export default function WorkspaceLayout() {
           </div>
         ) : null}
 
-        {canUseRoleSwitcher ? (
+        {canUseRoleSwitcher && !sidebarCollapsed ? (
           <div className="px-3 pb-3">
             <div
               className={`relative rounded-2xl border border-white/10 bg-[#070707] p-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.32)] ${
@@ -451,22 +454,22 @@ export default function WorkspaceLayout() {
           </div>
         ) : null}
 
+        {!sidebarCollapsed ? (
         <div className="px-3 pb-3">
           <Link
             to="/"
-            className={`flex items-center justify-center gap-3 rounded-lg px-3 py-2.5 text-gray-500 transition-colors hover:bg-white/5 hover:text-white ${
-              sidebarCollapsed ? "" : "md:justify-start"
-            }`}
-            title={sidebarCollapsed ? t.nav.start : undefined}
+            className="flex items-center justify-center gap-3 rounded-lg px-3 py-2.5 text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:justify-start"
           >
             <ArrowLeft className="h-5 w-5" strokeWidth={1.5} />
-            <span className={`${sidebarCollapsed ? "hidden" : "hidden md:inline"} text-sm font-medium`}>{t.nav.start}</span>
+            <span className="hidden text-sm font-medium md:inline">{t.nav.start}</span>
           </Link>
         </div>
+        ) : null}
 
         {/* Footer / Profile */}
+        {!sidebarCollapsed ? (
         <div className="p-4 border-t border-white/10">
-          <div className={`flex items-center justify-center gap-3 py-2 ${sidebarCollapsed ? "" : "md:justify-start md:px-2"}`}>
+          <div className="flex items-center justify-center gap-3 py-2 md:justify-start md:px-2">
             <div className="relative">
               {profileAvatar ? (
                 <img
@@ -479,7 +482,7 @@ export default function WorkspaceLayout() {
               )}
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-black"></div>
             </div>
-            <div className={`${sidebarCollapsed ? "hidden" : "hidden md:block"} flex-1 min-w-0`}>
+            <div className="hidden flex-1 min-w-0 md:block">
               <p className="text-sm font-medium text-white truncate">{user?.name || user?.email || t.auth.guest}</p>
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <Zap className="w-3 h-3" />
@@ -490,7 +493,7 @@ export default function WorkspaceLayout() {
               <button
                 type="button"
                 onClick={logout}
-                className={`${sidebarCollapsed ? "hidden" : "hidden md:inline-flex"} h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white`}
+                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:inline-flex"
                 aria-label={t.auth.logout}
                 title={t.auth.logout}
               >
@@ -499,7 +502,7 @@ export default function WorkspaceLayout() {
             ) : (
               <Link
                 to="/auth?mode=register"
-                className={`${sidebarCollapsed ? "hidden" : "hidden md:inline-flex"} h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white`}
+                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:inline-flex"
                 aria-label={t.auth.createAccount}
                 title={t.auth.createAccount}
               >
@@ -508,6 +511,7 @@ export default function WorkspaceLayout() {
             )}
           </div>
         </div>
+        ) : null}
       </aside>
 
       {/* Main Content */}

@@ -21,66 +21,21 @@ export function GenerationJobCard({
   const isCancelled = job.status === "cancelled";
   const title = mediaTitle(job.modality, job.status);
   const detail = mediaDetail(job);
+  const previewClass = job.modality === "image" ? "aspect-square sm:aspect-[4/3]" : "aspect-video";
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#0B0B0B] shadow-2xl shadow-black/40">
-      <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-white">
-            {mediaIcon(job.modality, isPending)}
-          </div>
-          <div>
-            <div className="text-base font-medium text-white">{title}</div>
-            <div className="mt-1 text-xs text-gray-500">{detail}</div>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {isPending && onCancel ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={isCancelling}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isCancelling ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.7} />
-              ) : (
-                <CircleStop className="h-3.5 w-3.5" strokeWidth={1.7} />
-              )}
-              Остановить
-            </button>
-          ) : null}
-          {isReady && onShare ? (
-            <button
-              type="button"
-              onClick={onShare}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white"
-            >
-              <Share2 className="h-3.5 w-3.5" strokeWidth={1.7} />
-              Поделиться
-            </button>
-          ) : null}
-          {artifactUrl ? (
-            <a
-              href={artifactUrl}
-              download={`nomduchat-${job.modality}-${job.id.slice(0, 8)}${mediaExtension(job.resultMimeType)}`}
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white"
-            >
-              <Download className="h-3.5 w-3.5" strokeWidth={1.7} />
-              Скачать
-            </a>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="p-5">
-        {isPending ? (
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black">
-            <div className="aspect-video">
+    <div className="overflow-hidden rounded-[1.35rem] border border-white/10 bg-[#0D0D0D] shadow-2xl shadow-black/35">
+      <div className="p-3.5 sm:p-4">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
+          {isPending ? (
+            <div className={`relative ${previewClass}`}>
               <div className="flex h-full flex-col justify-between p-5">
                 <div className="flex items-center justify-between">
                   <div className="h-2.5 w-28 rounded-full bg-white/15" />
                   <div className="h-2.5 w-16 rounded-full bg-white/10" />
+                </div>
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] text-white">
+                  {mediaIcon(job.modality, true)}
                 </div>
                 <div className="space-y-3">
                   <div className="h-3 w-3/4 rounded-full bg-white/15" />
@@ -88,54 +43,115 @@ export function GenerationJobCard({
                   <div className="h-3 w-2/3 rounded-full bg-white/10" />
                 </div>
               </div>
+              <motion.div
+                aria-hidden="true"
+                className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                animate={{ x: ["0%", "420%"] }}
+                transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+              />
             </div>
-            <motion.div
-              aria-hidden="true"
-              className="absolute inset-y-0 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-white/20 to-transparent"
-              animate={{ x: ["0%", "420%"] }}
-              transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-            />
-          </div>
-        ) : null}
+          ) : null}
 
-        {isReady && artifactUrl ? (
-          <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
-            {job.modality === "video" || job.modality === "avatar_video" ? (
-              <video className="aspect-video w-full bg-black" src={artifactUrl} controls playsInline />
-            ) : job.modality === "music" || job.modality === "voice" ? (
-              <div className="space-y-4 p-5">
-                <div className="flex h-24 items-center justify-center gap-1.5 rounded-2xl bg-white/[0.03]">
-                  {[24, 44, 32, 58, 38, 50, 28, 46, 34].map((height, index) => (
-                    <span key={index} className="w-2 rounded-full bg-white/70" style={{ height }} />
-                  ))}
+          {isReady && artifactUrl ? (
+            <>
+              {job.modality === "video" || job.modality === "avatar_video" ? (
+                <video className="aspect-video w-full bg-black" src={artifactUrl} controls playsInline />
+              ) : job.modality === "music" || job.modality === "voice" ? (
+                <div className="space-y-4 p-5">
+                  <div className="flex h-24 items-center justify-center gap-1.5 rounded-2xl bg-white/[0.03]">
+                    {[24, 44, 32, 58, 38, 50, 28, 46, 34].map((height, index) => (
+                      <span key={index} className="w-2 rounded-full bg-white/70" style={{ height }} />
+                    ))}
+                  </div>
+                  <audio className="w-full" src={artifactUrl} controls />
                 </div>
-                <audio className="w-full" src={artifactUrl} controls />
+              ) : job.modality === "image" ? (
+                <img className="max-h-[38rem] w-full object-contain" src={artifactUrl} alt={job.prompt} />
+              ) : (
+                <div className="p-5 text-sm text-gray-400">Файл готов.</div>
+              )}
+            </>
+          ) : null}
+
+          {isReady && !artifactUrl ? (
+            <div className={`${previewClass} flex items-center justify-center px-4 py-3 text-sm text-gray-400`}>
+              <div className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.8} />
+                Файл готов, загружаю плеер...
               </div>
-            ) : job.modality === "image" ? (
-              <img className="max-h-[34rem] w-full object-contain" src={artifactUrl} alt={job.prompt} />
-            ) : (
-              <div className="p-5 text-sm text-gray-400">Файл готов.</div>
-            )}
-          </div>
-        ) : null}
+            </div>
+          ) : null}
 
-        {isReady && !artifactUrl ? (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-400">
-            Файл готов, загружаю плеер...
-          </div>
-        ) : null}
+          {isFailed ? (
+            <div className={`${previewClass} flex items-center justify-center p-5`}>
+              <div className="max-w-xl rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-100">
+                {job.errorMessage || "Генерация не завершилась. Кредиты возвращены."}
+              </div>
+            </div>
+          ) : null}
 
-        {isFailed ? (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-            {job.errorMessage || "Генерация не завершилась. Кредиты возвращены."}
-          </div>
-        ) : null}
+          {isCancelled ? (
+            <div className={`${previewClass} flex items-center justify-center p-5`}>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-300">
+                Генерация остановлена. Кредиты вернулись на баланс.
+              </div>
+            </div>
+          ) : null}
+        </div>
 
-        {isCancelled ? (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-300">
-            Генерация остановлена. Кредиты вернулись на баланс.
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-white">
+                {mediaIcon(job.modality, isPending)}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-white">{title}</div>
+                <div className="mt-0.5 text-xs text-gray-500">{detail}</div>
+              </div>
+            </div>
+            <div className="mt-3 rounded-xl border border-white/10 bg-black/35 px-3 py-2 text-sm leading-relaxed text-gray-400">
+              {job.prompt}
+            </div>
           </div>
-        ) : null}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {isPending && onCancel ? (
+              <button
+                type="button"
+                onClick={onCancel}
+                disabled={isCancelling}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isCancelling ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.7} />
+                ) : (
+                  <CircleStop className="h-3.5 w-3.5" strokeWidth={1.7} />
+                )}
+                Остановить
+              </button>
+            ) : null}
+            {isReady && onShare ? (
+              <button
+                type="button"
+                onClick={onShare}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white"
+              >
+                <Share2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+                Поделиться
+              </button>
+            ) : null}
+            {artifactUrl ? (
+              <a
+                href={artifactUrl}
+                download={`nomduchat-${job.modality}-${job.id.slice(0, 8)}${mediaExtension(job.resultMimeType)}`}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white"
+              >
+                <Download className="h-3.5 w-3.5" strokeWidth={1.7} />
+                Скачать
+              </a>
+            ) : null}
+          </div>
+        </div>
       </div>
     </div>
   );
