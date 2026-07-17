@@ -520,6 +520,13 @@ test("auth profile exposes role permissions and protects admin-only routes", asy
     assert.ok(adminControlResponse.json().agents.some((agent: { id: string }) => agent.id === "image"));
     assert.ok(Array.isArray(adminControlResponse.json().promotions));
     assert.ok(Array.isArray(adminControlResponse.json().contentBlocks));
+    assert.ok(Array.isArray(adminControlResponse.json().integrationChecks));
+    assert.ok(
+      adminControlResponse.json().integrationChecks.some((check: { key: string }) => check.key === "oauth.yandex")
+    );
+    assert.ok(
+      adminControlResponse.json().integrationChecks.some((check: { key: string }) => check.key === "mail.lifecycle")
+    );
     assert.ok(typeof adminControlResponse.json().note === "string");
 
     const adminProviderControlResponse = await app.inject({

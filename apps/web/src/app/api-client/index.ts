@@ -477,12 +477,23 @@ export type AdminAuditApiRecord = {
   createdAt: string;
 };
 
+export type AdminIntegrationCheckApiRecord = {
+  key: string;
+  category: string;
+  label: string;
+  status: "ok" | "attention" | "missing" | "manual";
+  configured: boolean;
+  detail: string;
+  action: string;
+};
+
 export type AdminControlStateApiResponse = {
   featureFlags: AdminFeatureFlagApiRecord[];
   aiProviders: AdminAiProviderSettingApiRecord[];
   agents: AdminAgentApiRecord[];
   promotions: AdminPromotionApiRecord[];
   contentBlocks: AdminContentBlockApiRecord[];
+  integrationChecks: AdminIntegrationCheckApiRecord[];
   auditLog: AdminAuditApiRecord[];
   policyMode: string;
   note: string;

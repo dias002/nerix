@@ -46,6 +46,7 @@ import {
   type AdminContentBlockApiRecord,
   type AdminControlStateApiResponse,
   type AdminFeatureFlagApiRecord,
+  type AdminIntegrationCheckApiRecord,
   type AdminOverviewApiResponse,
   type AdminPricingApiRecord,
   type AdminPromotionApiRecord,
@@ -160,6 +161,12 @@ export default function Admin() {
         value: formatNumber(effectiveControl.contentBlocks.filter((block) => block.active).length),
         detail: `${formatNumber(effectiveControl.contentBlocks.length)} блоков`,
         icon: FilePenLine,
+      },
+      {
+        label: "Интеграции",
+        value: formatNumber(effectiveControl.integrationChecks.filter((check) => check.status === "ok").length),
+        detail: `${formatNumber(effectiveControl.integrationChecks.length)} проверок`,
+        icon: Plug,
       },
     ],
     [effectiveControl]
@@ -846,7 +853,7 @@ export default function Admin() {
 
         {activeTab === "control" ? (
           <section className="space-y-5">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
               {controlCounts.map((stat) => (
                 <article key={stat.label} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
                   <stat.icon className="h-5 w-5 text-gray-500" strokeWidth={1.5} />
@@ -865,6 +872,52 @@ export default function Admin() {
                 </p>
               </div>
             </div>
+
+            <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-gray-500" strokeWidth={1.5} />
+                    <h2 className="text-xl font-medium">Готовность интеграций</h2>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-600">
+                    Быстрый контроль внешних сервисов из чеклиста: входы, письма, оплаты, аналитика и медиа-провайдеры.
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-xs text-gray-400">
+                  <Plug className="h-3.5 w-3.5" strokeWidth={1.7} />
+                  {formatNumber(effectiveControl.integrationChecks.filter((check) => check.status === "ok").length)} готово
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                {effectiveControl.integrationChecks.length > 0 ? (
+                  effectiveControl.integrationChecks.map((check) => (
+                    <div key={check.key} className="rounded-2xl border border-white/10 bg-black p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-gray-500">
+                              {check.category}
+                            </span>
+                            <h3 className="text-sm font-medium text-white">{check.label}</h3>
+                          </div>
+                          <p className="mt-2 text-xs leading-relaxed text-gray-600">{check.detail}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs ${integrationStatusClass(check.status)}`}>
+                          {integrationStatusLabel(check.status)}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-xs leading-relaxed text-gray-500">{check.action}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-white/10 bg-black p-5 text-sm leading-relaxed text-gray-500 lg:col-span-2">
+                    Проверки интеграций загрузятся из API вместе с центром управления.
+                  </div>
+                )}
+              </div>
+            </article>
 
             <article className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -1579,4 +1632,18 @@ export default function Admin() {
       </div>
     </div>
   );
+}
+
+function integrationStatusLabel(status: AdminIntegrationCheckApiRecord["status"]) {
+  if (status === "ok") return "готово";
+  if (status === "attention") return "внимание";
+  if (status === "manual") return "ручной шаг";
+  return "не подключено";
+}
+
+function integrationStatusClass(status: AdminIntegrationCheckApiRecord["status"]) {
+  if (status === "ok") return "border-emerald-400/20 bg-emerald-400/10 text-emerald-100";
+  if (status === "attention") return "border-amber-400/20 bg-amber-400/10 text-amber-100";
+  if (status === "manual") return "border-sky-400/20 bg-sky-400/10 text-sky-100";
+  return "border-red-500/20 bg-red-500/10 text-red-200";
 }

@@ -41,6 +41,7 @@ export function createEmptyAdminControlState(): AdminControlStateApiResponse {
     agents: [],
     promotions: [],
     contentBlocks: [],
+    integrationChecks: [],
     auditLog: [],
     policyMode: "local",
     note: "Реальное состояние запуска загрузится из API. Демо-значения здесь не подставляются.",

@@ -105,12 +105,25 @@ export type AdminAuditRecord = {
   createdAt: string;
 };
 
+export type AdminIntegrationCheckStatus = "ok" | "attention" | "missing" | "manual";
+
+export type AdminIntegrationCheckRecord = {
+  key: string;
+  category: string;
+  label: string;
+  status: AdminIntegrationCheckStatus;
+  configured: boolean;
+  detail: string;
+  action: string;
+};
+
 export type AdminControlState = {
   featureFlags: AdminFeatureFlagRecord[];
   aiProviders: AdminAiProviderSettingRecord[];
   agents: AdminAgentRecord[];
   promotions: AdminPromotionRecord[];
   contentBlocks: AdminContentBlockRecord[];
+  integrationChecks: AdminIntegrationCheckRecord[];
   auditLog: AdminAuditRecord[];
   policyMode: string;
   note: string;
@@ -725,6 +738,7 @@ export class AdminService {
         agents: agentsResult.ok ? agentsResult.value.map(mapAdminAgentRecord) : [],
         promotions,
         contentBlocks,
+        integrationChecks: buildIntegrationChecks(),
         auditLog,
         policyMode: getProviderPolicyMode(),
         note: "Эти настройки хранятся в базе и позволяют менять поведение приложения без правки кода.",
@@ -1536,6 +1550,7 @@ function fallbackControlState(agents?: AgentRecord[]): AdminControlState {
       ...block,
       updatedAt: new Date().toISOString(),
     })),
+    integrationChecks: buildIntegrationChecks(),
     auditLog: [],
     policyMode: getProviderPolicyMode(),
     note: configuredProviders.size > 0
@@ -1643,6 +1658,148 @@ function fallbackAiBudgetState(): AdminAiBudgetState {
     );
 
   return buildAiBudgetState(providers);
+}
+
+function buildIntegrationChecks(): AdminIntegrationCheckRecord[] {
+  const smtpConfigured = Boolean(
+    config.SMTP_BZ_API_KEY || (config.SMTP_HOST && config.SMTP_USERNAME && config.SMTP_PASSWORD)
+  );
+  const metrikaId = process.env.VITE_YANDEX_METRIKA_ID?.trim() || process.env.YANDEX_METRIKA_ID?.trim();
+  const yandexVerification =
+    process.env.VITE_YANDEX_VERIFICATION_CODE?.trim() || process.env.YANDEX_VERIFICATION_CODE?.trim();
+
+  return [
+    integrationCheck({
+      key: "geo.country",
+      category: "Гео",
+      label: "Определение страны по IP",
+      status: "ok",
+      configured: true,
+      detail: "API читает country headers от Cloudflare, Vercel, CloudFront и reverse proxy.",
+      action: "На проде проверьте, что proxy передает cf-ipcountry или x-vercel-ip-country.",
+    }),
+    integrationCheck({
+      key: "oauth.google",
+      category: "Вход",
+      label: "Google OAuth",
+      status: config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET ? "ok" : "missing",
+      configured: Boolean(config.GOOGLE_CLIENT_ID && config.GOOGLE_CLIENT_SECRET),
+      detail: "Для России Google отключается политикой, для других стран нужен OAuth client.",
+      action: "Добавьте GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET в Render.",
+    }),
+    integrationCheck({
+      key: "oauth.yandex",
+      category: "Вход",
+      label: "Yandex ID",
+      status: config.YANDEX_CLIENT_ID && config.YANDEX_CLIENT_SECRET ? "ok" : "missing",
+      configured: Boolean(config.YANDEX_CLIENT_ID && config.YANDEX_CLIENT_SECRET),
+      detail: "Быстрый вход для пользователей из РФ подключается через Yandex OAuth.",
+      action: "Добавьте YANDEX_CLIENT_ID и YANDEX_CLIENT_SECRET в Render.",
+    }),
+    integrationCheck({
+      key: "oauth.vk",
+      category: "Вход",
+      label: "VK ID / Mail.ru через VK ID",
+      status: config.VK_CLIENT_ID && config.VK_CLIENT_SECRET ? "ok" : "missing",
+      configured: Boolean(config.VK_CLIENT_ID && config.VK_CLIENT_SECRET),
+      detail: "VK ID используется также для кнопки Mail.ru через VK ID.",
+      action: "Добавьте VK_CLIENT_ID и VK_CLIENT_SECRET в Render.",
+    }),
+    integrationCheck({
+      key: "oauth.sber",
+      category: "Вход",
+      label: "Sber ID",
+      status: "manual",
+      configured: false,
+      detail: "В интерфейсе Sber ID отмечен как скоро; backend-провайдер Sber еще не подключен.",
+      action: "Нужны доступ к Sber ID, client id/secret, redirect URL и отдельная реализация OAuth.",
+    }),
+    integrationCheck({
+      key: "mail.transactional",
+      category: "Почта",
+      label: "Письма регистрации и оплаты",
+      status: smtpConfigured ? "ok" : "missing",
+      configured: smtpConfigured,
+      detail: "Транзакционные письма используют SMTP.BZ или обычный SMTP.",
+      action: "Добавьте SMTP_BZ_API_KEY или SMTP_HOST, SMTP_USERNAME, SMTP_PASSWORD.",
+    }),
+    integrationCheck({
+      key: "mail.lifecycle",
+      category: "Почта",
+      label: "Напоминания 1/3 дня и окончание тарифа",
+      status: smtpConfigured && config.LIFECYCLE_NOTIFICATIONS_TOKEN ? "ok" : smtpConfigured ? "attention" : "missing",
+      configured: smtpConfigured && Boolean(config.LIFECYCLE_NOTIFICATIONS_TOKEN),
+      detail: "Маршрут /notifications/lifecycle/run готов; для продакшена нужен секрет и cron.",
+      action: "Задайте LIFECYCLE_NOTIFICATIONS_TOKEN и cron-запрос раз в день.",
+    }),
+    integrationCheck({
+      key: "payment.kaspi",
+      category: "Оплата",
+      label: "Kaspi",
+      status: config.KASPI_CHECKOUT_URL && config.KASPI_API_TOKEN ? "ok" : "missing",
+      configured: Boolean(config.KASPI_CHECKOUT_URL && config.KASPI_API_TOKEN),
+      detail: "Kaspi используется для Казахстана.",
+      action: "Добавьте KASPI_CHECKOUT_URL и KASPI_API_TOKEN.",
+    }),
+    integrationCheck({
+      key: "payment.yookassa",
+      category: "Оплата",
+      label: "YooKassa",
+      status: config.YOOKASSA_SHOP_ID && config.YOOKASSA_SECRET_KEY ? "ok" : "missing",
+      configured: Boolean(config.YOOKASSA_SHOP_ID && config.YOOKASSA_SECRET_KEY),
+      detail: "YooKassa используется для России и требует email для чеков.",
+      action: "Добавьте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY.",
+    }),
+    integrationCheck({
+      key: "analytics.yandex",
+      category: "Аналитика",
+      label: "Яндекс Метрика и Вебмастер",
+      status: metrikaId && yandexVerification ? "ok" : metrikaId || yandexVerification ? "attention" : "missing",
+      configured: Boolean(metrikaId && yandexVerification),
+      detail: "Frontend умеет вставлять Метрику и yandex-verification из env.",
+      action: "Добавьте VITE_YANDEX_METRIKA_ID и VITE_YANDEX_VERIFICATION_CODE при сборке web.",
+    }),
+    integrationCheck({
+      key: "seo.assets",
+      category: "SEO",
+      label: "Favicon, robots, sitemap",
+      status: "ok",
+      configured: true,
+      detail: "В web/public есть favicon, manifest, robots.txt и sitemap.xml.",
+      action: "После деплоя отправьте sitemap.xml в Яндекс.Вебмастер вручную.",
+    }),
+    integrationCheck({
+      key: "media.openai",
+      category: "Медиа",
+      label: "OpenAI текст/изображения/голос",
+      status: config.OPENAI_API_KEY ? "ok" : "missing",
+      configured: Boolean(config.OPENAI_API_KEY),
+      detail: "OpenAI включается только при наличии OPENAI_API_KEY.",
+      action: "Добавьте OPENAI_API_KEY и при необходимости OPENAI_IMAGE_MODEL, OPENAI_VOICE_MODEL.",
+    }),
+    integrationCheck({
+      key: "media.gemini",
+      category: "Медиа",
+      label: "Gemini изображения/видео/музыка",
+      status: config.GOOGLE_AI_API_KEY ? "ok" : "missing",
+      configured: Boolean(config.GOOGLE_AI_API_KEY),
+      detail: "Старые placeholder-модели нормализуются в рабочие дефолты Gemini.",
+      action: "Добавьте GOOGLE_AI_API_KEY и проверьте доступность нужных моделей в кабинете Google AI.",
+    }),
+    integrationCheck({
+      key: "media.heygen",
+      category: "Медиа",
+      label: "HeyGen аватар-видео",
+      status: config.HEYGEN_API_KEY ? "ok" : "missing",
+      configured: Boolean(config.HEYGEN_API_KEY),
+      detail: "Аватар-видео создается через HeyGen Video Agent.",
+      action: "Добавьте HEYGEN_API_KEY и при необходимости HEYGEN_AVATAR_ID, HEYGEN_VOICE_ID.",
+    }),
+  ];
+}
+
+function integrationCheck(input: AdminIntegrationCheckRecord): AdminIntegrationCheckRecord {
+  return input;
 }
 
 function aiBudgetStatus(
