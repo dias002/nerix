@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { prepareWorkspaceUser } from "./support";
 
 test("chat answer can be selected as best", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.localStorage.setItem("nomduchat-guest-chat-requests", "1");
-  });
+  await prepareWorkspaceUser(page);
 
   await page.goto("/workspace/chat");
+  await page.getByLabel("Модель ответа").selectOption({ label: "Local Mock" });
   await page.getByPlaceholder("Сообщение...").fill("Сделай короткий план для nomduchat");
   await page.keyboard.press("Enter");
 

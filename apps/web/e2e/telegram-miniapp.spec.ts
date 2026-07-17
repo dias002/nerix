@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { prepareWorkspaceUser } from "./support";
 
 test("Telegram Mini App builder generates a bot draft and creates an order", async ({ page }) => {
+  await prepareWorkspaceUser(page, "business_owner");
   await page.goto("/telegram/miniapp/bot-builder");
 
   await expect(page.getByRole("heading", { name: "AI bot builder" })).toBeVisible();

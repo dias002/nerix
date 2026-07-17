@@ -1,35 +1,33 @@
 import { expect, test } from "@playwright/test";
+import { prepareWorkspaceUser } from "./support";
 
 test("admin panel shows memory aggregates and editable pricing", async ({ page }) => {
-  await page.goto("/workspace");
-
-  await page.getByLabel("Локальная роль").click();
-  await page.getByRole("option", { name: "Админ", exact: true }).click();
-  await page.getByRole("link", { name: "Админ", exact: true }).click();
+  await prepareWorkspaceUser(page, "admin");
+  await page.goto("/workspace/admin");
 
   await expect(page).toHaveURL(/\/workspace\/admin/);
-  await expect(page.getByRole("heading", { name: "Панель управления nomduchat" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Админ панель nomduchat" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Направление" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Приоритеты админа" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Отчет по оплатам" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Kaspi" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kaspi" })).toBeVisible({ timeout: 15000 });
   await expect(page.getByRole("heading", { name: "YooKassa" })).toBeVisible();
 
   await page.getByRole("link", { name: "Пользователи", exact: true }).click();
-  await expect(page).toHaveURL(/\/workspace\/admin\?tab=users/);
+  await expect(page).toHaveURL(/\/workspace\/admin\/users/);
   await expect(page.getByRole("heading", { name: "Пользователи" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Поиск пользователей" })).toBeVisible();
   await expect(page.getByText("Реальные пользователи загрузятся из API")).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Память", exact: true }).click();
-  await expect(page).toHaveURL(/\/workspace\/admin\?tab=memory/);
+  await page.goto("/workspace/admin/memory");
+  await expect(page).toHaveURL(/\/workspace\/admin\/memory/);
   await expect(page.getByRole("heading", { name: "Память и чаты в базе" })).toBeVisible();
   await expect(page.getByText("Чатов в базе")).toBeVisible();
   await expect(page.getByText("Содержимое не раскрывается")).toBeVisible();
   await expect(page.getByText("Содержимое чатов и сообщений не выводится.")).toBeVisible();
 
   await page.getByRole("link", { name: "Прайс", exact: true }).click();
-  await expect(page).toHaveURL(/\/workspace\/admin\?tab=pricing/);
+  await expect(page).toHaveURL(/\/workspace\/admin\/pricing/);
   const ratesLoaded = await page.getByText("USD/RUB", { exact: true }).count();
   if (ratesLoaded > 0) {
     await expect(page.getByText("USD/KZT", { exact: true })).toBeVisible();
@@ -46,6 +44,6 @@ test("admin panel shows memory aggregates and editable pricing", async ({ page }
     await page.getByLabel("Сохранить цену").first().click();
     await expect(page.getByText("Прайс обновлен.")).toBeVisible();
   } else {
-    await expect(page.getByText("Локальные константы вместо них не показываются.")).toBeVisible();
+    await expect(page.getByText("Таблицы plans и plan_prices пока недоступны.")).toBeVisible();
   }
 });

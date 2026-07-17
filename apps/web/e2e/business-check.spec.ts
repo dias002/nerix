@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
+import { prepareWorkspaceUser } from "./support";
 
 test("business cabinet user flow", async ({ page }) => {
+  await prepareWorkspaceUser(page, "business_owner");
   await page.goto("/workspace/agents");
   await expect(page.getByRole("heading", { name: "Агенты" })).toBeVisible();
-  await page.getByRole("link", { name: "Бизнес" }).click();
+  await page.getByRole("link", { name: "Бизнес", exact: true }).click();
   await expect(page).toHaveURL(/\/workspace\/business$/);
   await expect(page.getByRole("heading", { name: "Бизнес-разделы nomduchat" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Основные разделы теперь в левом меню" })).toBeVisible();
@@ -18,12 +20,14 @@ test("business cabinet user flow", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Отчеты сотрудников" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Команда" })).toBeVisible();
   await page.getByRole("button", { name: "Пригласить сотрудника" }).click();
-  await expect(page.getByText(/Приглашение будет доступно|Приглашать сотрудников может/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Новый сотрудник" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Добавить сотрудника" })).toBeVisible();
+  await page.getByRole("button", { name: "Отмена" }).click();
 
   await page.getByRole("link", { name: "ИИ в Telegram" }).click();
   await expect(page).toHaveURL(/\/workspace\/business\/telegram-bot$/);
-  await expect(page.getByRole("heading", { name: "ИИ-менеджер в Telegram, который не теряет клиентов" })).toBeVisible();
-  await page.getByRole("button", { name: "Создать своего ИИ-менеджера в Telegram" }).click();
+  await expect(page.getByRole("heading", { name: "Запуск Telegram-менеджера с готовыми правилами ответа" })).toBeVisible();
+  await page.getByRole("button", { name: "Оформить заявку на Telegram-менеджера" }).click();
   await expect(page.getByRole("heading", { name: "Кто запускает менеджера" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Дальше" })).toBeDisabled();
   await page.getByPlaceholder("@username, телефон или WhatsApp").fill("@nomdu_manager");

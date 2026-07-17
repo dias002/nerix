@@ -161,7 +161,7 @@ export default function Apps() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="truncate text-base font-semibold text-white">{app.title}</h3>
+                      <div className="truncate text-base font-semibold text-white">{app.title}</div>
                       <span className="shrink-0 rounded-full border border-white/10 bg-black px-2 py-0.5 text-[11px] text-gray-500">
                         {app.status}
                       </span>

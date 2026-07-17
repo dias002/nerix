@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { prepareBase } from "./support";
 
 test("local role switcher changes workspace navigation", async ({ page }) => {
+  await prepareBase(page);
   await page.goto("/workspace");
 
   const chooseRole = async (name: string) => {
@@ -13,7 +15,8 @@ test("local role switcher changes workspace navigation", async ({ page }) => {
   await chooseRole("Админ");
   await expect(page.getByRole("link", { name: "Админ", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Пользователи", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Память", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Запуск", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "AI бюджет", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Прайс", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Рассылки", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Главная", exact: true })).toHaveCount(0);

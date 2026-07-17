@@ -110,12 +110,12 @@ test("workspace app and project aliases behave like real product routes", async 
   await expect(page).toHaveURL(/\/workspace\/projects$/);
   await expect(page.getByRole("heading", { name: "Проекты" })).toBeVisible();
 
-  await page.getByPlaceholder("Например, SEO-раздел").fill("Проверка таблицы");
+  await page.getByPlaceholder("SEO-раздел").fill("Проверка таблицы");
   await page.getByPlaceholder("Что нужно сделать").fill("Закрыть пользовательские сценарии");
   await page.getByRole("button", { name: "Создать" }).click();
   await expect(page.getByRole("heading", { name: "Проверка таблицы" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Продолжить в чате" }).first().click();
+  await page.getByRole("button", { name: "В чат" }).first().click();
   await expect(page).toHaveURL(/\/workspace\/chat$/);
   await expect(page.getByPlaceholder("Сообщение...")).toContainText("Помоги продолжить проект");
 });

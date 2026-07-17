@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { OutgoingHttpHeaders } from "node:http";
 import { z } from "zod";
 import type { Result } from "../../domain/result.js";
 import { resolveRequestUserId } from "../../server/auth-context.js";
@@ -149,7 +150,13 @@ export async function registerChatRoutes(
     const allowed = await assertFreeUserAiRequestAllowed(request, chat, abuseGuard, user.value.userId, user.value.isAdmin);
     if (!allowed.ok) return sendResult(reply, allowed);
 
+    const inheritedHeaders: OutgoingHttpHeaders = {};
+    for (const [name, value] of Object.entries(reply.getHeaders())) {
+      if (value !== undefined) inheritedHeaders[name] = value;
+    }
+
     reply.raw.writeHead(200, {
+      ...inheritedHeaders,
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",

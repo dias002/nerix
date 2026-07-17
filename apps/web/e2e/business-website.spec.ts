@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { prepareWorkspaceUser } from "./support";
 
 test("Business website builder opens a guided modal and generates a preview", async ({ page }) => {
+  await prepareWorkspaceUser(page, "business_owner");
   await page.goto("/workspace/business/website");
 
   await expect(page.getByRole("heading", { name: "Сайт, который клиент может править сам" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Клиент пишет, что ему нужно, а мы собираем первый сайт и показываем превью." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Клиент пишет, что ему нужно, а мы собираем первый сайт на готовом адресе nomduchat." })).toBeVisible();
   await page.getByRole("button", { name: "Создать сайт" }).first().click();
 
   const modal = page.locator("div.fixed").filter({ hasText: "Собрать сайт по короткому опросу" });
@@ -31,15 +33,12 @@ test("Business website builder opens a guided modal and generates a preview", as
   await modal.getByRole("button", { name: "Премиум Темный, спокойный, дорогой" }).click();
   await modal.getByRole("button", { name: "Дальше" }).click();
 
-  await expect(modal.getByRole("heading", { name: "Оплата запуска" })).toBeVisible();
-  await modal.getByLabel("Номер карты").fill("4242 4242 4242 4242");
-  await modal.getByLabel("Имя на карте").fill("NOMDU TEST");
-  await modal.getByPlaceholder("MM/YY").fill("12/30");
-  await modal.getByLabel("CVV").fill("123");
-  await modal.getByLabel("Телефон для чека").fill("+77000000000");
-  await modal.getByRole("button", { name: "Подтвердить и собрать сайт" }).click();
+  await expect(modal.getByRole("heading", { name: "Проверка и сборка" })).toBeVisible();
+  await expect(modal.getByText("Черновик без карты")).toBeVisible();
+  await modal.getByRole("button", { name: "Собрать сайт" }).click();
 
-  await expect(modal.getByText("Сайт собран по вашему описанию").first()).toBeVisible();
-  await expect(modal.getByText("Превью сайта")).toBeVisible();
-  await expect(modal.getByRole("heading", { name: /Nomdu Coffee/ }).first()).toBeVisible();
+  await expect(page.getByText("Черновик сайта собран. Теперь его можно править и публиковать.")).toBeVisible();
+  await expect(page.getByText("AI-сборка готова")).toBeVisible();
+  await expect(page.getByText("Превью сайта")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Nomdu Coffee/ }).first()).toBeVisible();
 });
