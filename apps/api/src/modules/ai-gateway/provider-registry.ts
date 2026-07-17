@@ -32,6 +32,7 @@ const allModalities: AiModality[] = ["text", "code", "image", "video", "avatar_v
 const selectableTextModalities: AiModality[] = ["text", "code", "file"];
 const defaultGeminiImageModel = "gemini-3.1-flash-image";
 const defaultGeminiVideoModel = "veo-3.1-lite-generate-preview";
+const defaultGeminiMusicModel = "lyria-3-clip-preview";
 
 export function getProviderPolicyMode(): ProviderPolicyMode {
   const explicit = config.AI_PROVIDER_POLICY;
@@ -97,7 +98,7 @@ export function getConfiguredProviders(): ProviderConfig[] {
         code: config.GEMINI_CODE_MODEL || config.GEMINI_TEXT_MODEL || "gemini-2.5-flash",
         image: normalizeGeminiImageModel(config.GEMINI_IMAGE_MODEL),
         video: normalizeGeminiVideoModel(config.GEMINI_VIDEO_MODEL),
-        music: config.GEMINI_MUSIC_MODEL || "gemini-music-configured",
+        music: normalizeGeminiMusicModel(config.GEMINI_MUSIC_MODEL),
         file: config.GEMINI_TEXT_MODEL || "gemini-2.5-flash",
       },
       reason: "Enabled only when GOOGLE_AI_API_KEY exists on the backend.",
@@ -462,6 +463,15 @@ function normalizeGeminiImageModel(value: string | undefined) {
   const model = value?.trim().replace(/^models\//, "");
   if (!model || model === "gemini-image-configured" || model === "image-primary") {
     return defaultGeminiImageModel;
+  }
+
+  return model;
+}
+
+function normalizeGeminiMusicModel(value: string | undefined) {
+  const model = value?.trim().replace(/^models\//, "");
+  if (!model || model === "gemini-music-configured" || model === "music-primary") {
+    return defaultGeminiMusicModel;
   }
 
   return model;

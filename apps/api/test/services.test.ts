@@ -1209,6 +1209,42 @@ test("Gemini media provider normalizes placeholder image model before request", 
   });
 });
 
+test("Gemini media provider normalizes placeholder music model to Lyria", async () => {
+  await withConfig({ GOOGLE_AI_API_KEY: "gemini-key", GEMINI_MUSIC_MODEL: undefined }, async () => {
+    const providers = getConfiguredProviders();
+    const gemini = providers.find((provider) => provider.code === "gemini");
+    assert.equal(gemini?.modelByModality.music, "lyria-3-clip-preview");
+
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    await withFetchStub(async (input, init) => {
+      calls.push({ url: String(input), init });
+      return jsonResponse({
+        output_audio: {
+          data: Buffer.from("lyria mp3").toString("base64"),
+        },
+      });
+    }, async () => {
+      const musicResult = await new GeminiMediaGenerationProvider().generate({
+        jobId: "job-music",
+        provider: "gemini",
+        model: "music-primary",
+        modality: "music",
+        prompt: "создай техно трек про любовь",
+      });
+
+      assert.equal(musicResult.status, "succeeded");
+      assert.equal(musicResult.mimeType, "audio/mpeg");
+      assert.equal(Buffer.from(musicResult.base64Data ?? "", "base64").toString("utf8"), "lyria mp3");
+    });
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
+      model: "lyria-3-clip-preview",
+      input: "создай техно трек про любовь",
+    });
+  });
+});
+
 test("Gemini media provider starts video without unsupported numberOfVideos parameter", async () => {
   await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];

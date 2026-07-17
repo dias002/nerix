@@ -52,6 +52,7 @@ const heygenVideoAgentOperationPrefix = "heygen-video-agent://session/";
 const heygenVideoOperationPrefix = "heygen-video://video/";
 const defaultGeminiImageModel = "gemini-3.1-flash-image";
 const defaultGeminiVideoModel = "veo-3.1-lite-generate-preview";
+const defaultGeminiMusicModel = "lyria-3-clip-preview";
 
 export class MockMediaGenerationProvider implements MediaGenerationProvider {
   async generate(input: MediaGenerationProviderInput) {
@@ -212,7 +213,10 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
   private async startInteraction(input: MediaGenerationProviderInput) {
     const url = new URL("https://generativelanguage.googleapis.com/v1beta/interactions");
     url.searchParams.set("key", config.GOOGLE_AI_API_KEY ?? "");
-    const model = input.modality === "image" ? normalizeGeminiImageModel(input.model) : input.model.replace(/^models\//, "");
+    const model =
+      input.modality === "image"
+        ? normalizeGeminiImageModel(input.model)
+        : normalizeGeminiMusicModel(input.model);
 
     const response = await fetch(url, {
       method: "POST",
@@ -799,6 +803,15 @@ function normalizeGeminiImageModel(value: string | undefined) {
   const model = value?.trim().replace(/^models\//, "");
   if (!model || model === "gemini-image-configured" || model === "image-primary") {
     return defaultGeminiImageModel;
+  }
+
+  return model;
+}
+
+function normalizeGeminiMusicModel(value: string | undefined) {
+  const model = value?.trim().replace(/^models\//, "");
+  if (!model || model === "gemini-music-configured" || model === "music-primary") {
+    return defaultGeminiMusicModel;
   }
 
   return model;
