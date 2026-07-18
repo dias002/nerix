@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { LedgerEntryType, WalletBalance } from "@nomduchat/shared";
 import type { DatabaseClient } from "../../database/index.js";
-import { ensureOwnerWalletCredits } from "../users/admin-access.js";
+import { ensureAppReviewWalletCredits, ensureOwnerWalletCredits } from "../users/admin-access.js";
 import { ensureLocalUser, LOCAL_USER_PUBLIC_ID, toDatabaseUserId, toPublicUserId } from "../users/local-user.js";
 import type { CreditReservation, LedgerEntryRecord, WalletRecord } from "./wallet.types.js";
 
@@ -432,6 +432,7 @@ export class PostgresWalletRepository implements WalletRepository {
     );
 
     await ensureOwnerWalletCredits(client, databaseUserId);
+    await ensureAppReviewWalletCredits(client, databaseUserId);
   }
 
   private async findWallet(client: DatabaseClient, databaseUserId: string, forUpdate = false) {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseClient } from "../../database/index.js";
-import { ensureOwnerSubscription } from "../users/admin-access.js";
+import { ensureAppReviewAccountEntitlements, ensureOwnerSubscription } from "../users/admin-access.js";
 import { ensureLocalUser, LOCAL_USER_PUBLIC_ID, toDatabaseUserId, toPublicUserId } from "../users/local-user.js";
 import { findPlan, findPlanPrice, subscriptionPlans } from "./plans.js";
 import type {
@@ -673,6 +673,7 @@ export class PostgresSubscriptionRepository implements SubscriptionRepository {
     if (!databaseUserId) return null;
 
     await ensureOwnerSubscription(this.database, databaseUserId);
+    await ensureAppReviewAccountEntitlements(this.database, databaseUserId);
     const subscription = await this.findCurrentSubscription(this.database, databaseUserId);
     return subscription ? mapSubscriptionRow(subscription) : null;
   }

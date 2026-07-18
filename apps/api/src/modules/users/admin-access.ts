@@ -3,8 +3,38 @@ import type { DatabaseClient } from "../../database/index.js";
 
 export const ownerEntitlementCredits = 50_000;
 export const ownerEntitlementReferenceId = "owner-full-access";
+export const appReviewEntitlementCredits = 50_000;
+export const appReviewEntitlementReferenceId = "app-review-full-access";
 
 const builtInOwnerEmails = ["dias.sunnatilla@gmail.com"];
+const appReviewEntitlementEmails = ["apple.review@nomduchat.com"];
+
+type Entitlement = {
+  credits: number;
+  referenceId: string;
+  referenceType: string;
+  source: string;
+  periodYears: number;
+  matchesEmail(email: string | null | undefined): boolean;
+};
+
+const ownerEntitlement: Entitlement = {
+  credits: ownerEntitlementCredits,
+  referenceId: ownerEntitlementReferenceId,
+  referenceType: "owner_entitlement",
+  source: "built_in_owner_entitlement",
+  periodYears: 20,
+  matchesEmail: isOwnerEmail,
+};
+
+const appReviewEntitlement: Entitlement = {
+  credits: appReviewEntitlementCredits,
+  referenceId: appReviewEntitlementReferenceId,
+  referenceType: "app_review_entitlement",
+  source: "app_review_full_access",
+  periodYears: 1,
+  matchesEmail: isAppReviewEntitlementEmail,
+};
 
 export function isAdminEmail(email: string | null | undefined) {
   return isOwnerEmail(email) || configuredAdminEmails().has(normalizeEmail(email));
@@ -14,14 +44,43 @@ export function isOwnerEmail(email: string | null | undefined) {
   return builtInOwnerEmails.includes(normalizeEmail(email));
 }
 
+export function isAppReviewEntitlementEmail(email: string | null | undefined) {
+  return appReviewEntitlementEmails.includes(normalizeEmail(email));
+}
+
 export async function ensureOwnerAccountEntitlements(client: DatabaseClient, databaseUserId: string) {
   await ensureOwnerSubscription(client, databaseUserId);
   await ensureOwnerWalletCredits(client, databaseUserId);
 }
 
 export async function ensureOwnerSubscription(client: DatabaseClient, databaseUserId: string) {
-  const owner = await findOwnerUser(client, databaseUserId);
-  if (!owner) return;
+  await ensureEntitlementSubscription(client, databaseUserId, ownerEntitlement);
+}
+
+export async function ensureOwnerWalletCredits(client: DatabaseClient, databaseUserId: string) {
+  await ensureEntitlementWalletCredits(client, databaseUserId, ownerEntitlement);
+}
+
+export async function ensureAppReviewAccountEntitlements(client: DatabaseClient, databaseUserId: string) {
+  await ensureAppReviewSubscription(client, databaseUserId);
+  await ensureAppReviewWalletCredits(client, databaseUserId);
+}
+
+export async function ensureAppReviewSubscription(client: DatabaseClient, databaseUserId: string) {
+  await ensureEntitlementSubscription(client, databaseUserId, appReviewEntitlement);
+}
+
+export async function ensureAppReviewWalletCredits(client: DatabaseClient, databaseUserId: string) {
+  await ensureEntitlementWalletCredits(client, databaseUserId, appReviewEntitlement);
+}
+
+async function ensureEntitlementSubscription(
+  client: DatabaseClient,
+  databaseUserId: string,
+  entitlement: Entitlement
+) {
+  const user = await findEntitledUser(client, databaseUserId, entitlement);
+  if (!user) return;
 
   const currentSubscription = await client.query<{ id: string; plan_slug: string }>(
     `
@@ -47,11 +106,11 @@ export async function ensureOwnerSubscription(client: DatabaseClient, databaseUs
     [databaseUserId]
   );
 
-  const country = owner.countryCode === "RU" ? "RU" : "KZ";
+  const country = user.countryCode === "RU" ? "RU" : "KZ";
   const provider = country === "RU" ? "yookassa" : "kaspi";
   const now = new Date();
   const periodEnd = new Date(now);
-  periodEnd.setUTCFullYear(now.getUTCFullYear() + 20);
+  periodEnd.setUTCFullYear(now.getUTCFullYear() + entitlement.periodYears);
 
   await client.query(
     `
@@ -70,9 +129,13 @@ export async function ensureOwnerSubscription(client: DatabaseClient, databaseUs
   );
 }
 
-export async function ensureOwnerWalletCredits(client: DatabaseClient, databaseUserId: string) {
-  const owner = await findOwnerUser(client, databaseUserId);
-  if (!owner) return;
+async function ensureEntitlementWalletCredits(
+  client: DatabaseClient,
+  databaseUserId: string,
+  entitlement: Entitlement
+) {
+  const user = await findEntitledUser(client, databaseUserId, entitlement);
+  if (!user) return;
 
   await client.query(
     `
@@ -101,23 +164,23 @@ export async function ensureOwnerWalletCredits(client: DatabaseClient, databaseU
   if (!row) return;
 
   const availableCredits = toNumber(row.available_credits);
-  const ownerEntitlementLedger = await client.query<{ id: string }>(
+  const entitlementLedger = await client.query<{ id: string }>(
     `
       select id
       from ledger_entries
       where wallet_id = $1
-        and reference_type = 'owner_entitlement'
-        and reference_id = $2
+        and reference_type = $2
+        and reference_id = $3
       limit 1
     `,
-    [row.id, ownerEntitlementReferenceId]
+    [row.id, entitlement.referenceType, entitlement.referenceId]
   );
-  const hasOwnerEntitlement = Boolean(ownerEntitlementLedger.rows[0]);
+  const hasEntitlementLedger = Boolean(entitlementLedger.rows[0]);
 
-  if (availableCredits === ownerEntitlementCredits) return;
-  if (availableCredits > ownerEntitlementCredits && !hasOwnerEntitlement) return;
+  if (availableCredits === entitlement.credits) return;
+  if (availableCredits > entitlement.credits && !hasEntitlementLedger) return;
 
-  const nextAvailableCredits = ownerEntitlementCredits;
+  const nextAvailableCredits = entitlement.credits;
   const amountCredits = nextAvailableCredits - availableCredits;
   const ledgerType = amountCredits >= 0 ? "topup" : "adjustment";
 
@@ -142,17 +205,18 @@ export async function ensureOwnerWalletCredits(client: DatabaseClient, databaseU
         reference_id,
         metadata
       )
-      values ($1, $2, $3, $4, 'owner_entitlement', $5, $6::jsonb)
+      values ($1, $2, $3, $4, $5, $6, $7::jsonb)
     `,
     [
       row.id,
       ledgerType,
       amountCredits,
       nextAvailableCredits,
-      ownerEntitlementReferenceId,
+      entitlement.referenceType,
+      entitlement.referenceId,
       JSON.stringify({
-        email: owner.email,
-        source: "built_in_owner_entitlement",
+        email: user.email,
+        source: entitlement.source,
         previousAvailableCredits: availableCredits,
       }),
     ]
@@ -171,7 +235,7 @@ function normalizeEmail(email: string | null | undefined) {
   return email?.trim().toLowerCase() ?? "";
 }
 
-async function findOwnerUser(client: DatabaseClient, databaseUserId: string) {
+async function findEntitledUser(client: DatabaseClient, databaseUserId: string, entitlement: Entitlement) {
   const result = await client.query<{ email: string | null; country_code: string | null }>(
     `
       select email, country_code
@@ -183,7 +247,7 @@ async function findOwnerUser(client: DatabaseClient, databaseUserId: string) {
   );
 
   const user = result.rows[0];
-  if (!isOwnerEmail(user?.email)) return null;
+  if (!entitlement.matchesEmail(user?.email)) return null;
 
   return {
     email: user.email ?? "",
