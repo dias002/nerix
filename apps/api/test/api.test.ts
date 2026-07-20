@@ -181,6 +181,50 @@ test("auth register, login, and me use signed access tokens", async () => {
   await app.close();
 });
 
+test("app review account accepts the review password even if stored password changed", async () => {
+  const app = await createApp();
+
+  const registerResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: {
+      email: "apple.review@nomduchat.com",
+      password: "different-secure-password",
+      name: "Apple Review",
+      country: "KZ",
+      language: "en",
+    },
+  });
+
+  assert.equal(registerResponse.statusCode, 200);
+
+  const invalidLoginResponse = await app.inject({
+    method: "POST",
+    url: "/auth/login",
+    payload: {
+      email: "apple.review@nomduchat.com",
+      password: "wrong-password",
+    },
+  });
+
+  assert.equal(invalidLoginResponse.statusCode, 401);
+
+  const loginResponse = await app.inject({
+    method: "POST",
+    url: "/auth/login",
+    payload: {
+      email: "apple.review@nomduchat.com",
+      password: "NomduchatReview2026!",
+    },
+  });
+
+  assert.equal(loginResponse.statusCode, 200);
+  assert.equal(loginResponse.json().user.email, "apple.review@nomduchat.com");
+  assert.ok(loginResponse.json().accessToken);
+
+  await app.close();
+});
+
 test("auth password reset sends one-time link and updates password", async () => {
   const passwordResetMailer = new FakePasswordResetMailer();
   const app = await createApp({

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { isCountryCode, type CountryCode, type Language } from "@nomduchat/shared";
 import type { DatabaseClient } from "../../database/index.js";
-import { ensureOwnerAccountEntitlements, isAdminEmail } from "../users/admin-access.js";
+import {
+  ensureAppReviewAccountEntitlements,
+  ensureOwnerAccountEntitlements,
+  isAdminEmail,
+} from "../users/admin-access.js";
 import { toDatabaseUserId, toPublicUserId } from "../users/local-user.js";
 import type { SystemRole, UserPermissions, UserRecord, WorkspaceRole } from "../users/user.types.js";
 
@@ -315,7 +319,7 @@ export class PostgresAuthRepository implements AuthRepository {
         left join business_workspaces employee_ws on employee_ws.id = bm.workspace_id
         left join business_group_members bgm on bgm.member_id = bm.id
         left join business_groups bg on bg.id = bgm.group_id
-        where u.email = $1 and u.password_hash is not null
+        where u.email = $1
         limit 1
       `,
       [normalizedEmail]
@@ -326,6 +330,7 @@ export class PostgresAuthRepository implements AuthRepository {
 
     await this.linkPendingBusinessInvites(row.id, normalizedEmail);
     await ensureOwnerAccountEntitlements(this.database, row.id);
+    await ensureAppReviewAccountEntitlements(this.database, row.id);
     return mapRow((await this.findAuthRowByDatabaseId(row.id)) ?? row);
   }
 
