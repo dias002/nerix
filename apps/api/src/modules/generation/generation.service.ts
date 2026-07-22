@@ -39,7 +39,7 @@ export class GenerationService {
 
   async listJobs(userId: string) {
     return ok({
-      jobs: await this.generationRepository.listJobs(userId),
+      jobs: (await this.generationRepository.listJobs(userId)).map(jobForResponse),
     });
   }
 
@@ -56,7 +56,7 @@ export class GenerationService {
     }
 
     return ok({
-      job,
+      job: jobForResponse(job),
     });
   }
 
@@ -159,12 +159,12 @@ export class GenerationService {
             status: "running",
             metadata: {
               operationName: providerResult.operationName,
-              providerRaw: providerResult.raw,
+              providerRaw: sanitizeProviderRaw(providerResult.raw),
             },
           })) ?? job;
 
         return ok({
-          job: runningJob,
+          job: jobForResponse(runningJob),
           route: routeResult.value,
           usage: buildUsage(reservedCredits, null),
         });
@@ -178,13 +178,13 @@ export class GenerationService {
         base64Data: providerResult.base64Data,
         providerUri: providerResult.providerUri,
         metadata: {
-          providerRaw: providerResult.raw,
+          providerRaw: sanitizeProviderRaw(providerResult.raw),
           text: providerResult.text,
         },
       });
 
       return ok({
-        job: finalized,
+        job: jobForResponse(finalized),
         route: routeResult.value,
         usage: buildUsage(reservedCredits, finalized.finalCredits ?? null),
       });
@@ -196,7 +196,7 @@ export class GenerationService {
       });
 
       return ok({
-        job: failed,
+        job: jobForResponse(failed),
         route: routeResult.value,
         usage: buildUsage(reservedCredits, 0),
       });
@@ -213,13 +213,13 @@ export class GenerationService {
     const recoveringRefundedArtifact = canRecoverRefundedArtifact(job, operationName);
     if (job.status !== "running" && !recoveringRefundedArtifact) {
       return ok({
-        job,
+        job: jobForResponse(job),
       });
     }
 
     if (!operationName) {
       return ok({
-        job,
+        job: jobForResponse(job),
       });
     }
 
@@ -230,12 +230,12 @@ export class GenerationService {
           (await this.generationRepository.updateJob(input.userId, job.id, {
             status: "running",
             metadata: {
-              lastProviderRaw: refreshResult.raw,
+              lastProviderRaw: sanitizeProviderRaw(refreshResult.raw),
             },
           })) ?? job;
 
         return ok({
-          job: runningJob,
+          job: jobForResponse(runningJob),
         });
       }
 
@@ -245,12 +245,12 @@ export class GenerationService {
           job,
           errorMessage: refreshResult.errorMessage ?? "Media generation failed.",
           metadata: {
-            providerRaw: refreshResult.raw,
+            providerRaw: sanitizeProviderRaw(refreshResult.raw),
           },
         });
 
         return ok({
-          job: failed,
+          job: jobForResponse(failed),
         });
       }
 
@@ -262,13 +262,13 @@ export class GenerationService {
         base64Data: refreshResult.base64Data,
         providerUri: refreshResult.providerUri,
         metadata: {
-          providerRaw: refreshResult.raw,
+          providerRaw: sanitizeProviderRaw(refreshResult.raw),
         },
         skipBillingCapture: recoveringRefundedArtifact,
       });
 
       return ok({
-        job: finalized,
+        job: jobForResponse(finalized),
       });
     } catch (error) {
       const failed = await this.refundFailedJob({
@@ -278,7 +278,7 @@ export class GenerationService {
       });
 
       return ok({
-        job: failed,
+        job: jobForResponse(failed),
       });
     }
   }
@@ -291,7 +291,7 @@ export class GenerationService {
 
     if (job.status !== "queued" && job.status !== "running") {
       return ok({
-        job,
+        job: jobForResponse(job),
       });
     }
 
@@ -301,7 +301,7 @@ export class GenerationService {
 
     if (operationName) {
       try {
-        providerCancelRaw = (await this.mediaProvider.cancel(operationName)).raw;
+        providerCancelRaw = sanitizeProviderRaw((await this.mediaProvider.cancel(operationName)).raw);
       } catch (error) {
         providerCancelError = error instanceof Error ? error.message : "Provider cancellation failed.";
       }
@@ -328,7 +328,7 @@ export class GenerationService {
       })) ?? job;
 
     return ok({
-      job: cancelled,
+      job: jobForResponse(cancelled),
     });
   }
 
@@ -552,6 +552,51 @@ function sanitizeAvatarVideoMetadata(input?: AvatarVideoGenerationInput) {
     expressiveness: input.expressiveness,
     motionPrompt: input.motionPrompt,
   });
+}
+
+const providerBinaryFields = new Set([
+  "artifactbase64",
+  "b64_json",
+  "base64data",
+  "base64_data",
+  "bytesbase64encoded",
+  "bytes_base64_encoded",
+  "data",
+  "signature",
+]);
+
+function sanitizeProviderRaw(input?: Record<string, unknown>) {
+  if (!input) return undefined;
+  return sanitizeProviderValue(input) as Record<string, unknown>;
+}
+
+function sanitizeProviderValue(input: unknown, key?: string): unknown {
+  if (typeof input === "string") {
+    if (key && providerBinaryFields.has(key.toLowerCase())) return "[binary omitted]";
+    if (input.length > 4_000) return "[large provider value omitted]";
+    return input;
+  }
+
+  if (Array.isArray(input)) {
+    return input.map((value) => sanitizeProviderValue(value));
+  }
+
+  if (input && typeof input === "object") {
+    return Object.fromEntries(
+      Object.entries(input).map(([field, value]) => [field, sanitizeProviderValue(value, field)])
+    );
+  }
+
+  return input;
+}
+
+function jobForResponse(job: MediaGenerationJob): MediaGenerationJob {
+  const metadata = sanitizeProviderValue(job.metadata) as Record<string, unknown>;
+  delete metadata.artifactBase64;
+  return {
+    ...job,
+    metadata,
+  };
 }
 
 function stringMetadata(job: MediaGenerationJob, key: string) {

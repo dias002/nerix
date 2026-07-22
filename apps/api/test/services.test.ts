@@ -29,7 +29,11 @@ import { ChatService } from "../src/modules/chat/chat.service.js";
 import { InMemoryConversationRepository } from "../src/modules/chat/conversation.repository.js";
 import { applyResponseStyle } from "../src/modules/chat/prompt-builder.js";
 import { ChatUsagePolicy } from "../src/modules/chat/usage-policy.js";
-import { GeminiMediaGenerationProvider, HeyGenMediaGenerationProvider } from "../src/modules/generation/media-provider.js";
+import {
+  GeminiMediaGenerationProvider,
+  HeyGenMediaGenerationProvider,
+  OpenAiVoiceGenerationProvider,
+} from "../src/modules/generation/media-provider.js";
 import { InMemoryMailingRepository } from "../src/modules/mailings/mailing.repository.js";
 import { MailingService, parseContacts } from "../src/modules/mailings/mailing.service.js";
 import type { SmtpBzMessage } from "../src/modules/mailings/mailing.types.js";
@@ -691,6 +695,7 @@ test("generation service creates media jobs, stores artifacts, and can be starte
     assert.equal(generationResponse.value.job.provider, "mock-provider");
     assert.match(generationResponse.value.job.resultUrl ?? "", /\/generation\/jobs\/.+\/artifact$/);
     assert.ok((generationResponse.value.job.finalCredits ?? 0) > 0);
+    assert.equal("artifactBase64" in generationResponse.value.job.metadata, false);
 
     const artifactResponse = await dependencies.generation.getArtifact({
       userId: "local-user",
@@ -1115,6 +1120,42 @@ test("backend completion accepts injected providers without changing routing cod
   });
 
   assert.equal(result.content, "custom:model-a:hello");
+});
+
+test("OpenAI voice provider returns an MP3 artifact and normalizes the configured model", async () => {
+  await withConfig({ OPENAI_API_KEY: "sk-voice-test", OPENAI_VOICE_MODEL: undefined }, async () => {
+    await withFetchStub(async (input, init) => {
+      assert.equal(String(input), "https://api.openai.com/v1/audio/speech");
+      assert.equal(init?.method, "POST");
+      assert.equal(new Headers(init?.headers).get("authorization"), "Bearer sk-voice-test");
+
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      assert.equal(body.model, "gpt-4o-mini-tts");
+      assert.equal(body.voice, "alloy");
+      assert.equal(body.input, "спокойным голосом: Добро пожаловать в nomduchat");
+      assert.equal(body.response_format, "mp3");
+
+      return new Response(new Uint8Array([1, 2, 3, 4]), {
+        status: 200,
+        headers: {
+          "Content-Type": "audio/mpeg",
+        },
+      });
+    }, async () => {
+      const provider = new OpenAiVoiceGenerationProvider();
+      const result = await provider.generate({
+        jobId: "voice-job",
+        provider: "openai",
+        model: "openai-voice-configured",
+        modality: "voice",
+        prompt: "Озвучь спокойным голосом: Добро пожаловать в nomduchat",
+      });
+
+      assert.equal(result.status, "succeeded");
+      assert.equal(result.mimeType, "audio/mpeg");
+      assert.equal(result.base64Data, Buffer.from([1, 2, 3, 4]).toString("base64"));
+    });
+  });
 });
 
 test("Gemini media provider sends interaction payloads without unsupported config", async () => {

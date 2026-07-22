@@ -53,6 +53,7 @@ const heygenVideoOperationPrefix = "heygen-video://video/";
 const defaultGeminiImageModel = "gemini-3.1-flash-image";
 const defaultGeminiVideoModel = "veo-3.1-lite-generate-preview";
 const defaultGeminiMusicModel = "lyria-3-clip-preview";
+const defaultOpenAiVoiceModel = "gpt-4o-mini-tts";
 
 export class MockMediaGenerationProvider implements MediaGenerationProvider {
   async generate(input: MediaGenerationProviderInput) {
@@ -613,13 +614,88 @@ export class HeyGenMediaGenerationProvider implements MediaGenerationProvider {
   }
 }
 
+export class OpenAiVoiceGenerationProvider implements MediaGenerationProvider {
+  async generate(input: MediaGenerationProviderInput) {
+    if (!config.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is required for OpenAI voice generation.");
+    }
+    if (input.modality !== "voice") {
+      throw new Error(`OpenAI voice generation does not support '${input.modality}'.`);
+    }
+
+    const model = normalizeOpenAiVoiceModel(input.model);
+    const voice = inferOpenAiVoice(input.prompt);
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        voice,
+        input: cleanSpeechInput(input.prompt),
+        response_format: "mp3",
+        speed: 1,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`OpenAI speech generation failed with ${response.status}: ${errorBody.slice(0, 500)}`);
+    }
+
+    return {
+      status: "succeeded" as const,
+      mimeType: response.headers.get("content-type") ?? "audio/mpeg",
+      base64Data: Buffer.from(await response.arrayBuffer()).toString("base64"),
+      raw: {
+        provider: "openai",
+        model,
+        voice,
+      },
+    };
+  }
+
+  async refresh() {
+    return {
+      status: "failed" as const,
+      errorMessage: "OpenAI voice generations complete synchronously.",
+    };
+  }
+
+  async cancel(_operationName?: string) {
+    return {
+      raw: {
+        provider: "openai",
+        cancelled: true,
+      },
+    };
+  }
+
+  async fetchArtifact(uri: string) {
+    const response = await fetch(uri);
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`OpenAI artifact fetch failed with ${response.status}: ${errorBody.slice(0, 500)}`);
+    }
+
+    return {
+      mimeType: response.headers.get("content-type") ?? inferMimeTypeFromUri(uri) ?? "application/octet-stream",
+      data: Buffer.from(await response.arrayBuffer()),
+    };
+  }
+}
+
 export class BackendMediaGenerationProvider implements MediaGenerationProvider {
   private readonly mock = new MockMediaGenerationProvider();
+  private readonly openaiVoice = new OpenAiVoiceGenerationProvider();
   private readonly gemini = new GeminiMediaGenerationProvider();
   private readonly heygen = new HeyGenMediaGenerationProvider();
 
   async generate(input: MediaGenerationProviderInput) {
     if (input.provider === "mock-provider") return this.mock.generate(input);
+    if (input.provider === "openai" && input.modality === "voice") return this.openaiVoice.generate(input);
     if (input.provider === "gemini") return this.gemini.generate(input);
     if (input.provider === "heygen") return this.heygen.generate(input);
 
@@ -815,6 +891,37 @@ function normalizeGeminiMusicModel(value: string | undefined) {
   }
 
   return model;
+}
+
+function normalizeOpenAiVoiceModel(value: string | undefined) {
+  const model = value?.trim();
+  if (!model || model === "openai-voice-configured" || model === "voice-primary") {
+    return defaultOpenAiVoiceModel;
+  }
+
+  return model;
+}
+
+function inferOpenAiVoice(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  if (containsAny(normalized, ["муж", "низк", "бас", "male", "deep"])) return "onyx";
+  if (containsAny(normalized, ["жен", "female", "мягк", "тепл"])) return "nova";
+  if (containsAny(normalized, ["детск", "ребен", "child", "young", "игрив"])) return "fable";
+  if (containsAny(normalized, ["энерг", "ярк", "реклам", "promo"])) return "shimmer";
+  return "alloy";
+}
+
+function cleanSpeechInput(prompt: string) {
+  return (
+    prompt
+      .replace(/^(озвучь|сделай озвучку|создай озвучку|прочитай вслух|voice over|text to speech)[:\s-]*/i, "")
+      .trim()
+      .slice(0, 4_000) || prompt.slice(0, 4_000)
+  );
+}
+
+function containsAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(needle));
 }
 
 function extractErrorMessage(error: object) {
