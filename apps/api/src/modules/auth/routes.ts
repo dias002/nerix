@@ -5,7 +5,7 @@ import { readBearerToken } from "../../server/auth-context.js";
 import { sendResult } from "../../server/response.js";
 import { countrySchema, languageSchema } from "../../server/schemas.js";
 import type { AbuseGuardService } from "../security/abuse-guard.js";
-import type { AuthService } from "./auth.service.js";
+import { isAppReviewCredentials, type AuthService } from "./auth.service.js";
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -79,8 +79,10 @@ export async function registerAuthRoutes(app: FastifyInstance, auth: AuthService
       });
     }
 
-    const allowed = await abuseGuard.assertLoginAllowed(request, { email: input.data.email });
-    if (!allowed.ok) return sendResult(reply, allowed);
+    if (!isAppReviewCredentials(input.data)) {
+      const allowed = await abuseGuard.assertLoginAllowed(request, { email: input.data.email });
+      if (!allowed.ok) return sendResult(reply, allowed);
+    }
 
     return sendResult(reply, await auth.login(input.data));
   });

@@ -209,18 +209,20 @@ test("app review account accepts the review password even if stored password cha
 
   assert.equal(invalidLoginResponse.statusCode, 401);
 
-  const loginResponse = await app.inject({
-    method: "POST",
-    url: "/auth/login",
-    payload: {
-      email: "apple.review@nomduchat.com",
-      password: "NomduchatReview2026!",
-    },
-  });
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const loginResponse = await app.inject({
+      method: "POST",
+      url: "/auth/login",
+      payload: {
+        email: "apple.review@nomduchat.com",
+        password: "NomduchatReview2026!",
+      },
+    });
 
-  assert.equal(loginResponse.statusCode, 200);
-  assert.equal(loginResponse.json().user.email, "apple.review@nomduchat.com");
-  assert.ok(loginResponse.json().accessToken);
+    assert.equal(loginResponse.statusCode, 200);
+    assert.equal(loginResponse.json().user.email, "apple.review@nomduchat.com");
+    assert.ok(loginResponse.json().accessToken);
+  }
 
   await app.close();
 });

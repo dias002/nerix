@@ -19,6 +19,10 @@ import type { UpdateUserProfileInput } from "../users/user.repository.js";
 
 const appReviewPassword = "NomduchatReview2026!";
 
+export function isAppReviewCredentials(input: { email: string; password: string }) {
+  return isAppReviewEntitlementEmail(input.email) && input.password === appReviewPassword;
+}
+
 export class AuthService {
   constructor(
     private readonly repository: AuthRepository,
@@ -77,7 +81,7 @@ export class AuthService {
 
     const user = await this.repository.findByEmail(input.email);
     const passwordMatches = user ? verifyPassword(input.password, user.passwordHash) : false;
-    const appReviewMatches = isAppReviewEntitlementEmail(input.email) && input.password === appReviewPassword;
+    const appReviewMatches = isAppReviewCredentials(input);
     if (!user || !user.email || (!passwordMatches && !appReviewMatches)) {
       return fail(new DomainError("unauthorized", "Invalid email or password.", 401));
     }
