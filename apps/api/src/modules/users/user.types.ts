@@ -17,6 +17,7 @@ export type UserRecord = {
   name: string;
   email: string | null;
   phone: string | null;
+  avatarUrl: string | null;
   country: CountryCode;
   language: Language;
   systemRole: SystemRole;

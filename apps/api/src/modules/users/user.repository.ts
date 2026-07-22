@@ -1,4 +1,4 @@
-import { isCountryCode, type Language } from "@nomduchat/shared";
+import { isCountryCode, type CountryCode, type Language } from "@nomduchat/shared";
 import type { DatabaseClient } from "../../database/index.js";
 import { isAdminEmail } from "./admin-access.js";
 import { ensureLocalUser, LOCAL_USER_PUBLIC_ID, toDatabaseUserId, toPublicUserId } from "./local-user.js";
@@ -45,8 +45,16 @@ export type UserDeletionResult = {
   retainedRecords: string[];
 };
 
+export type UpdateUserProfileInput = {
+  name?: string;
+  country?: CountryCode;
+  language?: Language;
+  avatarUrl?: string | null;
+};
+
 export interface UserRepository {
   findById(userId: string): Promise<UserRecord | null>;
+  updateProfile(userId: string, input: UpdateUserProfileInput): Promise<UserRecord | null>;
   exportData(userId: string, fallbackUser?: UserRecord): Promise<UserDataExportRecord | null>;
   deactivateAccount(userId: string, fallbackUser?: UserRecord): Promise<UserDeletionResult | null>;
 }
@@ -60,6 +68,7 @@ export class InMemoryUserRepository implements UserRepository {
         name: "Local User",
         email: "local@nomduchat.ai",
         phone: null,
+        avatarUrl: null,
         country: "KZ",
         language: "ru",
         systemRole: "user",
@@ -73,6 +82,21 @@ export class InMemoryUserRepository implements UserRepository {
 
   async findById(userId: string) {
     return this.users.get(userId) ?? null;
+  }
+
+  async updateProfile(userId: string, input: UpdateUserProfileInput) {
+    const existing = this.users.get(userId);
+    if (!existing) return null;
+
+    const updated: UserRecord = {
+      ...existing,
+      name: input.name ?? existing.name,
+      country: input.country ?? existing.country,
+      language: input.language ?? existing.language,
+      avatarUrl: input.avatarUrl !== undefined ? input.avatarUrl : existing.avatarUrl,
+    };
+    this.users.set(userId, updated);
+    return updated;
   }
 
   async exportData(userId: string, fallbackUser?: UserRecord) {
@@ -92,6 +116,7 @@ export class InMemoryUserRepository implements UserRepository {
       name: "Deleted user",
       email: null,
       phone: null,
+      avatarUrl: null,
       businessWorkspace: null,
       permissions: permissionsFor("user", "personal"),
       workspaceRole: "personal",
@@ -113,6 +138,7 @@ type UserRow = {
   display_name: string | null;
   email: string | null;
   phone: string | null;
+  avatar_url: string | null;
   country_code: string;
   language: string;
   system_role: string | null;
@@ -143,6 +169,7 @@ export class PostgresUserRepository implements UserRepository {
           u.display_name,
           u.email,
           u.phone,
+          u.avatar_url,
           u.country_code,
           u.language,
           u.system_role,
@@ -173,6 +200,37 @@ export class PostgresUserRepository implements UserRepository {
 
     const row = result.rows[0];
     return row ? mapUserRow(row) : null;
+  }
+
+  async updateProfile(userId: string, input: UpdateUserProfileInput) {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return null;
+
+    if (userId === LOCAL_USER_PUBLIC_ID) {
+      await ensureLocalUser(this.database);
+    }
+
+    await this.database.query(
+      `
+        update users
+        set display_name = coalesce($2, display_name),
+            country_code = coalesce($3, country_code),
+            language = coalesce($4, language),
+            avatar_url = case when $5::boolean then $6 else avatar_url end,
+            updated_at = now()
+        where id = $1
+      `,
+      [
+        databaseUserId,
+        input.name ?? null,
+        input.country ?? null,
+        input.language ?? null,
+        input.avatarUrl !== undefined,
+        input.avatarUrl ?? null,
+      ]
+    );
+
+    return this.findById(userId);
   }
 
   async exportData(userId: string, fallbackUser?: UserRecord) {
@@ -340,6 +398,7 @@ export class PostgresUserRepository implements UserRepository {
         update users
         set email = $2,
             phone = null,
+            avatar_url = null,
             password_hash = null,
             display_name = 'Deleted user',
             updated_at = now()
@@ -502,6 +561,7 @@ function mapUserRow(row: UserRow): UserRecord {
     name: row.display_name ?? "nomduchat User",
     email: row.email,
     phone: row.phone,
+    avatarUrl: row.avatar_url,
     country: isCountryCode(row.country_code) ? row.country_code : "KZ",
     language: isLanguage(row.language) ? row.language : "ru",
     systemRole,

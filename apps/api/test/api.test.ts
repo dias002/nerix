@@ -225,6 +225,58 @@ test("app review account accepts the review password even if stored password cha
   await app.close();
 });
 
+test("authenticated user can update profile fields and avatar", async () => {
+  const app = await createApp();
+
+  const registerResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: {
+      email: "profile@example.com",
+      password: "secure-password",
+      name: "Old Name",
+      country: "KZ",
+      language: "ru",
+    },
+  });
+
+  assert.equal(registerResponse.statusCode, 200);
+  const accessToken = registerResponse.json().accessToken;
+  const avatarDataUrl = "data:image/png;base64,iVBORw0KGgo=";
+
+  const updateResponse = await app.inject({
+    method: "PATCH",
+    url: "/users/me",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+    payload: {
+      name: "Profile Name",
+      country: "US",
+      language: "en",
+      avatarDataUrl,
+    },
+  });
+
+  assert.equal(updateResponse.statusCode, 200);
+  assert.equal(updateResponse.json().user.name, "Profile Name");
+  assert.equal(updateResponse.json().user.country, "US");
+  assert.equal(updateResponse.json().user.language, "en");
+  assert.equal(updateResponse.json().user.avatarUrl, avatarDataUrl);
+
+  const meResponse = await app.inject({
+    method: "GET",
+    url: "/auth/me",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+  });
+  assert.equal(meResponse.statusCode, 200);
+  assert.equal(meResponse.json().user.avatarUrl, avatarDataUrl);
+
+  await app.close();
+});
+
 test("auth password reset sends one-time link and updates password", async () => {
   const passwordResetMailer = new FakePasswordResetMailer();
   const app = await createApp({
@@ -401,7 +453,7 @@ test("abuse guard rate-limits public AI route probes", async () => {
   await app.close();
 });
 
-test("user can export and deactivate own account data", async () => {
+test("user can export and permanently delete own account data", async () => {
   const app = await createApp();
 
   const registerResponse = await app.inject({
@@ -445,8 +497,8 @@ test("user can export and deactivate own account data", async () => {
   assert.equal(blockedDeleteResponse.statusCode, 400);
 
   const deleteResponse = await app.inject({
-    method: "POST",
-    url: "/users/me/delete",
+    method: "DELETE",
+    url: "/users/me",
     headers: {
       authorization: `Bearer ${accessToken}`,
     },
@@ -456,8 +508,28 @@ test("user can export and deactivate own account data", async () => {
   });
 
   assert.equal(deleteResponse.statusCode, 200);
+  assert.equal(deleteResponse.json().deleted, true);
   assert.equal(deleteResponse.json().emailBeforeDeletion, "delete-me@example.com");
   assert.ok(deleteResponse.json().retainedRecords.includes("subscription_checkouts"));
+
+  const oldSessionResponse = await app.inject({
+    method: "GET",
+    url: "/auth/me",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+  });
+  assert.equal(oldSessionResponse.statusCode, 404);
+
+  const oldLoginResponse = await app.inject({
+    method: "POST",
+    url: "/auth/login",
+    payload: {
+      email: "delete-me@example.com",
+      password: "secure-password",
+    },
+  });
+  assert.equal(oldLoginResponse.statusCode, 401);
 
   await app.close();
 });

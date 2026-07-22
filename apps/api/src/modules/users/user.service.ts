@@ -1,5 +1,6 @@
 import { DomainError, fail, ok } from "../../domain/result.js";
-import type { UserRepository } from "./user.repository.js";
+import { normalizeAvatarDataUrl } from "./avatar.js";
+import type { UpdateUserProfileInput, UserRepository } from "./user.repository.js";
 import type { UserRecord } from "./user.types.js";
 
 export class UserService {
@@ -15,6 +16,18 @@ export class UserService {
     return ok(user);
   }
 
+  async updateCurrentUserProfile(userId: string, input: UpdateUserProfileInput & { avatarDataUrl?: string | null }) {
+    const normalized = normalizeProfileInput(input);
+    if (!normalized.ok) return normalized;
+
+    const user = await this.repository.updateProfile(userId, normalized.value);
+    if (!user) {
+      return fail(new DomainError("not_found", `User '${userId}' was not found.`, 404));
+    }
+
+    return ok({ user });
+  }
+
   async exportCurrentUserData(userId = "local-user", fallbackUser?: UserRecord) {
     const exportData = await this.repository.exportData(userId, fallbackUser);
 
@@ -25,7 +38,7 @@ export class UserService {
     return ok(exportData);
   }
 
-  async deactivateCurrentUser(input: { userId: string; confirmation: string; fallbackUser?: UserRecord }) {
+  async deleteCurrentUser(input: { userId: string; confirmation: string; fallbackUser?: UserRecord }) {
     if (input.confirmation !== "DELETE") {
       return fail(new DomainError("validation_failed", "Type DELETE to confirm account deletion.", 400));
     }
@@ -35,6 +48,21 @@ export class UserService {
       return fail(new DomainError("not_found", `User '${input.userId}' was not found.`, 404));
     }
 
-    return ok(result);
+    return ok({ ...result, deleted: true });
+  }
+}
+
+function normalizeProfileInput(input: UpdateUserProfileInput & { avatarDataUrl?: string | null }) {
+  try {
+    const avatarUrl = normalizeAvatarDataUrl(input.avatarDataUrl);
+    return ok({
+      name: input.name?.trim(),
+      country: input.country,
+      language: input.language,
+      ...(avatarUrl !== undefined ? { avatarUrl } : {}),
+    });
+  } catch (error) {
+    if (error instanceof DomainError) return fail(error);
+    throw error;
   }
 }

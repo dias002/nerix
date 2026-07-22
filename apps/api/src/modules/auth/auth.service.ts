@@ -13,7 +13,9 @@ import { hashPassword, verifyPassword } from "./password.js";
 import type { PasswordResetMailer } from "./password-reset-mailer.js";
 import type { TransactionalMailer } from "../notifications/transactional-mailer.js";
 import { signAccessToken, verifyAccessToken } from "./token.js";
+import { normalizeAvatarDataUrl } from "../users/avatar.js";
 import { isAppReviewEntitlementEmail } from "../users/admin-access.js";
+import type { UpdateUserProfileInput } from "../users/user.repository.js";
 
 const appReviewPassword = "NomduchatReview2026!";
 
@@ -30,10 +32,14 @@ export class AuthService {
     name?: string;
     country?: CountryCode;
     language?: Language;
+    avatarDataUrl?: string | null;
   }) {
     if (!isRegistrationPasswordSafe(input.password)) {
       return fail(new DomainError("validation_failed", "Password length is invalid."));
     }
+
+    const avatarUrl = this.readAvatarDataUrl(input.avatarDataUrl);
+    if (!avatarUrl.ok) return avatarUrl;
 
     const user = await this.repository.createUser({
       email: input.email,
@@ -41,6 +47,7 @@ export class AuthService {
       name: input.name?.trim() || input.email.split("@")[0],
       country: input.country ?? "KZ",
       language: input.language ?? "ru",
+      avatarUrl: avatarUrl.value ?? null,
     });
 
     if (!user || !user.email) {
@@ -104,6 +111,30 @@ export class AuthService {
     return ok({
       user,
     });
+  }
+
+  async updateProfile(accessToken: string | null, input: UpdateUserProfileInput & { avatarDataUrl?: string | null }) {
+    const currentUser = await this.me(accessToken);
+    if (!currentUser.ok) return currentUser;
+
+    const avatarUrl = this.readAvatarDataUrl(input.avatarDataUrl);
+    if (!avatarUrl.ok) return avatarUrl;
+
+    const user = await this.repository.updateProfile(currentUser.value.user.id, {
+      name: input.name?.trim(),
+      country: input.country,
+      language: input.language,
+      ...(avatarUrl.value !== undefined ? { avatarUrl: avatarUrl.value } : {}),
+    });
+    if (!user) {
+      return fail(new DomainError("not_found", `User '${currentUser.value.user.id}' was not found.`, 404));
+    }
+
+    return ok({ user });
+  }
+
+  async deleteAccountAccess(userId: string) {
+    await this.repository.deleteAccountAccess(userId);
   }
 
   async linkedAccounts(accessToken: string | null) {
@@ -283,6 +314,15 @@ export class AuthService {
       await task();
     } catch {
       // Transactional email must not block account access.
+    }
+  }
+
+  private readAvatarDataUrl(value: string | null | undefined) {
+    try {
+      return ok(normalizeAvatarDataUrl(value));
+    } catch (error) {
+      if (error instanceof DomainError) return fail(error);
+      throw error;
     }
   }
 }

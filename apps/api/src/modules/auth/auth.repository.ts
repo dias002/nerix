@@ -7,6 +7,7 @@ import {
   isAdminEmail,
 } from "../users/admin-access.js";
 import { toDatabaseUserId, toPublicUserId } from "../users/local-user.js";
+import type { UpdateUserProfileInput } from "../users/user.repository.js";
 import type { SystemRole, UserPermissions, UserRecord, WorkspaceRole } from "../users/user.types.js";
 
 export type AuthUserRecord = UserRecord & {
@@ -49,9 +50,12 @@ export interface AuthRepository {
     name: string;
     country: CountryCode;
     language: Language;
+    avatarUrl?: string | null;
   }): Promise<UserRecord | null>;
   findByEmail(email: string): Promise<AuthUserRecord | null>;
   findById(userId: string): Promise<UserRecord | null>;
+  updateProfile(userId: string, input: UpdateUserProfileInput): Promise<UserRecord | null>;
+  deleteAccountAccess(userId: string): Promise<void>;
   findOrCreateOAuthUser(input: OAuthUserProfile): Promise<UserRecord>;
   listOAuthAccounts(userId: string): Promise<OAuthAccountRecord[]>;
   unlinkOAuthAccount(userId: string, provider: OAuthProviderCode): Promise<OAuthUnlinkResult>;
@@ -81,6 +85,7 @@ export class InMemoryAuthRepository implements AuthRepository {
     name: string;
     country: CountryCode;
     language: Language;
+    avatarUrl?: string | null;
   }) {
     const email = normalizeEmail(input.email);
     if (this.emailIndex.has(email)) return null;
@@ -90,6 +95,7 @@ export class InMemoryAuthRepository implements AuthRepository {
       id: randomUUID(),
       email,
       phone: null,
+      avatarUrl: input.avatarUrl ?? null,
       name: input.name,
       country: input.country,
       language: input.language,
@@ -116,6 +122,36 @@ export class InMemoryAuthRepository implements AuthRepository {
     return user ? publicUser(user) : null;
   }
 
+  async updateProfile(userId: string, input: UpdateUserProfileInput) {
+    const user = this.users.get(userId);
+    if (!user) return null;
+
+    const updated: AuthUserRecord = {
+      ...user,
+      name: input.name ?? user.name,
+      country: input.country ?? user.country,
+      language: input.language ?? user.language,
+      avatarUrl: input.avatarUrl !== undefined ? input.avatarUrl : user.avatarUrl,
+    };
+    this.users.set(userId, updated);
+    return publicUser(updated);
+  }
+
+  async deleteAccountAccess(userId: string) {
+    const user = this.users.get(userId);
+    if (user?.email) {
+      this.emailIndex.delete(normalizeEmail(user.email));
+    }
+    this.users.delete(userId);
+
+    for (const [key, account] of this.oauthIndex.entries()) {
+      if (account.userId === userId) this.oauthIndex.delete(key);
+    }
+    for (const [key, token] of this.passwordResetTokens.entries()) {
+      if (token.userId === userId) this.passwordResetTokens.delete(key);
+    }
+  }
+
   async findOrCreateOAuthUser(input: OAuthUserProfile) {
     const oauthKey = `${input.provider}:${input.providerUserId}`;
     const existingOAuth = this.oauthIndex.get(oauthKey);
@@ -136,6 +172,7 @@ export class InMemoryAuthRepository implements AuthRepository {
       id: randomUUID(),
       email,
       phone: null,
+      avatarUrl: null,
       name: input.name,
       country: input.country,
       language: input.language,
@@ -223,6 +260,7 @@ type AuthUserRow = {
   display_name: string | null;
   email: string | null;
   phone: string | null;
+  avatar_url: string | null;
   country_code: string;
   language: string;
   system_role: string | null;
@@ -254,17 +292,19 @@ export class PostgresAuthRepository implements AuthRepository {
     name: string;
     country: CountryCode;
     language: Language;
+    avatarUrl?: string | null;
   }) {
     const result = await this.database.query<AuthUserRow>(
       `
-        insert into users (email, display_name, country_code, language, password_hash)
-        values ($1, $2, $3, $4, $5)
+        insert into users (email, display_name, country_code, language, password_hash, avatar_url)
+        values ($1, $2, $3, $4, $5, $6)
         on conflict (email) do nothing
         returning
           id,
           display_name,
           email,
           phone,
+          avatar_url,
           country_code,
           language,
           system_role,
@@ -277,7 +317,7 @@ export class PostgresAuthRepository implements AuthRepository {
           null::text as business_group_name,
           password_hash
       `,
-      [normalizeEmail(input.email), input.name, input.country, input.language, input.passwordHash]
+      [normalizeEmail(input.email), input.name, input.country, input.language, input.passwordHash, input.avatarUrl ?? null]
     );
 
     const row = result.rows[0];
@@ -296,6 +336,7 @@ export class PostgresAuthRepository implements AuthRepository {
           u.display_name,
           u.email,
           u.phone,
+          u.avatar_url,
           u.country_code,
           u.language,
           u.system_role,
@@ -342,6 +383,7 @@ export class PostgresAuthRepository implements AuthRepository {
           u.display_name,
           u.email,
           u.phone,
+          u.avatar_url,
           u.country_code,
           u.language,
           u.system_role,
@@ -366,6 +408,7 @@ export class PostgresAuthRepository implements AuthRepository {
         left join business_group_members bgm on bgm.member_id = bm.id
         left join business_groups bg on bg.id = bgm.group_id
         where u.id = $1
+          and u.email not like 'deleted+%@nomduchat.local'
         limit 1
       `,
       [userId]
@@ -376,6 +419,47 @@ export class PostgresAuthRepository implements AuthRepository {
 
     await ensureOwnerAccountEntitlements(this.database, row.id);
     return publicUser(mapRow((await this.findAuthRowByDatabaseId(row.id)) ?? row));
+  }
+
+  async updateProfile(userId: string, input: UpdateUserProfileInput) {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return null;
+
+    await this.database.query(
+      `
+        update users
+        set display_name = coalesce($2, display_name),
+            country_code = coalesce($3, country_code),
+            language = coalesce($4, language),
+            avatar_url = case when $5::boolean then $6 else avatar_url end,
+            updated_at = now()
+        where id = $1
+      `,
+      [
+        databaseUserId,
+        input.name ?? null,
+        input.country ?? null,
+        input.language ?? null,
+        input.avatarUrl !== undefined,
+        input.avatarUrl ?? null,
+      ]
+    );
+
+    return this.findById(userId);
+  }
+
+  async deleteAccountAccess(userId: string) {
+    const databaseUserId = toDatabaseUserId(userId);
+    if (!databaseUserId) return;
+
+    await this.transaction(async (client) => {
+      await client.query("delete from password_reset_tokens where user_id = $1", [databaseUserId]);
+      await client.query("delete from oauth_accounts where user_id = $1", [databaseUserId]);
+      await client.query(
+        "update users set password_hash = null, updated_at = now() where id = $1",
+        [databaseUserId]
+      );
+    });
   }
 
   async createPasswordResetToken(input: { email: string; tokenHash: string; expiresAt: string }) {
@@ -475,6 +559,7 @@ export class PostgresAuthRepository implements AuthRepository {
             u.display_name,
             u.email,
             u.phone,
+            u.avatar_url,
             u.country_code,
             u.language,
             u.system_role,
@@ -526,6 +611,7 @@ export class PostgresAuthRepository implements AuthRepository {
               u.display_name,
               u.email,
               u.phone,
+              u.avatar_url,
               u.country_code,
               u.language,
               u.system_role,
@@ -560,13 +646,14 @@ export class PostgresAuthRepository implements AuthRepository {
       if (!userRow) {
         const createdUser = await client.query<AuthUserRow>(
           `
-            insert into users (email, display_name, country_code, language, password_hash)
-            values ($1, $2, $3, $4, null)
+            insert into users (email, display_name, country_code, language, password_hash, avatar_url)
+            values ($1, $2, $3, $4, null, null)
             returning
               id,
               display_name,
               email,
               phone,
+              avatar_url,
               country_code,
               language,
               system_role,
@@ -707,6 +794,7 @@ export class PostgresAuthRepository implements AuthRepository {
           u.display_name,
           u.email,
           u.phone,
+          u.avatar_url,
           u.country_code,
           u.language,
           u.system_role,
@@ -731,6 +819,7 @@ export class PostgresAuthRepository implements AuthRepository {
         left join business_group_members bgm on bgm.member_id = bm.id
         left join business_groups bg on bg.id = bgm.group_id
         where u.id = $1
+          and u.email not like 'deleted+%@nomduchat.local'
         limit 1
       `,
       [userId]
@@ -749,6 +838,7 @@ function mapRow(row: AuthUserRow): AuthUserRecord {
     name: row.display_name ?? "nomduchat User",
     email: row.email,
     phone: row.phone,
+    avatarUrl: row.avatar_url,
     country: isCountryCode(row.country_code) ? row.country_code : "KZ",
     language: isLanguage(row.language) ? row.language : "ru",
     systemRole,
@@ -775,6 +865,7 @@ function publicUser(user: AuthUserRecord): UserRecord {
     name: user.name,
     email: user.email,
     phone: user.phone,
+    avatarUrl: user.avatarUrl,
     country: user.country,
     language: user.language,
     systemRole: user.systemRole,
