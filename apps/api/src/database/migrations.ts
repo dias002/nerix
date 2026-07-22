@@ -12,11 +12,17 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
       password_hash text,
       system_role text not null default 'user',
       display_name text,
+      avatar_url text,
       country_code text not null default 'KZ',
       language text not null default 'ru',
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     )
+  `);
+
+  await database.query(`
+    alter table users
+      add column if not exists avatar_url text
   `);
 
   await database.query(`
