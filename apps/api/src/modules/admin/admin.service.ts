@@ -98,6 +98,15 @@ export type AdminContentBlockRecord = {
   updatedAt: string;
 };
 
+export type PublicContentBlockRecord = Pick<
+  AdminContentBlockRecord,
+  "key" | "locale" | "title" | "body" | "placement" | "updatedAt"
+>;
+
+export type PublicContentBlocks = {
+  contentBlocks: PublicContentBlockRecord[];
+};
+
 export type AdminAuditRecord = {
   action: string;
   entityType: string | null;
@@ -745,6 +754,24 @@ export class AdminService {
       });
     } catch {
       return this.fallbackControlStateResult();
+    }
+  }
+
+  async publishedContentBlocks(input: { placement: string; locale: string }) {
+    try {
+      await this.ensureControlSeeded();
+      const contentBlocks = (await this.contentBlocks())
+        .filter((block) => block.active && block.placement === input.placement && block.locale === input.locale)
+        .map(toPublicContentBlock);
+
+      return ok<PublicContentBlocks>({ contentBlocks });
+    } catch {
+      const updatedAt = new Date().toISOString();
+      const contentBlocks = defaultContentBlocks()
+        .filter((block) => block.active && block.placement === input.placement && block.locale === input.locale)
+        .map((block) => toPublicContentBlock({ ...block, updatedAt }));
+
+      return ok<PublicContentBlocks>({ contentBlocks });
     }
   }
 
@@ -1972,6 +1999,30 @@ function defaultContentBlocks(): Array<Omit<AdminContentBlockRecord, "updatedAt"
       active: true,
     },
     {
+      key: "workspace.home.article.images",
+      locale: "ru",
+      title: "Как подготовить изображение, которое выглядит дороже",
+      body: "До генерации определите формат, главный объект и свет. Это помогает собрать чистую композицию без случайных деталей.\n\nДобавьте референс, если важно сохранить форму, материал или характер сцены. В описании оставьте только те признаки, которые действительно должны попасть в кадр.\n\nПеред запуском проверьте размер и ракурс: они сильнее всего влияют на то, как изображение будет выглядеть в публикации.",
+      placement: "workspace.home.articles",
+      active: true,
+    },
+    {
+      key: "workspace.home.article.video",
+      locale: "ru",
+      title: "Что указать перед генерацией короткого видео",
+      body: "Стартовый кадр задаёт композицию, героя и свет будущего ролика. Выберите его до того, как описывать движение.\n\nДля короткой сцены достаточно одного действия и одного движения камеры. Чем меньше конфликтующих команд, тем стабильнее сохраняются детали.\n\nЗаранее задайте длительность, формат и качество под площадку, где будет опубликовано видео.",
+      placement: "workspace.home.articles",
+      active: true,
+    },
+    {
+      key: "workspace.home.article.humanizer",
+      locale: "ru",
+      title: "Как убрать сухой AI-тон из текста",
+      body: "Сначала сохраните факты и основную мысль, затем уберите канцелярит и повторяющиеся выводы. Текст станет короче, но не потеряет смысл.\n\nРазбейте длинные предложения и оставьте естественные связки между абзацами. Не добавляйте эмоции там, где их не было в исходнике.\n\nВ конце прочитайте текст вслух: одинаковый ритм и слишком ровные формулировки заметнее всего именно на слух.",
+      placement: "workspace.home.articles",
+      active: true,
+    },
+    {
       key: "business.hero",
       locale: "ru",
       title: "Business кабинет nomduchat",
@@ -2063,6 +2114,17 @@ function mapContentBlockRow(row: ContentBlockRow): AdminContentBlockRecord {
     placement: row.placement,
     active: row.active,
     updatedAt: toIsoString(row.updated_at),
+  };
+}
+
+function toPublicContentBlock(block: AdminContentBlockRecord): PublicContentBlockRecord {
+  return {
+    key: block.key,
+    locale: block.locale,
+    title: block.title,
+    body: block.body,
+    placement: block.placement,
+    updatedAt: block.updatedAt,
   };
 }
 

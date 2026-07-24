@@ -41,6 +41,18 @@ services:
         generateValue: true
       - key: OPENAI_API_KEY
         sync: false
+      - key: GOOGLE_AI_API_KEY
+        sync: false
+      - key: GEMINI_TEXT_MODEL
+        value: gemini-3.1-flash-lite
+      - key: GEMINI_CODE_MODEL
+        value: gemini-3.1-flash-lite
+      - key: GEMINI_IMAGE_MODEL
+        value: gemini-3.1-flash-image
+      - key: GEMINI_VIDEO_MODEL
+        value: veo-3.1-lite-generate-preview
+      - key: GEMINI_MUSIC_MODEL
+        value: lyria-3-clip-preview
       - key: SMTP_BZ_API_KEY
         sync: false
       - key: PASSWORD_RESET_FROM_EMAIL

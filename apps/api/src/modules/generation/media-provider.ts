@@ -1,6 +1,6 @@
 import type { AiModality } from "@nomduchat/shared";
 import { config } from "../../config.js";
-import type { AvatarVideoGenerationInput } from "./generation.types.js";
+import type { AvatarVideoGenerationInput, ImageReferenceInput, MediaGenerationOptions } from "./generation.types.js";
 
 export type MediaGenerationProviderInput = {
   jobId: string;
@@ -10,6 +10,9 @@ export type MediaGenerationProviderInput = {
   prompt: string;
   systemPrompt?: string;
   avatarVideo?: AvatarVideoGenerationInput;
+  imageReference?: ImageReferenceInput;
+  imageReferences?: ImageReferenceInput[];
+  options?: MediaGenerationOptions;
 };
 
 export type MediaGenerationProviderResult = {
@@ -53,6 +56,7 @@ const heygenVideoOperationPrefix = "heygen-video://video/";
 const defaultGeminiImageModel = "gemini-3.1-flash-image";
 const defaultGeminiVideoModel = "veo-3.1-lite-generate-preview";
 const defaultGeminiMusicModel = "lyria-3-clip-preview";
+const defaultOpenAiImageModel = "gpt-image-1";
 const defaultOpenAiVoiceModel = "gpt-4o-mini-tts";
 
 export class MockMediaGenerationProvider implements MediaGenerationProvider {
@@ -218,6 +222,17 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
       input.modality === "image"
         ? normalizeGeminiImageModel(input.model)
         : normalizeGeminiMusicModel(input.model);
+    const references = input.imageReferences?.length
+      ? input.imageReferences
+      : input.imageReference
+        ? [input.imageReference]
+        : [];
+    const interactionInput = input.modality === "music"
+      ? input.prompt
+      : [
+          { type: "text", text: input.prompt },
+          ...references.map(toGeminiInlineImage),
+        ];
 
     const response = await fetch(url, {
       method: "POST",
@@ -226,7 +241,17 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
       },
       body: JSON.stringify({
         model,
-        input: input.modality === "music" ? input.prompt : [{ type: "text", text: input.prompt }],
+        input: interactionInput,
+        ...(input.modality === "image"
+          ? {
+              response_format: {
+                type: "image",
+                mime_type: "image/jpeg",
+                aspect_ratio: input.options?.aspectRatio ?? "1:1",
+                image_size: input.options?.imageSize ?? "1K",
+              },
+            }
+          : {}),
       }),
     });
 
@@ -264,12 +289,23 @@ export class GeminiMediaGenerationProvider implements MediaGenerationProvider {
       },
       body: JSON.stringify({
         instances: [
-          {
+          compactObject({
             prompt: input.prompt,
-          },
+            image: input.imageReference
+              ? {
+                  inlineData: {
+                    mimeType: input.imageReference.mimeType,
+                    data: input.imageReference.data.toString("base64"),
+                  },
+                }
+              : undefined,
+          }),
         ],
         parameters: {
-          resolution: "720p",
+          numberOfVideos: 1,
+          aspectRatio: normalizeVideoAspectRatio(input.options?.aspectRatio),
+          resolution: input.options?.videoResolution ?? "720p",
+          durationSeconds: normalizeVideoDuration(input.options, Boolean(input.imageReference)),
         },
       }),
     });
@@ -614,53 +650,27 @@ export class HeyGenMediaGenerationProvider implements MediaGenerationProvider {
   }
 }
 
-export class OpenAiVoiceGenerationProvider implements MediaGenerationProvider {
+export class OpenAiMediaGenerationProvider implements MediaGenerationProvider {
   async generate(input: MediaGenerationProviderInput) {
     if (!config.OPENAI_API_KEY) {
-      throw new Error("OPENAI_API_KEY is required for OpenAI voice generation.");
-    }
-    if (input.modality !== "voice") {
-      throw new Error(`OpenAI voice generation does not support '${input.modality}'.`);
+      throw new Error("OPENAI_API_KEY is required for OpenAI media generation.");
     }
 
-    const model = normalizeOpenAiVoiceModel(input.model);
-    const voice = inferOpenAiVoice(input.prompt);
-    const response = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        voice,
-        input: cleanSpeechInput(input.prompt),
-        response_format: "mp3",
-        speed: 1,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`OpenAI speech generation failed with ${response.status}: ${errorBody.slice(0, 500)}`);
+    if (input.modality === "image") {
+      return input.imageReference || input.imageReferences?.length ? this.editImage(input) : this.generateImage(input);
     }
 
-    return {
-      status: "succeeded" as const,
-      mimeType: response.headers.get("content-type") ?? "audio/mpeg",
-      base64Data: Buffer.from(await response.arrayBuffer()).toString("base64"),
-      raw: {
-        provider: "openai",
-        model,
-        voice,
-      },
-    };
+    if (input.modality === "voice") {
+      return this.generateSpeech(input);
+    }
+
+    throw new Error(`OpenAI media generation does not support '${input.modality}'.`);
   }
 
   async refresh() {
     return {
       status: "failed" as const,
-      errorMessage: "OpenAI voice generations complete synchronously.",
+      errorMessage: "OpenAI media generations complete synchronously.",
     };
   }
 
@@ -680,22 +690,176 @@ export class OpenAiVoiceGenerationProvider implements MediaGenerationProvider {
       throw new Error(`OpenAI artifact fetch failed with ${response.status}: ${errorBody.slice(0, 500)}`);
     }
 
+    const arrayBuffer = await response.arrayBuffer();
     return {
       mimeType: response.headers.get("content-type") ?? inferMimeTypeFromUri(uri) ?? "application/octet-stream",
-      data: Buffer.from(await response.arrayBuffer()),
+      data: Buffer.from(arrayBuffer),
     };
+  }
+
+  private async generateImage(input: MediaGenerationProviderInput) {
+    const body = await this.fetchJson(
+      "https://api.openai.com/v1/images/generations",
+      {
+        method: "POST",
+        headers: openAiJsonHeaders(),
+        body: JSON.stringify({
+          model: normalizeOpenAiImageModel(input.model),
+          prompt: input.prompt,
+          size: openAiImageSize(input.options?.aspectRatio),
+        }),
+      },
+      "OpenAI image generation"
+    );
+
+    const artifact = extractOpenAiImageArtifact(body);
+    if (!artifact) {
+      throw new Error("OpenAI image generation completed without an image artifact.");
+    }
+
+    return {
+      status: "succeeded" as const,
+      mimeType: artifact.mimeType,
+      base64Data: artifact.base64Data,
+      providerUri: artifact.uri,
+      raw: body,
+    };
+  }
+
+  private async editImage(input: MediaGenerationProviderInput) {
+    const references = input.imageReferences?.length ? input.imageReferences : input.imageReference ? [input.imageReference] : [];
+    if (references.length === 0) {
+      throw new Error("An image reference is required for OpenAI image edits.");
+    }
+
+    const form = new FormData();
+    form.append("model", normalizeOpenAiImageModel(input.model));
+    form.append("prompt", [
+      "Edit the provided source image or images. Preserve the main subject, composition, and recognizable style unless the user explicitly asks to change them.",
+      "If the user says an image is an identity reference, preserve the recognizable person. If the user says an image is a style reference only, use it only for style, lighting, crop, and quality.",
+      "Apply only the requested change.",
+      "",
+      "Source image prompts:",
+      ...references.map((reference, index) => `${index + 1}. ${reference.prompt}`),
+      "",
+      "User edit request:",
+      input.prompt,
+    ].join("\n"));
+    const imageFieldName = references.length > 1 ? "image[]" : "image";
+    for (const reference of references) {
+      form.append(
+        imageFieldName,
+        new Blob([new Uint8Array(reference.data)], { type: reference.mimeType }),
+        `nomduchat-source-${reference.jobId}.${extensionForMimeType(reference.mimeType)}`
+      );
+    }
+    form.append("size", openAiImageSize(input.options?.aspectRatio));
+
+    const body = await this.fetchJson(
+      "https://api.openai.com/v1/images/edits",
+      {
+        method: "POST",
+        headers: openAiFormHeaders(),
+        body: form,
+      },
+      "OpenAI image edit"
+    );
+
+    const artifact = extractOpenAiImageArtifact(body);
+    if (!artifact) {
+      throw new Error("OpenAI image edit completed without an image artifact.");
+    }
+
+    return {
+      status: "succeeded" as const,
+      mimeType: artifact.mimeType,
+      base64Data: artifact.base64Data,
+      providerUri: artifact.uri,
+      raw: body,
+    };
+  }
+
+  async generateSpeech(input: MediaGenerationProviderInput) {
+    const format = input.options?.audioFormat ?? "mp3";
+    const response = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: openAiJsonHeaders(),
+      body: JSON.stringify({
+        model: normalizeOpenAiVoiceModel(input.model),
+        voice: input.options?.voice ?? inferOpenAiVoice(input.prompt),
+        input: cleanSpeechInput(input.prompt),
+        response_format: format,
+        speed: input.options?.speechSpeed ?? 1,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`OpenAI speech generation failed with ${response.status}: ${errorBody.slice(0, 500)}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    return {
+      status: "succeeded" as const,
+      mimeType: response.headers.get("content-type") ?? (format === "wav" ? "audio/wav" : "audio/mpeg"),
+      base64Data: Buffer.from(arrayBuffer).toString("base64"),
+      raw: {
+        provider: "openai",
+        model: normalizeOpenAiVoiceModel(input.model),
+      },
+    };
+  }
+
+  private async fetchJson(url: string, init: RequestInit, label: string) {
+    const response = await fetch(url, init);
+    const body = await readJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(`${label} failed with ${response.status}: ${JSON.stringify(body).slice(0, 500)}`);
+    }
+
+    return body;
+  }
+}
+
+export class OpenAiVoiceGenerationProvider implements MediaGenerationProvider {
+  private readonly openai = new OpenAiMediaGenerationProvider();
+
+  async generate(input: MediaGenerationProviderInput) {
+    if (!config.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is required for OpenAI voice generation.");
+    }
+    if (input.modality !== "voice") {
+      throw new Error(`OpenAI voice generation does not support '${input.modality}'.`);
+    }
+
+    return this.openai.generateSpeech(input);
+  }
+
+  async refresh() {
+    return {
+      status: "failed" as const,
+      errorMessage: "OpenAI voice generations complete synchronously.",
+    };
+  }
+
+  async cancel(operationName?: string) {
+    return this.openai.cancel(operationName);
+  }
+
+  async fetchArtifact(uri: string) {
+    return this.openai.fetchArtifact(uri);
   }
 }
 
 export class BackendMediaGenerationProvider implements MediaGenerationProvider {
   private readonly mock = new MockMediaGenerationProvider();
-  private readonly openaiVoice = new OpenAiVoiceGenerationProvider();
+  private readonly openai = new OpenAiMediaGenerationProvider();
   private readonly gemini = new GeminiMediaGenerationProvider();
   private readonly heygen = new HeyGenMediaGenerationProvider();
 
   async generate(input: MediaGenerationProviderInput) {
     if (input.provider === "mock-provider") return this.mock.generate(input);
-    if (input.provider === "openai" && input.modality === "voice") return this.openaiVoice.generate(input);
+    if (input.provider === "openai") return this.openai.generate(input);
     if (input.provider === "gemini") return this.gemini.generate(input);
     if (input.provider === "heygen") return this.heygen.generate(input);
 
@@ -716,6 +880,7 @@ export class BackendMediaGenerationProvider implements MediaGenerationProvider {
 
   async fetchArtifact(uri: string) {
     if (uri.startsWith("mock://")) return this.mock.fetchArtifact(uri);
+    if (isOpenAiArtifactUri(uri)) return this.openai.fetchArtifact(uri);
     if (isHttpUri(uri) && !isGeminiArtifactUri(uri)) return this.heygen.fetchArtifact(uri);
     return this.gemini.fetchArtifact(uri);
   }
@@ -723,6 +888,24 @@ export class BackendMediaGenerationProvider implements MediaGenerationProvider {
 
 export function createMediaGenerationProvider(): MediaGenerationProvider {
   return new BackendMediaGenerationProvider();
+}
+
+const geminiImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+function toGeminiInlineImage(reference: ImageReferenceInput) {
+  const mimeType = reference.mimeType.trim().toLowerCase();
+  if (!geminiImageMimeTypes.has(mimeType)) {
+    throw new Error("Gemini image references must use JPEG, PNG, or WebP.");
+  }
+  if (reference.data.length === 0) {
+    throw new Error("Gemini image references cannot be empty.");
+  }
+
+  return {
+    type: "image",
+    mime_type: mimeType,
+    data: reference.data.toString("base64"),
+  };
 }
 
 function extractMediaArtifact(
@@ -893,12 +1076,15 @@ function normalizeGeminiMusicModel(value: string | undefined) {
   return model;
 }
 
+function normalizeOpenAiImageModel(value: string | undefined) {
+  const model = value?.trim();
+  if (!model || model === "openai-image-configured" || model === "image-primary") return defaultOpenAiImageModel;
+  return model;
+}
+
 function normalizeOpenAiVoiceModel(value: string | undefined) {
   const model = value?.trim();
-  if (!model || model === "openai-voice-configured" || model === "voice-primary") {
-    return defaultOpenAiVoiceModel;
-  }
-
+  if (!model || model === "openai-voice-configured" || model === "voice-primary") return defaultOpenAiVoiceModel;
   return model;
 }
 
@@ -943,6 +1129,19 @@ function heygenJsonHeaders(apiKey: string) {
   return {
     "Content-Type": "application/json",
     "X-Api-Key": apiKey,
+  };
+}
+
+function openAiJsonHeaders() {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${config.OPENAI_API_KEY}`,
+  };
+}
+
+function openAiFormHeaders() {
+  return {
+    Authorization: `Bearer ${config.OPENAI_API_KEY}`,
   };
 }
 
@@ -1021,6 +1220,8 @@ function createHeyGenTitle(name: string | undefined, jobId: string) {
 function extensionForMimeType(mimeType: string) {
   if (mimeType === "image/png") return "png";
   if (mimeType === "image/webp") return "webp";
+  if (mimeType === "audio/mpeg") return "mp3";
+  if (mimeType === "audio/wav") return "wav";
   return "jpg";
 }
 
@@ -1036,6 +1237,72 @@ function isGeminiArtifactUri(uri: string) {
   }
 }
 
+function normalizeVideoAspectRatio(aspectRatio?: MediaGenerationOptions["aspectRatio"]) {
+  return aspectRatio === "9:16" ? "9:16" : "16:9";
+}
+
+function normalizeVideoDuration(options?: MediaGenerationOptions, hasStartingFrame = false) {
+  if (hasStartingFrame || options?.videoResolution === "1080p" || options?.videoResolution === "4k") return 8;
+  return options?.durationSeconds ?? 8;
+}
+
+function openAiImageSize(aspectRatio?: MediaGenerationOptions["aspectRatio"]) {
+  if (["2:3", "3:4", "4:5", "9:16"].includes(aspectRatio ?? "")) return "1024x1536";
+  if (["3:2", "4:3", "5:4", "16:9", "21:9"].includes(aspectRatio ?? "")) return "1536x1024";
+  return "1024x1024";
+}
+
 function compactObject(input: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+}
+
+function extractOpenAiImageArtifact(input: unknown) {
+  const data = input && typeof input === "object" ? (input as Record<string, unknown>).data : null;
+  if (!Array.isArray(data)) return null;
+
+  for (const item of data) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    const base64Data = typeof record.b64_json === "string" ? record.b64_json : undefined;
+    const uri = typeof record.url === "string" ? record.url : undefined;
+    if (base64Data || uri) {
+      return {
+        mimeType: inferMimeTypeFromUri(uri) ?? "image/png",
+        base64Data,
+        uri,
+      };
+    }
+  }
+
+  return null;
+}
+
+function inferOpenAiVoice(prompt: string) {
+  const normalized = prompt.toLowerCase();
+  if (containsAny(normalized, ["муж", "низк", "бас", "male", "deep"])) return "onyx";
+  if (containsAny(normalized, ["жен", "female", "мягк", "тепл"])) return "nova";
+  if (containsAny(normalized, ["детск", "ребен", "child", "young", "игрив"])) return "fable";
+  if (containsAny(normalized, ["энерг", "ярк", "реклам", "promo"])) return "shimmer";
+  if (containsAny(normalized, ["спокой", "делов", "нейтрал"])) return "alloy";
+  return "alloy";
+}
+
+function cleanSpeechInput(prompt: string) {
+  return prompt
+    .replace(/^(озвучь|сделай озвучку|создай озвучку|прочитай вслух|voice over|text to speech)[:\s-]*/i, "")
+    .trim()
+    .slice(0, 4_000) || prompt.slice(0, 4_000);
+}
+
+function containsAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(needle));
+}
+
+function isOpenAiArtifactUri(uri: string) {
+  try {
+    const { hostname } = new URL(uri);
+    return hostname.endsWith("openai.com") || hostname.endsWith("oaidalleapiprodscus.blob.core.windows.net");
+  } catch {
+    return false;
+  }
 }

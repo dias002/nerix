@@ -73,7 +73,26 @@ const contentBlockUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
+const publicContentBlocksQuerySchema = z.object({
+  placement: z.string().trim().min(1).max(120),
+  locale: z.string().trim().min(2).max(12).default("ru"),
+});
+
 export async function registerAdminRoutes(app: FastifyInstance, admin: AdminService, auth: AuthService) {
+  app.get("/content/blocks", async (request, reply) => {
+    const input = publicContentBlocksQuerySchema.safeParse(request.query);
+    if (!input.success) {
+      return reply.status(400).send({
+        error: {
+          code: "validation_failed",
+          message: "Invalid content blocks query.",
+        },
+      });
+    }
+
+    return sendResult(reply, await admin.publishedContentBlocks(input.data));
+  });
+
   app.get("/admin/overview", async (request, reply) => {
     const currentUser = await resolveAdmin(request, auth);
     if (!currentUser.ok) return sendResult(reply, currentUser);

@@ -15,6 +15,7 @@ import {
   Megaphone,
   MessageSquare,
   Plug,
+  Plus,
   Power,
   Radio,
   RefreshCw,
@@ -54,6 +55,12 @@ import {
   type PlanId,
 } from "../api";
 import { useAuth } from "../auth";
+import {
+  buildWorkspaceArticleKey,
+  normalizeWorkspaceArticleSlug,
+  workspaceArticleSlugFromKey,
+  type WorkspaceArticleType,
+} from "../data/workspaceArticles";
 import { useLocation, useSearchParams } from "react-router";
 import { AiBudgetProviderCard, PaymentStat, UserStat } from "./admin/components";
 import {
@@ -91,6 +98,21 @@ import { adminHeader, readAdminPathTab, readAdminTab } from "./admin/navigation"
 import { statusClass } from "./admin/styles";
 import type { AdminTab, ContentBlockDraft, FeatureFlagDraft, PromotionDraft } from "./admin/types";
 
+const workspaceArticlePlacement = "workspace.home.articles";
+const workspaceArticleOptions: Array<{ id: WorkspaceArticleType; label: string }> = [
+  { id: "images", label: "Изображения" },
+  { id: "video", label: "Видео" },
+  { id: "voice", label: "Озвучка" },
+  { id: "humanizer", label: "Humanizer" },
+];
+
+const emptyWorkspaceArticleDraft = {
+  type: "images" as WorkspaceArticleType,
+  slug: "",
+  title: "",
+  body: "",
+};
+
 export default function Admin() {
   const { user } = useAuth();
   const location = useLocation();
@@ -107,6 +129,7 @@ export default function Admin() {
   const [featureFlagDrafts, setFeatureFlagDrafts] = useState<Record<string, FeatureFlagDraft>>({});
   const [promotionDrafts, setPromotionDrafts] = useState<Record<string, PromotionDraft>>({});
   const [contentBlockDrafts, setContentBlockDrafts] = useState<Record<string, ContentBlockDraft>>({});
+  const [workspaceArticleDraft, setWorkspaceArticleDraft] = useState(() => ({ ...emptyWorkspaceArticleDraft }));
   const [loading, setLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(false);
   const [controlLoading, setControlLoading] = useState(false);
@@ -124,6 +147,16 @@ export default function Admin() {
   const effectiveUsers = adminUsers ?? emptyUsers;
   const effectiveControl = controlState ?? emptyControlState;
   const effectiveAiBudget = aiBudget ?? emptyAiBudget;
+  const workspaceArticleSlug = normalizeWorkspaceArticleSlug(workspaceArticleDraft.slug);
+  const workspaceArticleKey = buildWorkspaceArticleKey(workspaceArticleDraft.type, workspaceArticleSlug);
+  const canCreateWorkspaceArticle = Boolean(
+    workspaceArticleKey &&
+      workspaceArticleDraft.title.trim() &&
+      workspaceArticleDraft.title.trim().length <= 180 &&
+      workspaceArticleDraft.body.trim() &&
+      workspaceArticleDraft.body.trim().length <= 5_000 &&
+      !controlBusyKey
+  );
 
   const pricing = effectiveOverview.pricing;
   const memory = effectiveOverview.memory;
@@ -357,8 +390,10 @@ export default function Admin() {
     try {
       setControlState(await callback());
       setNotice(message);
+      return true;
     } catch (controlError) {
       setError(toPublicApiError(controlError, "Не удалось сохранить настройку."));
+      return false;
     } finally {
       setControlBusyKey(null);
     }
@@ -486,6 +521,47 @@ export default function Admin() {
       () => updateAdminContentBlock(block.key, { locale: block.locale, active: !block.active }),
       block.active ? "Контентный блок скрыт." : "Контентный блок опубликован."
     );
+  };
+
+  const createWorkspaceArticle = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const slug = normalizeWorkspaceArticleSlug(workspaceArticleDraft.slug);
+    const key = buildWorkspaceArticleKey(workspaceArticleDraft.type, slug);
+    const title = workspaceArticleDraft.title.trim();
+    const body = workspaceArticleDraft.body.trim();
+
+    if (!key || !title || !body) {
+      setError("Заполните направление, slug, заголовок и текст статьи.");
+      return;
+    }
+
+    const duplicateKey = effectiveControl.contentBlocks.some(
+      (block) => block.locale === "ru" && block.key === key
+    );
+    const duplicateSlug = effectiveControl.contentBlocks.some(
+      (block) => block.locale === "ru" && workspaceArticleSlugFromKey(block.key) === slug
+    );
+
+    if (duplicateKey || duplicateSlug) {
+      setError("Статья с таким slug уже существует.");
+      return;
+    }
+
+    const saved = await runControlAction(
+      `content-create:${key}`,
+      () =>
+        updateAdminContentBlock(key, {
+          locale: "ru",
+          title,
+          body,
+          placement: workspaceArticlePlacement,
+          active: true,
+        }),
+      "Статья опубликована на главной."
+    );
+
+    if (saved) setWorkspaceArticleDraft({ ...emptyWorkspaceArticleDraft });
   };
 
   if (!user?.permissions.adminPanel) {
@@ -1357,6 +1433,101 @@ export default function Admin() {
                 <p className="mt-2 text-sm leading-relaxed text-gray-600">
                   Заголовки и описания для ключевых страниц. Это заготовка CMS-слоя, который дальше можно подключать к лендингу и агентам.
                 </p>
+
+                <form
+                  onSubmit={(event) => void createWorkspaceArticle(event)}
+                  className="mt-5 rounded-2xl border border-white/10 bg-black p-4"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-medium text-white">Новая статья на главной</h3>
+                      <p className="mt-1 break-all font-mono text-[11px] text-gray-600">
+                        {workspaceArticleKey ?? `workspace.home.article.${workspaceArticleDraft.type}.slug`}
+                      </p>
+                    </div>
+                    <span className="w-fit rounded-full border border-white/10 px-2 py-1 text-[11px] text-gray-500">
+                      RU · опубликована
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="space-y-1.5 text-xs text-gray-500">
+                      <span>Направление CTA</span>
+                      <select
+                        value={workspaceArticleDraft.type}
+                        onChange={(event) =>
+                          setWorkspaceArticleDraft((current) => ({
+                            ...current,
+                            type: event.target.value as WorkspaceArticleType,
+                          }))
+                        }
+                        className="h-10 w-full rounded-xl border border-white/10 bg-[#050505] px-3 text-sm text-white outline-none transition-colors focus:border-white/25"
+                      >
+                        {workspaceArticleOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="space-y-1.5 text-xs text-gray-500">
+                      <span>Slug</span>
+                      <input
+                        value={workspaceArticleDraft.slug}
+                        onChange={(event) =>
+                          setWorkspaceArticleDraft((current) => ({
+                            ...current,
+                            slug: normalizeWorkspaceArticleSlug(event.target.value),
+                          }))
+                        }
+                        required
+                        maxLength={64}
+                        placeholder="video-for-product-card"
+                        className="h-10 w-full rounded-xl border border-white/10 bg-[#050505] px-3 font-mono text-sm text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="mt-3 block space-y-1.5 text-xs text-gray-500">
+                    <span>Заголовок</span>
+                    <input
+                      value={workspaceArticleDraft.title}
+                      onChange={(event) =>
+                        setWorkspaceArticleDraft((current) => ({ ...current, title: event.target.value }))
+                      }
+                      required
+                      maxLength={180}
+                      className="h-10 w-full rounded-xl border border-white/10 bg-[#050505] px-3 text-sm text-white outline-none transition-colors focus:border-white/25"
+                    />
+                  </label>
+
+                  <label className="mt-3 block space-y-1.5 text-xs text-gray-500">
+                    <span>Текст</span>
+                    <textarea
+                      value={workspaceArticleDraft.body}
+                      onChange={(event) =>
+                        setWorkspaceArticleDraft((current) => ({ ...current, body: event.target.value }))
+                      }
+                      required
+                      maxLength={5_000}
+                      rows={5}
+                      className="w-full resize-y rounded-xl border border-white/10 bg-[#050505] px-3 py-2 text-sm leading-relaxed text-white outline-none transition-colors focus:border-white/25"
+                    />
+                  </label>
+
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-600">Пустая строка разделяет абзацы.</p>
+                    <button
+                      type="submit"
+                      disabled={!canCreateWorkspaceArticle}
+                      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Plus className="h-4 w-4" strokeWidth={1.8} />
+                      Опубликовать
+                    </button>
+                  </div>
+                </form>
 
                 <div className="mt-5 space-y-3">
                   {effectiveControl.contentBlocks.length > 0 ? (

@@ -160,6 +160,7 @@ const envSchema = z.object({
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(30),
   TRANSACTIONAL_FROM_EMAIL: z.string().email().optional(),
   TRANSACTIONAL_FROM_NAME: z.string().default("nomduchat"),
+  SUPPORT_EMAIL: z.string().email().default("admin@nomduchat.com"),
   LIFECYCLE_NOTIFICATIONS_TOKEN: z.string().optional(),
   MAILINGS_API_TOKEN: z.string().optional(),
   MAILINGS_API_USER_ID: z.string().default("local-user"),

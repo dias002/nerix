@@ -1,0 +1,145 @@
+[
+  {
+    "id": "ai-translation",
+    "title": "AI-перевод",
+    "text": "Перевод текста с сохранением смысла, тона и структуры.",
+    "category": "Текст",
+    "accent": "solar",
+    "agentId": "documents",
+    "networkId": "gemini:gemini-2.5-flash",
+    "starterPrompt": "Переведи текст на английский. Сохрани смысл, структуру и тон. После перевода укажи спорные места.",
+    "visual": "A translucent language prism orbiting a warm amber planet, thin letter-like light particles transforming across the prism without readable text"
+  },
+  {
+    "id": "prompt-builder",
+    "title": "Генератор промптов",
+    "text": "Собирает точный запрос для текста, изображения, видео или бизнеса.",
+    "category": "Текст",
+    "accent": "plasma",
+    "agentId": "general",
+    "starterPrompt": "Помоги составить сильный промпт. Сначала задай 3 уточняющих вопроса, затем дай готовую версию.",
+    "visual": "A luminous magenta energy thread assembling several floating glass modules into one precise beam"
+  },
+  {
+    "id": "humanizer",
+    "title": "Humanizer",
+    "text": "Убирает сухие AI-формулировки и делает текст естественнее.",
+    "category": "Текст",
+    "accent": "coral",
+    "href": "/tools/humanizer",
+    "visual": "A rigid metallic waveform gradually becoming a warm organic coral ribbon in deep space"
+  },
+  {
+    "id": "seo-article",
+    "title": "SEO-статья",
+    "text": "Структура, заголовки, читаемый текст и мета-описание.",
+    "category": "Маркетинг",
+    "accent": "orbit",
+    "agentId": "marketing",
+    "networkId": "openai:gpt-4o-mini",
+    "starterPrompt": "Подготовь SEO-статью: заголовок, план H2/H3, интро, основной текст, FAQ и meta description.",
+    "visual": "A bright orbital path rising through layered editorial pages toward a small golden star, no letters"
+  },
+  {
+    "id": "interior",
+    "title": "Дизайн интерьера",
+    "text": "Визуальная концепция комнаты по описанию или исходному фото.",
+    "category": "Изображения",
+    "accent": "solar",
+    "creationMode": "image",
+    "starterPrompt": "Современная гостиная с мягким вечерним светом, натуральным камнем и тёплым деревом.",
+    "visual": "A premium architectural room floating inside a glass space habitat, warm sunset lighting and precise materials"
+  },
+  {
+    "id": "images",
+    "title": "Изображения",
+    "text": "Карточки товаров, обложки и визуальные концепции.",
+    "category": "Изображения",
+    "accent": "plasma",
+    "creationMode": "image",
+    "starterPrompt": "Создай выразительный рекламный визуал продукта с чистой композицией и направленным светом.",
+    "visual": "A polished product object emerging from a violet cosmic aperture with controlled studio lighting"
+  },
+  {
+    "id": "video",
+    "title": "Видео",
+    "text": "Короткие ролики со стартовым кадром и управлением камерой.",
+    "category": "Видео",
+    "accent": "coral",
+    "creationMode": "video",
+    "starterPrompt": "Кинематографичный продуктовый ролик: объект появляется из темноты, камера плавно приближается.",
+    "visual": "A cinematic camera orbiting a glowing coral planet, visible motion trail and a widescreen frame gate"
+  },
+  {
+    "id": "avatar",
+    "title": "AI-аватар",
+    "text": "Персональный ведущий по фото и набор живых эмоций.",
+    "category": "Видео",
+    "accent": "orbit",
+    "href": "/workspace/avatar",
+    "visual": "A friendly premium 3D portrait inside a small orbital studio, warm rim light, expressive face"
+  },
+  {
+    "id": "presentation",
+    "title": "Презентация",
+    "text": "Структура слайдов, тезисы, заметки и визуальные идеи.",
+    "category": "Бизнес",
+    "accent": "solar",
+    "agentId": "presentations",
+    "networkId": "openai:gpt-4.1-mini",
+    "starterPrompt": "Собери презентацию: цель, аудитория, структура слайдов, тезисы, заметки спикера и идеи визуалов.",
+    "visual": "Several elegant glass presentation planes unfolding like solar sails around a golden core, no text"
+  },
+  {
+    "id": "music",
+    "title": "Музыка и песня",
+    "text": "Трек, джингл или песня через Gemini Lyria.",
+    "category": "Аудио",
+    "accent": "plasma",
+    "creationMode": "music",
+    "starterPrompt": "Энергичный электронный джингл для технологичного продукта, запоминающийся хук, 30 секунд.",
+    "visual": "A violet sound wave wrapping around a glossy moon like a luminous vinyl groove"
+  },
+  {
+    "id": "voice",
+    "title": "Озвучка",
+    "text": "Дикторская версия текста с темпом и естественными паузами.",
+    "category": "Аудио",
+    "accent": "coral",
+    "creationMode": "voice",
+    "starterPrompt": "Добро пожаловать в NomduChat. Опишите задачу, и мы соберём подходящий рабочий процесс.",
+    "visual": "A warm coral voice pulse traveling between two polished communication satellites"
+  },
+  {
+    "id": "mailing",
+    "title": "Письмо для рассылки",
+    "text": "Тема, короткое письмо, CTA и варианты для A/B-проверки.",
+    "category": "Маркетинг",
+    "accent": "orbit",
+    "agentId": "marketing",
+    "networkId": "openai:gpt-4o-mini",
+    "starterPrompt": "Сформируй письмо для рассылки: тема, прехедер, короткое письмо, CTA и 2 варианта A/B-теста.",
+    "visual": "A sleek message capsule launching along two diverging orbital paths, one amber and one rose"
+  },
+  {
+    "id": "code",
+    "title": "Код и отладка",
+    "text": "Разбор ошибки, минимальное исправление и проверка результата.",
+    "category": "Разработка",
+    "accent": "plasma",
+    "agentId": "code",
+    "networkId": "anthropic:claude-sonnet-4-20250514",
+    "starterPrompt": "Помоги с кодом: найди проблему, предложи минимальное исправление, тесты и проверку результата.",
+    "visual": "A fractured dark crystal circuit repairing itself with a precise violet energy bridge, no code text"
+  },
+  {
+    "id": "documents",
+    "title": "Документы",
+    "text": "Резюме файла, риски, правки и понятные выводы.",
+    "category": "Документы",
+    "accent": "solar",
+    "agentId": "documents",
+    "starterPrompt": "Проанализируй документ: краткое резюме, риски, важные факты, правки и следующие действия.",
+    "visual": "Layered translucent document sheets orbiting a warm analytical core, subtle warning markers without text"
+  }
+]

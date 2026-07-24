@@ -36,6 +36,7 @@ export async function sendChatMessage(input: {
   conversationId?: string;
   agentId?: string;
   selectedModelId?: string;
+  imageReferenceJobId?: string;
   responseStyle?: ResponseStyleId;
   language?: Language;
   country?: "KZ" | "RU";
@@ -49,6 +50,7 @@ export async function sendChatMessage(input: {
       conversationId: input.conversationId,
       agentId: input.agentId,
       selectedModelId: input.selectedModelId,
+      imageReferenceJobId: input.imageReferenceJobId,
       responseStyle: input.responseStyle,
       message: input.message,
       attachments: input.attachments,
@@ -79,6 +81,7 @@ export async function sendChatMessageStream(input: {
   conversationId?: string;
   agentId?: string;
   selectedModelId?: string;
+  imageReferenceJobId?: string;
   responseStyle?: ResponseStyleId;
   language?: Language;
   country?: "KZ" | "RU";
@@ -92,6 +95,7 @@ export async function sendChatMessageStream(input: {
       conversationId: input.conversationId,
       agentId: input.agentId,
       selectedModelId: input.selectedModelId,
+      imageReferenceJobId: input.imageReferenceJobId,
       responseStyle: input.responseStyle,
       message: input.message,
       attachments: input.attachments,

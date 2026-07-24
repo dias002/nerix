@@ -6,6 +6,7 @@ export interface Message {
   sender: "user" | "ai";
   attachments?: AttachedFile[];
   generationJob?: MediaGenerationJobApiRecord;
+  imageReferenceJob?: MediaGenerationJobApiRecord;
   selectedBest?: boolean;
 }
 

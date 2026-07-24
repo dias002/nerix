@@ -1,57 +1,53 @@
 import type { UserApiRecord } from "./api";
+import {
+  getWorkspaceFeatureStatus as getWorkspaceFeatureStatusFromShared,
+  resolveWorkspaceFeatureAccess,
+  type WorkspaceFeatureAccess,
+  type WorkspaceFeatureStatus,
+} from "@nomduchat/shared";
 
-export type WorkspaceAccess = {
-  isGuest: boolean;
-  isAdmin: boolean;
-  isOwner: boolean;
-  canUseChat: boolean;
-  canUseHistory: boolean;
-  canUseBalance: boolean;
-  canUseSettings: boolean;
-  canUseMailings: boolean;
-  canUseBusiness: boolean;
-  canUseBusinessOverview: boolean;
-  canUseBusinessDialogs: boolean;
-  canUseBusinessAnalytics: boolean;
-  canUseBusinessWebsite: boolean;
-  canUseBusinessTelegramBot: boolean;
-  canUseBusinessIdeas: boolean;
-};
+export type WorkspaceAccess = WorkspaceFeatureAccess;
 
 export function getWorkspaceAccess(user: UserApiRecord | null): WorkspaceAccess {
   const isGuest = !user;
   const isOwner = user?.email?.trim().toLowerCase() === "dias.sunnatilla@gmail.com";
   const isAdmin = Boolean(user?.permissions.adminPanel || isOwner);
-  const hasBusinessIdentity =
-    isOwner ||
-    user?.workspaceRole === "business_owner" ||
-    user?.workspaceRole === "business_employee" ||
-    user?.activePlanId === "business" ||
-    Boolean(user?.businessWorkspace);
-  const canUseBusiness = Boolean(user?.permissions.business && hasBusinessIdentity && (!isAdmin || isOwner));
-  const canManageBusiness = Boolean(canUseBusiness && user?.permissions.businessSettings);
-  const canSeeEmployeeReports = Boolean(canUseBusiness && user?.permissions.employeeReports);
 
-  return {
+  return resolveWorkspaceFeatureAccess({
     isGuest,
     isAdmin,
     isOwner,
-    canUseChat: true,
-    canUseHistory: !isAdmin || isOwner,
-    canUseBalance: !isAdmin || isOwner,
-    canUseSettings: Boolean(user),
-    canUseMailings: Boolean(isAdmin && user?.permissions.mailings),
-    canUseBusiness,
-    canUseBusinessOverview: canUseBusiness,
-    canUseBusinessDialogs: canUseBusiness,
-    canUseBusinessAnalytics: canSeeEmployeeReports,
-    canUseBusinessWebsite: canManageBusiness,
-    canUseBusinessTelegramBot: canManageBusiness,
-    canUseBusinessIdeas: canManageBusiness,
-  };
+    workspaceRole: user?.workspaceRole,
+    activePlanId: user?.activePlanId,
+    hasBusinessWorkspace: Boolean(user?.businessWorkspace),
+    permissions: user?.permissions,
+  });
 }
 
 export function getUnauthorizedWorkspaceRedirect(pathname: string, access: WorkspaceAccess) {
+  const featureStatus = getWorkspaceFeatureStatus(pathname, access);
+  if (featureStatus === "hidden") {
+    if (isWorkspacePath(pathname, "/workspace/admin")) {
+      return access.isAdmin ? "/workspace/admin" : "/workspace/chat";
+    }
+    if (isWorkspacePath(pathname, "/workspace/business")) {
+      return access.canUseBusiness ? "/workspace/business" : "/workspace/chat";
+    }
+    if (isWorkspacePath(pathname, "/workspace/settings")) {
+      return access.canUseSettings ? "/workspace/settings" : "/workspace/chat";
+    }
+    if (isWorkspacePath(pathname, "/workspace/balance")) {
+      return access.canUseBalance ? "/workspace/balance" : "/workspace/chat";
+    }
+    if (isWorkspacePath(pathname, "/workspace/mailings")) {
+      return access.canUseMailings ? "/workspace/mailings" : "/workspace/admin";
+    }
+    if (isWorkspacePath(pathname, "/workspace")) {
+      return "/workspace";
+    }
+    return "/workspace";
+  }
+
   if (access.isAdmin && !access.isOwner) {
     if (isWorkspacePath(pathname, "/workspace/mailings") && !access.canUseMailings) {
       return "/workspace/admin";
@@ -83,12 +79,23 @@ export function getUnauthorizedWorkspaceRedirect(pathname: string, access: Works
     return "/workspace/chat";
   }
 
-  if ((isWorkspacePath(pathname, "/workspace/settings") || isWorkspacePath(pathname, "/workspace/memory")) && !access.canUseSettings) {
+  const isPublicProfile = isWorkspacePath(pathname, "/workspace/settings/profile");
+  if (
+    (isWorkspacePath(pathname, "/workspace/settings") || isWorkspacePath(pathname, "/workspace/memory")) &&
+    !isPublicProfile &&
+    !access.canUseSettings
+  ) {
     return "/workspace/chat";
   }
 
   return null;
 }
+
+export function getWorkspaceFeatureStatus(pathname: string, access: WorkspaceAccess): WorkspaceFeatureStatus {
+  return getWorkspaceFeatureStatusFromShared(pathname, access);
+}
+
+export type { WorkspaceFeatureStatus };
 
 function getBusinessRedirect(pathname: string, access: WorkspaceAccess) {
   if (!access.canUseBusiness) return "/workspace/chat";

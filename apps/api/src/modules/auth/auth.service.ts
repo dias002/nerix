@@ -18,7 +18,6 @@ import { isAppReviewEntitlementEmail } from "../users/admin-access.js";
 import type { UpdateUserProfileInput } from "../users/user.repository.js";
 
 const appReviewPassword = "NomduchatReview2026!";
-
 export function isAppReviewCredentials(input: { email: string; password: string }) {
   return isAppReviewEntitlementEmail(input.email) && input.password === appReviewPassword;
 }

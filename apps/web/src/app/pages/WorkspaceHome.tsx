@@ -1,59 +1,75 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { ArrowRight, MessageSquarePlus } from "lucide-react";
-import DownloadAppBanner from "../components/DownloadAppBanner";
+import { getPublicContentBlocks } from "../api";
+import PageHeader from "../components/workspace/PageHeader";
 import { useLanguage } from "../i18n";
+import {
+  toWorkspaceArticles,
+  workspaceArticleFallbacks,
+  type WorkspaceArticleBlock,
+} from "../data/workspaceArticles";
 
 export default function WorkspaceHome() {
-  const { t } = useLanguage();
+  const { language } = useLanguage();
+  const [articleBlocks, setArticleBlocks] = useState<WorkspaceArticleBlock[]>(workspaceArticleFallbacks);
+  const articles = useMemo(() => toWorkspaceArticles(articleBlocks), [articleBlocks]);
+
+  useEffect(() => {
+    let active = true;
+    void getPublicContentBlocks({ placement: "workspace.home.articles", locale: language })
+      .then((response) => {
+        if (!active || response.contentBlocks.length === 0) return;
+        setArticleBlocks(response.contentBlocks);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [language]);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#050505] p-6 md:p-8">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="mx-auto flex min-h-full max-w-4xl flex-col justify-center space-y-8 py-10 text-center"
-      >
-        <h2 className="text-3xl font-medium text-white">
-          {t.workspaceHome.question}
-        </h2>
-        <p className="mx-auto max-w-sm text-sm leading-relaxed text-gray-500">
-          {t.workspaceHome.hint}
-        </p>
-        
-        <Link
-          to="/workspace/chat"
-          className="inline-flex items-center gap-3 px-6 py-3.5 bg-[#1A1A1A] hover:bg-[#2A2A2A] text-white rounded-xl border border-white/10 transition-colors mx-auto"
+    <div className="ns-page-scroll">
+      <main className="ns-page space-y-10">
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.44, ease: [0.22, 1, 0.36, 1] }}
+          className="ns-living-grid rounded-[var(--radius-hero)] px-0 py-8 md:py-12"
         >
-          <MessageSquarePlus className="w-5 h-5" />
-          <span>{t.workspaceHome.startChat}</span>
-        </Link>
+          <PageHeader
+            overline="Nomdu workspace"
+            title="AI-платформа для работы с контентом"
+          />
 
-        <div className="rounded-3xl border border-white/10 bg-[#0A0A0A] p-5 text-left">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <h3 className="text-lg font-medium text-white">{t.workspaceHome.servicesTitle}</h3>
-            <Link to="/workspace/agents" className="hidden items-center gap-1 text-sm text-gray-500 transition-colors hover:text-white sm:flex">
-              {t.nav.agents}
-              <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
-            </Link>
+          <div className="mt-8 max-w-[760px]">
+            <p className="text-sm leading-relaxed text-gray-300 md:text-base">
+              Nomduchat — единая среда для генерации текста, изображений, видео и аватаров.
+              Здесь публикуются обновления и примеры применения ИИ, а также описания того, какие
+              инструменты доступны в приложении.
+            </p>
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            {t.workspaceHome.services.map((service) => (
-              <Link
-                key={service.title}
-                to="/workspace/agents"
-                className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 transition-colors hover:border-white/15 hover:bg-white/[0.05]"
-              >
-                <h4 className="text-base font-medium text-white">{service.title}</h4>
-                <p className="mt-2 text-sm leading-relaxed text-gray-500">{service.text}</p>
+        </motion.section>
+
+        <section className="ns-home-editorial" aria-labelledby="workspace-articles-title">
+          <div className="ns-home-editorial-head">
+            <p className="ns-overline">Обновления</p>
+            <h2 id="workspace-articles-title">Идеи для работы с AI</h2>
+          </div>
+          <div className="ns-home-articles">
+            {articles.map((article) => (
+              <Link key={article.key} to={`/workspace/articles/${article.slug}`} className="ns-home-article">
+                <img src={`/app-covers/${article.cover}.jpg`} alt="" loading="lazy" />
+                <div className="ns-home-article-copy">
+                  <span>{article.category}</span>
+                  <h3>{article.title}</h3>
+                  <p>{article.excerpt}</p>
+                </div>
               </Link>
             ))}
           </div>
-        </div>
-
-        <DownloadAppBanner />
-      </motion.div>
+        </section>
+      </main>
     </div>
   );
 }

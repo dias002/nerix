@@ -1,7 +1,8 @@
 import { Link } from "react-router";
-import type { ReactNode } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Check, CircleUser, Copy, Globe, Link2, Mail, Shield } from "lucide-react";
+import { countryCodes, type Language } from "@nomduchat/shared";
+import { ArrowLeft, Camera, Check, CircleUser, Copy, Globe, Link2, LoaderCircle, Mail, Save, Shield, Trash2 } from "lucide-react";
 import {
   getLinkedAccounts,
   startOAuth,
@@ -29,16 +30,34 @@ const accountProviders = [
 
 export default function SettingsProfile() {
   const { t } = useLanguage();
-  const { accessToken, user } = useAuth();
+  const { accessToken, updateProfile, user } = useAuth();
   const [copied, setCopied] = useState(false);
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccountApiRecord[]>([]);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [pendingProvider, setPendingProvider] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState(user?.name ?? "");
+  const [profileCountry, setProfileCountry] = useState((user?.country ?? "KZ").toUpperCase());
+  const [profileLanguage, setProfileLanguage] = useState<Language>(normalizeApiLanguage(user?.language));
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(user?.avatarUrl ?? null);
+  const [avatarDirty, setAvatarDirty] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profilePending, setProfilePending] = useState(false);
   const referralLink = useMemo(() => {
     const origin = typeof window === "undefined" ? "https://nomduchat.com" : window.location.origin;
     const ref = user?.id ?? user?.email ?? "guest";
     return `${origin}/auth?mode=register&ref=${encodeURIComponent(ref)}`;
   }, [user?.email, user?.id]);
+
+  useEffect(() => {
+    setProfileName(user?.name ?? "");
+    setProfileCountry((user?.country ?? "KZ").toUpperCase());
+    setProfileLanguage(normalizeApiLanguage(user?.language));
+    setAvatarPreview(user?.avatarUrl ?? null);
+    setAvatarDirty(false);
+    setProfileError(null);
+    setProfileSaved(false);
+  }, [user?.avatarUrl, user?.country, user?.id, user?.language, user?.name]);
 
   useEffect(() => {
     let active = true;
@@ -109,6 +128,63 @@ export default function SettingsProfile() {
     }
   };
 
+  const saveProfile = async () => {
+    if (!accessToken) {
+      setProfileError("Войдите в аккаунт, чтобы сохранить профиль.");
+      return;
+    }
+
+    const country = profileCountry.trim().toUpperCase();
+    if (!countryCodes.includes(country as (typeof countryCodes)[number])) {
+      setProfileError("Укажите страну двухбуквенным ISO-кодом, например KZ, RU, US.");
+      return;
+    }
+
+    setProfilePending(true);
+    setProfileError(null);
+    setProfileSaved(false);
+    try {
+      await updateProfile({
+        name: profileName.trim() || undefined,
+        country,
+        language: profileLanguage,
+        avatarDataUrl: avatarDirty ? avatarPreview : undefined,
+      });
+      setAvatarDirty(false);
+      setProfileSaved(true);
+      window.setTimeout(() => setProfileSaved(false), 1600);
+    } catch (error) {
+      setProfileError(toPublicApiError(error, "Не удалось сохранить профиль."));
+    } finally {
+      setProfilePending(false);
+    }
+  };
+
+  const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setProfileError("Выберите изображение для аватарки.");
+      return;
+    }
+
+    if (file.size > 1_500_000) {
+      setProfileError("Фото для аватарки должно быть до 1.5 МБ.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== "string") return;
+      setAvatarPreview(reader.result);
+      setAvatarDirty(true);
+      setProfileError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const rows = [
     { label: t.settings.profile, value: user?.name || t.auth.guest, icon: CircleUser },
     { label: t.auth.email, value: user?.email ?? "—", icon: Mail },
@@ -116,8 +192,123 @@ export default function SettingsProfile() {
     { label: t.settings.security, value: user ? t.settings.protected : t.auth.guestHint, icon: Shield },
   ];
 
+  if (!user) {
+    return (
+      <div className="ns-page-scroll">
+        <main className="ns-page-text flex min-h-[70vh] items-center justify-center">
+          <section className="flex max-w-sm flex-col items-center text-center">
+            <CircleUser className="h-16 w-16 text-[var(--text-tertiary)]" strokeWidth={1.35} />
+            <h1 className="mt-5 text-3xl font-medium text-[var(--text-primary)]">Профиль гостя</h1>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+              Войдите, чтобы сохранить имя, фото и настройки.
+            </p>
+            <Link
+              to="/auth?mode=login&returnTo=%2Fworkspace%2Fsettings%2Fprofile"
+              className="nd-primary-action mt-6 inline-flex h-11 items-center justify-center px-6 text-sm font-semibold"
+            >
+              Войти
+            </Link>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <SettingsDetailShell title={t.settings.profile} subtitle={t.settings.profileSubtitle}>
+      <section className="rounded-2xl border border-white/10 bg-[#0D0D0D] p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+          <div className="flex items-center gap-3 sm:w-48 sm:flex-col sm:items-start">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black">
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <CircleUser className="h-10 w-10 text-gray-500" strokeWidth={1.5} />
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-lg border border-white/10 px-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white">
+                <Camera className="h-4 w-4" strokeWidth={1.7} />
+                Фото
+                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              </label>
+              {avatarPreview ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAvatarPreview(null);
+                    setAvatarDirty(true);
+                  }}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-red-400/10 hover:text-red-200"
+                  aria-label="Удалить аватар"
+                  title="Удалить аватар"
+                >
+                  <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-3 md:grid-cols-2">
+            <label className="block md:col-span-2">
+              <span className="mb-1.5 block text-xs text-gray-500">Имя пользователя</span>
+              <input
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                className="h-11 w-full rounded-xl border border-white/10 bg-black px-3 text-sm text-white outline-none focus:border-white/25"
+                placeholder="Как вас показывать в профиле"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs text-gray-500">Страна</span>
+              <input
+                value={profileCountry}
+                onChange={(event) => setProfileCountry(event.target.value.toUpperCase().slice(0, 2))}
+                list="profile-country-options"
+                className="h-11 w-full rounded-xl border border-white/10 bg-black px-3 text-sm text-white outline-none focus:border-white/25"
+                placeholder="KZ"
+              />
+              <datalist id="profile-country-options">
+                {countryCodes.map((code) => (
+                  <option key={code} value={code} />
+                ))}
+              </datalist>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs text-gray-500">Язык аккаунта</span>
+              <select
+                value={profileLanguage}
+                onChange={(event) => setProfileLanguage(event.target.value as Language)}
+                className="h-11 w-full rounded-xl border border-white/10 bg-black px-3 text-sm text-white outline-none focus:border-white/25"
+              >
+                <option className="bg-black text-white" value="ru">Русский</option>
+                <option className="bg-black text-white" value="kz">Қазақша</option>
+                <option className="bg-black text-white" value="en">English</option>
+              </select>
+            </label>
+            {profileError ? (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-200 md:col-span-2">
+                {profileError}
+              </div>
+            ) : null}
+            {profileSaved ? (
+              <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100 md:col-span-2">
+                Профиль сохранен.
+              </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void saveProfile()}
+              disabled={profilePending || !accessToken}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:opacity-55 md:col-span-2"
+            >
+              {profilePending ? <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.8} /> : <Save className="h-4 w-4" strokeWidth={1.8} />}
+              Сохранить профиль
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#0D0D0D]">
         {rows.map((row, index) => (
           <div
@@ -235,19 +426,19 @@ export function SettingsDetailShell({
   const { t } = useLanguage();
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#050505] p-8 md:p-12">
-      <div className="mx-auto max-w-2xl space-y-8">
+    <div className="ns-page-scroll">
+      <div className="ns-page-text space-y-8">
         <div className="space-y-5">
           <Link
             to="/workspace/settings"
-            className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
+            className="inline-flex items-center gap-2 text-sm text-[var(--text-tertiary)] transition-colors hover:text-[var(--text-primary)]"
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={1.7} />
             {t.settings.backToSettings}
           </Link>
           <div>
-            <h2 className="text-2xl font-medium text-white">{title}</h2>
-            <p className="mt-2 text-gray-400">{subtitle}</p>
+            <h2 className="ns-page-title text-[var(--text-primary)]">{title}</h2>
+            <p className="mt-2 text-[var(--text-secondary)]">{subtitle}</p>
           </div>
         </div>
         {children}
@@ -263,4 +454,9 @@ function resolveOAuthCountry(country: string | undefined) {
 function isProviderUnavailable(provider: AccountProvider, country: string | undefined) {
   const normalizedCountry = resolveOAuthCountry(country);
   return provider.unavailableCountries?.includes(normalizedCountry) ?? false;
+}
+
+function normalizeApiLanguage(language: string | undefined): Language {
+  if (language === "kz" || language === "en") return language;
+  return "ru";
 }

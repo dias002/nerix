@@ -61,6 +61,16 @@ export type WalletBalance = {
   currency: "NOMDUCHAT";
 };
 
+export {
+  getWorkspaceFeaturePaths,
+  getWorkspaceFeatureStatus,
+  resolveWorkspaceFeatureAccess,
+  type WorkspaceFeatureAccess,
+  type WorkspaceFeatureAccessInput,
+  type WorkspaceFeaturePermissionsInput,
+  type WorkspaceFeatureStatus,
+} from "./workspace-features.js";
+
 export type AiRouteRequest = {
   userId: string;
   country: CountryCode;

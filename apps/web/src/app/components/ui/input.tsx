@@ -8,9 +8,9 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 rounded-md border px-3 py-1 text-base bg-input-background transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-        "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
-        "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
+        "flex h-10 w-full min-w-0 rounded-[var(--radius-input)] border border-[var(--line-subtle)] bg-[var(--surface-1)] px-3 py-1 text-base text-[var(--text-primary)] outline-none transition-[background-color,border-color,box-shadow,color] duration-[var(--duration-fast)] file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] selection:bg-[var(--signal-mint)] selection:text-[var(--text-inverse)] disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
+        "focus-visible:border-[rgba(115,230,194,0.38)] focus-visible:shadow-[var(--shadow-signal)] focus-visible:outline-2 focus-visible:outline-[var(--signal-mint)] focus-visible:outline-offset-2",
+        "aria-invalid:border-[var(--danger)]",
         className,
       )}
       {...props}

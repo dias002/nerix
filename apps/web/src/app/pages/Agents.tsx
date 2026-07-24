@@ -7,6 +7,13 @@ import { getAgents } from "../api";
 
 const fallbackAgentIds = ["general", "business", "code", "study", "documents", "image", "video", "avatar", "music", "voice", "marketing", "support"];
 const fallbackAgentIcons = [Bot, Briefcase, Code, GraduationCap, FileText, ImageIcon, Video, Video, Music2, Mic, Megaphone, Headphones];
+const mediaAgentPaths: Record<string, string> = {
+  image: "/workspace/media/image",
+  video: "/workspace/media/video",
+  music: "/workspace/media/music",
+  voice: "/workspace/media/voice",
+  avatar: "/workspace/avatar",
+};
 const agentIconsById = new Map([
   ["general", Bot],
   ["business", Briefcase],
@@ -160,7 +167,7 @@ export default function Agents() {
               </div>
 
               <Link
-                to={`/workspace/chat?agent=${selectedAgent.id}`}
+                to={agentHref(selectedAgent.id)}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-medium text-black transition-colors hover:bg-gray-200"
               >
                 {t.agents.openChat}
@@ -172,4 +179,8 @@ export default function Agents() {
       </div>
     </div>
   );
+}
+
+function agentHref(agentId: string) {
+  return mediaAgentPaths[agentId] ?? `/workspace/chat?agent=${encodeURIComponent(agentId)}`;
 }

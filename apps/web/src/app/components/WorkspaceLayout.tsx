@@ -1,18 +1,22 @@
-import { Outlet, Link, useLocation, useNavigate } from "react-router";
+import { Navigate, Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { AlertCircle, ArrowLeft, BarChart3, Bot, BriefcaseBusiness, Check, ChevronDown, ChevronLeft, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, ImageIcon, Lightbulb, LogIn, LogOut, Mail, MessageSquare, PanelLeftClose, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
+import { AlertCircle, BarChart3, Bot, BriefcaseBusiness, Building2, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, Home, ImageIcon, Lightbulb, LogIn, LogOut, Mail, MessageSquare, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getCurrentSubscription, getPlans, getSubscriptionCheckouts, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type SubscriptionCheckoutApiRecord, type UsageLimitsApiResponse } from "../api";
-import { roleLabel, type LocalRoleOverride, useAuth } from "../auth";
-import { useLanguage } from "../i18n";
-import { getUnauthorizedWorkspaceRedirect, getWorkspaceAccess } from "../roleAccess";
+import { useAuth } from "../auth";
+import { useLanguage, type Language } from "../i18n";
+import { getUnauthorizedWorkspaceRedirect, getWorkspaceAccess, getWorkspaceFeatureStatus } from "../roleAccess";
+import CommandPalette from "./CommandPalette";
+import MobileNavigation from "./MobileNavigation";
+import WorkspaceAppShell from "./shell/WorkspaceAppShell";
+import WorkspaceSidebar, { type WorkspaceNavItem, type WorkspaceNavSection } from "./shell/WorkspaceSidebar";
+import WorkspaceTopbar from "./shell/WorkspaceTopbar";
 
 export default function WorkspaceLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { t } = useLanguage();
-  const { canUseRoleSwitcher, isAuthenticated, logout, roleOverride, setRoleOverride, user } = useAuth();
-  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const { language, t } = useLanguage();
+  const { isAuthenticated, logout, roleOverride, user } = useAuth();
   const [usageLimits, setUsageLimits] = useState<UsageLimitsApiResponse | null>(null);
   const [wallet, setWallet] = useState<WalletBalance | null>(null);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscriptionApiResponse | null>(null);
@@ -21,7 +25,7 @@ export default function WorkspaceLayout() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [renewalDialogOpen, setRenewalDialogOpen] = useState(false);
   const [renewalNudgeHidden, setRenewalNudgeHidden] = useState(false);
-  const [profileAvatar] = useState(() => {
+  const [legacyProfileAvatar] = useState(() => {
     if (typeof window === "undefined") return null;
     return window.localStorage.getItem("nomduchat-profile-avatar-draft");
   });
@@ -29,7 +33,6 @@ export default function WorkspaceLayout() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("nomduchat-sidebar-collapsed") === "true";
   });
-  const [businessMenuOpen, setBusinessMenuOpen] = useState(false);
 
   useEffect(() => {
     window.localStorage.setItem("nomduchat-sidebar-collapsed", String(sidebarCollapsed));
@@ -38,19 +41,35 @@ export default function WorkspaceLayout() {
   const access = useMemo(() => getWorkspaceAccess(user), [user]);
   const isAdminNavigation = access.isAdmin && !access.isOwner;
   const adminTab = new URLSearchParams(location.search).get("tab");
-  const roleOptions: LocalRoleOverride[] = ["real", "admin", "user", "business_owner", "business_employee"];
-  const isBusinessSection =
-    location.pathname === "/workspace/business" || location.pathname.startsWith("/workspace/business/");
+  const profileAvatar = user?.avatarUrl ?? legacyProfileAvatar;
+  const profileHref = "/workspace/settings/profile";
   const showBusinessBrand = access.canUseBusiness;
-  const businessNavItems = [
-    { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.businessOverview, visible: access.canUseBusinessOverview },
+  const resolveFeatureStatus = (path: string) => getWorkspaceFeatureStatus(path, access);
+  const currentFeatureStatus = resolveFeatureStatus(location.pathname);
+  const withFeatureVisibility = (items: WorkspaceNavItem[]) =>
+    items.map((item) => {
+      const featureStatus = resolveFeatureStatus(item.path);
+      return {
+        ...item,
+        featureStatus,
+        visible: item.visible && featureStatus !== "hidden",
+      };
+    });
+  const businessNavItems = withFeatureVisibility([
+    {
+      path: "/workspace/business",
+      icon: Building2,
+      label: t.nav.businessOverview,
+      visible: access.canUseBusinessOverview,
+      active: () => location.pathname === "/workspace/business",
+    },
     { path: "/workspace/business/website", icon: Globe, label: t.nav.businessWebsite, visible: access.canUseBusinessWebsite },
     { path: "/workspace/business/telegram-bot", icon: Bot, label: t.nav.businessTelegramBot, visible: access.canUseBusinessTelegramBot },
     { path: "/workspace/business/dialogs", icon: MessageSquare, label: t.nav.businessDialogs, visible: access.canUseBusinessDialogs },
     { path: "/workspace/business/analytics", icon: BarChart3, label: t.nav.businessAnalytics, visible: access.canUseBusinessAnalytics },
     { path: "/workspace/business/ideas", icon: Lightbulb, label: t.nav.businessIdeas, visible: access.canUseBusinessIdeas },
-  ];
-  const adminNavItems = [
+  ]);
+  const adminNavItems: WorkspaceNavItem[] = withFeatureVisibility([
         {
           path: "/workspace/admin",
           icon: ShieldCheck,
@@ -100,16 +119,18 @@ export default function WorkspaceLayout() {
         },
         { path: "/workspace/mailings", icon: Mail, label: t.nav.mailings, visible: access.canUseMailings },
         { path: "/workspace/settings", icon: Settings, label: t.nav.settings, visible: access.canUseSettings },
-      ];
-  const workspaceNavItems = [
+      ]);
+  const quickNavItems: WorkspaceNavItem[] = withFeatureVisibility([
+    { path: "/workspace/apps", icon: Grid2X2, label: t.nav.apps, visible: access.canUseChat },
+    { path: "/workspace/media", icon: ImageIcon, label: t.nav.media, visible: access.canUseChat },
+    { path: "/workspace/avatar", icon: UserRound, label: t.nav.avatar, visible: access.canUseChat },
+    { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: access.canUseHistory },
+  ]);
+
+  const workspaceNavItems: WorkspaceNavItem[] = withFeatureVisibility([
+        { path: "/workspace", icon: Home, label: t.nav.home, visible: access.canUseChat },
         { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: access.canUseChat },
-        { path: "/workspace/agents", icon: Bot, label: t.nav.agents, visible: access.canUseChat },
         { path: "/workspace/projects", icon: FolderKanban, label: t.nav.projects, visible: access.canUseChat },
-        { path: "/workspace/apps", icon: Grid2X2, label: t.nav.apps, visible: access.canUseChat },
-        { path: "/workspace/media", icon: ImageIcon, label: t.nav.media, visible: access.canUseChat },
-        { path: "/workspace/avatar", icon: UserRound, label: t.nav.avatar, visible: access.canUseChat },
-        { path: "/workspace/history", icon: Clock3, label: t.nav.history, visible: access.canUseHistory },
-        { path: "/workspace/business", icon: BriefcaseBusiness, label: t.nav.business, visible: access.canUseBusiness },
         { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: access.canUseBalance },
         {
           path: "/workspace/settings",
@@ -118,17 +139,73 @@ export default function WorkspaceLayout() {
           visible: access.canUseSettings,
           active: () => location.pathname.startsWith("/workspace/settings") || location.pathname === "/workspace/memory",
         },
-      ];
-  const navItems = isAdminNavigation
-    ? adminNavItems
+      ]);
+  const shellLabels = getShellLabels(language);
+  const workspaceNavSections: WorkspaceNavSection[] = [
+    {
+      id: "work",
+      label: shellLabels.work,
+      items: workspaceNavItems.filter((item) =>
+        item.path === "/workspace" || item.path === "/workspace/chat" || item.path === "/workspace/projects",
+      ),
+    },
+    {
+      id: "create",
+      label: shellLabels.create,
+      items: [],
+    },
+    {
+      id: "manage",
+      label: shellLabels.manage,
+      items: workspaceNavItems.filter((item) =>
+        item.path === "/workspace/balance" ||
+        item.path === "/workspace/settings",
+      ),
+    },
+  ];
+  const ownerAdminItems = adminNavItems.filter(
+    (adminItem) => !workspaceNavItems.some((workspaceItem) => workspaceItem.path === adminItem.path),
+  );
+  const adminNavSections: WorkspaceNavSection[] = [
+    {
+      id: "admin",
+      label: shellLabels.admin,
+      items: adminNavItems.filter((item) =>
+        item.path === "/workspace/admin" ||
+        item.path === "/workspace/admin/control" ||
+        item.path === "/workspace/admin/ai-budget" ||
+        item.path === "/workspace/admin/users" ||
+        item.path === "/workspace/admin/pricing",
+      ),
+    },
+    {
+      id: "admin-work",
+      label: shellLabels.work,
+      items: adminNavItems.filter((item) =>
+        item.path === "/workspace/chat" || item.path === "/workspace/mailings" || item.path === "/workspace/settings",
+      ),
+    },
+  ];
+  const navSections = isAdminNavigation
+    ? adminNavSections
     : access.isOwner
       ? [
-          ...workspaceNavItems,
-          ...adminNavItems.filter(
-            (adminItem) => !workspaceNavItems.some((workspaceItem) => workspaceItem.path === adminItem.path),
-          ),
+          ...workspaceNavSections,
+          {
+            id: "owner-admin",
+            label: shellLabels.admin,
+            items: ownerAdminItems,
+          },
         ]
-      : workspaceNavItems;
+      : workspaceNavSections;
+  const navItems: WorkspaceNavItem[] = [
+    ...navSections.flatMap((section) => section.items),
+    ...quickNavItems,
+    ...businessNavItems,
+  ];
+
+  const visibleQuickItems = quickNavItems.filter((item) => item.visible);
+  const pageContext = getPageContext(location.pathname, navItems, shellLabels.workspace);
 
   const refreshUsageLimits = useCallback(() => {
     if (isAdminNavigation || access.isGuest) {
@@ -169,10 +246,6 @@ export default function WorkspaceLayout() {
   }, [access, location.pathname, navigate]);
 
   useEffect(() => {
-    setBusinessMenuOpen(access.canUseBusiness && isBusinessSection && !sidebarCollapsed);
-  }, [access.canUseBusiness, isBusinessSection, sidebarCollapsed]);
-
-  useEffect(() => {
     refreshUsageLimits();
   }, [refreshUsageLimits]);
 
@@ -207,7 +280,7 @@ export default function WorkspaceLayout() {
     };
   }, [refreshUsageLimits]);
 
-  const isActive = (item: (typeof navItems)[number]) => {
+  const isActive = (item: WorkspaceNavItem) => {
     if (item.active) return item.active();
     const path = item.path.split("?")[0];
     if (path === "/workspace") {
@@ -221,307 +294,92 @@ export default function WorkspaceLayout() {
     }
     setOnboardingOpen(false);
   };
+  const showModelContext =
+    location.pathname.startsWith("/workspace/chat") ||
+    location.pathname.startsWith("/workspace/apps") ||
+    location.pathname.startsWith("/workspace/media") ||
+    location.pathname.startsWith("/workspace/avatar");
 
-  return (
-    <div className="min-h-screen flex relative overflow-hidden bg-black text-white">
-      {/* Sidebar */}
-      <aside
-        className={`
-          custom-scrollbar fixed left-0 top-0 bottom-0 z-30 flex flex-col overflow-y-auto overflow-x-hidden transition-[width,transform] duration-300
-          ${sidebarCollapsed ? "w-16" : "w-20 md:w-64"}
-        `}
-        style={{
-          backgroundColor: "#000000",
-          borderRight: "1px solid rgba(255, 255, 255, 0.1)",
-        }}
-      >
-        {/* Logo */}
-        <div className="px-3 py-7">
-          {sidebarCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(false)}
-              className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] transition-colors hover:border-white/20 hover:bg-white/[0.06]"
-              aria-label="Показать меню"
-              title="Показать меню"
-            >
-              <img src="/favicon.png" alt="" className="h-6 w-6 rounded-md object-cover" />
-            </button>
-          ) : (
-            <div className="flex items-center justify-center md:justify-between">
-              <Link to="/" className="block text-xl font-medium text-white text-center transition-colors hover:text-gray-300 md:text-left">
-                <span className="md:hidden">
-                  <img src="/favicon.png" alt={t.product} className="mx-auto h-8 w-8 rounded-lg object-cover" />
-                </span>
-                <span className="hidden md:inline">
-                  {t.product}
-                  {showBusinessBrand ? (
-                    <span className="ml-2 rounded-full border border-white/10 px-2 py-0.5 align-middle text-[11px] font-medium uppercase tracking-[0.12em] text-gray-400">
-                      Business
-                    </span>
-                  ) : null}
-                </span>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(true)}
-                className="hidden h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:inline-flex"
-                aria-label="Скрыть меню"
-                title="Скрыть меню"
-              >
-                <PanelLeftClose className="h-5 w-5" strokeWidth={1.5} />
-              </button>
-            </div>
-          )}
-          {!sidebarCollapsed ? (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(true)}
-              className="mt-5 flex h-9 w-full items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:hidden"
-              aria-label="Скрыть меню"
-              title="Скрыть меню"
-            >
-              <ChevronLeft className="h-5 w-5" strokeWidth={1.5} />
-            </button>
-          ) : null}
-        </div>
+  const fallbackRedirect = getUnauthorizedWorkspaceRedirect(location.pathname, access);
+  const featureContent = (() => {
+    if (currentFeatureStatus === "hidden") {
+      return fallbackRedirect && fallbackRedirect !== location.pathname
+        ? <Navigate to={fallbackRedirect} replace />
+        : <Navigate to="/workspace/chat" replace />;
+    }
 
-        {/* Navigation */}
-        {!sidebarCollapsed ? (
-          <nav className="flex-1 px-3 py-2">
-            <ul className="space-y-1">
-              {navItems.filter((item) => item.visible).map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item);
-                return (
-                  <li key={item.path}>
-                    <Link
-                      to={item.path}
-                      className={`
-                        flex items-center justify-center gap-3 px-3 py-2.5 rounded-lg transition-colors md:justify-start
-                        ${
-                          active
-                            ? "bg-white/10 text-white"
-                            : "text-gray-400 hover:text-white hover:bg-white/5"
-                        }
-                      `}
-                    >
-                      <Icon className="w-5 h-5" strokeWidth={1.5} />
-                      <span className="hidden text-sm font-medium md:inline">
-                        {item.label}
-                      </span>
-                    </Link>
-                    {item.path === "/workspace/business" ? (
-                      <div
-                        aria-hidden={!businessMenuOpen}
-                        className={`hidden overflow-hidden transition-[max-height,opacity,transform] duration-300 ease-out md:block ${
-                          businessMenuOpen ? "max-h-72 translate-y-0 opacity-100" : "max-h-0 -translate-y-1 opacity-0"
-                        }`}
-                      >
-                        <ul className="mt-1 space-y-1 border-l border-white/10 pl-4">
-                          {businessNavItems.filter((subItem) => subItem.visible).map((subItem, index) => {
-                            const SubIcon = subItem.icon;
-                            const subActive =
-                              subItem.path === "/workspace/business"
-                                ? location.pathname === "/workspace/business"
-                                : location.pathname === subItem.path || location.pathname.startsWith(`${subItem.path}/`);
+    if (currentFeatureStatus === "beta") {
+      return <WorkspaceFeatureComingSoon currentPath={location.pathname} />;
+    }
 
-                            return (
-                              <li
-                                key={subItem.path}
-                                className="transition-[opacity,transform] duration-300 ease-out"
-                                style={{
-                                  transitionDelay: businessMenuOpen ? `${index * 35}ms` : "0ms",
-                                  opacity: businessMenuOpen ? 1 : 0,
-                                  transform: businessMenuOpen ? "translateX(0)" : "translateX(-6px)",
-                                }}
-                              >
-                                <Link
-                                  to={subItem.path}
-                                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-colors ${
-                                    subActive
-                                      ? "bg-white/10 text-white"
-                                      : "text-gray-500 hover:bg-white/5 hover:text-white"
-                                  }`}
-                                >
-                                  <SubIcon className="h-4 w-4" strokeWidth={1.5} />
-                                  <span className="truncate">{subItem.label}</span>
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
-          </nav>
-        ) : (
-          <div className="flex-1" />
-        )}
-
-        {!sidebarCollapsed && !isAdminNavigation && access.canUseBalance ? (
-          <div className="hidden px-3 pb-3 md:block">
-            <UsageLimitPanel
-              isGuest={access.isGuest}
-              usage={usageLimits}
-              wallet={wallet}
-              subscription={currentSubscription}
-              plans={plans}
-            />
-          </div>
-        ) : null}
-
-        {canUseRoleSwitcher && !sidebarCollapsed ? (
-          <div className="px-3 pb-3">
-            <div
-              className={`relative rounded-2xl border border-white/10 bg-[#070707] p-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.32)] ${
-                sidebarCollapsed ? "hidden" : "hidden md:block"
-              }`}
-              onBlur={(event) => {
-                const nextTarget = event.relatedTarget as Node | null;
-                if (!event.currentTarget.contains(nextTarget)) {
-                  setRoleMenuOpen(false);
-                }
-              }}
-            >
-              <div className="mb-2 px-1 text-[11px] font-medium uppercase tracking-[0.14em] text-gray-600">
-                Локальная роль
-              </div>
-              <button
-                id="local-role-switcher"
-                type="button"
-                aria-label="Локальная роль"
-                aria-haspopup="listbox"
-                aria-expanded={roleMenuOpen}
-                onClick={() => setRoleMenuOpen((open) => !open)}
-                className="flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-white/15 bg-black px-3 text-left text-sm text-white outline-none transition-colors hover:border-white/25 focus:border-white/35"
-              >
-                <span className="min-w-0 truncate">{roleLabel(roleOverride)}</span>
-                <ChevronDown
-                  className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${roleMenuOpen ? "rotate-180" : ""}`}
-                  strokeWidth={1.8}
-                />
-              </button>
-              {roleMenuOpen ? (
-                <div
-                  role="listbox"
-                  aria-labelledby="local-role-switcher"
-                  className="absolute bottom-[calc(100%-0.35rem)] left-2.5 right-2.5 z-50 max-h-60 overflow-y-auto rounded-xl border border-white/[0.12] bg-[#090909] p-1 shadow-[0_18px_44px_rgba(0,0,0,0.7)]"
-                >
-                  {roleOptions.map((role) => {
-                    const selected = roleOverride === role;
-                    return (
-                      <button
-                        key={role}
-                        type="button"
-                        role="option"
-                        aria-selected={selected}
-                        onClick={() => {
-                          setRoleOverride(role);
-                          setRoleMenuOpen(false);
-                        }}
-                        className={`flex h-9 w-full items-center justify-between gap-2 rounded-lg px-3 text-left text-sm transition-colors ${
-                          selected
-                            ? "bg-white text-black"
-                            : "text-gray-300 hover:bg-white/[0.08] hover:text-white"
-                        }`}
-                      >
-                        <span className="truncate">{roleLabel(role)}</span>
-                        {selected ? <Check className="h-4 w-4 shrink-0" strokeWidth={1.9} /> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                const currentIndex = roleOptions.indexOf(roleOverride);
-                setRoleOverride(roleOptions[(currentIndex + 1) % roleOptions.length]);
-                setRoleMenuOpen(false);
-              }}
-              className={`h-9 w-full items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-xs font-medium text-gray-400 transition-colors hover:border-white/20 hover:text-white ${
-                sidebarCollapsed ? "flex" : "flex md:hidden"
-              }`}
-              title={`Локальная роль: ${roleLabel(roleOverride)}`}
-            >
-              {roleOverride === "real" ? "R" : roleLabel(roleOverride).slice(0, 1)}
-            </button>
-          </div>
-        ) : null}
-
-        {!sidebarCollapsed ? (
-        <div className="px-3 pb-3">
+    return <Outlet />;
+  })();
+  const usageSlot = !isAdminNavigation && access.canUseBalance ? (
+    <div className="px-3 pb-3">
+      <UsageLimitPanel
+        isGuest={access.isGuest}
+        usage={usageLimits}
+        wallet={wallet}
+        subscription={currentSubscription}
+        plans={plans}
+      />
+    </div>
+  ) : null;
+  const profileSlot = (
+    <div className="border-t border-[var(--line-subtle)] p-4">
+      <div className="flex items-center gap-2 py-2">
+        {isAuthenticated ? (
           <Link
-            to="/"
-            className="flex items-center justify-center gap-3 rounded-lg px-3 py-2.5 text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:justify-start"
+            to={profileHref}
+            className="flex min-w-0 flex-1 items-center justify-center gap-3 rounded-[var(--radius-control)] py-1 transition-colors hover:bg-[var(--surface-1)] md:justify-start md:px-2"
+            aria-label={t.settings.profile}
           >
-            <ArrowLeft className="h-5 w-5" strokeWidth={1.5} />
-            <span className="hidden text-sm font-medium md:inline">{t.nav.start}</span>
-          </Link>
-        </div>
-        ) : null}
-
-        {/* Footer / Profile */}
-        {!sidebarCollapsed ? (
-        <div className="p-4 border-t border-white/10">
-          <div className="flex items-center justify-center gap-3 py-2 md:justify-start md:px-2">
-            <div className="relative">
+            <div className="relative shrink-0">
               {profileAvatar ? (
-                <img
-                  src={profileAvatar}
-                  alt=""
-                  className="h-8 w-8 rounded-full border border-white/10 object-cover"
-                />
+                <img src={profileAvatar} alt="" className="h-8 w-8 rounded-full border border-[var(--line-subtle)] object-cover" />
               ) : (
-                <CircleUser className="w-8 h-8 text-gray-300" strokeWidth={1.5} />
+                <CircleUser className="h-8 w-8 text-[var(--text-secondary)]" strokeWidth={1.5} />
               )}
-              <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-black"></div>
+              <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--canvas)] bg-[var(--signal-mint)]" />
             </div>
-            <div className="hidden flex-1 min-w-0 md:block">
-              <p className="text-sm font-medium text-white truncate">{user?.name || user?.email || t.auth.guest}</p>
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <Zap className="w-3 h-3" />
+            <div className="hidden min-w-0 flex-1 md:block">
+              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{user?.name || user?.email || t.auth.guest}</p>
+              <div className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
+                <Zap className="h-3 w-3" />
                 <span className="truncate">{user?.email ?? t.auth.guestHint}</span>
               </div>
             </div>
-            {isAuthenticated ? (
-              <button
-                type="button"
-                onClick={logout}
-                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:inline-flex"
-                aria-label={t.auth.logout}
-                title={t.auth.logout}
-              >
-                <LogOut className="h-4 w-4" strokeWidth={1.6} />
-              </button>
-            ) : (
-              <Link
-                to="/auth?mode=register"
-                className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-white/5 hover:text-white md:inline-flex"
-                aria-label={t.auth.createAccount}
-                title={t.auth.createAccount}
-              >
-                <LogIn className="h-4 w-4" strokeWidth={1.6} />
-              </Link>
-            )}
-          </div>
-        </div>
+          </Link>
+        ) : (
+          <Link
+            to="/auth?mode=login&returnTo=%2Fworkspace%2Fsettings%2Fprofile"
+            className="flex min-w-0 flex-1 items-center justify-center gap-3 rounded-[var(--radius-control)] py-1 transition-colors hover:bg-[var(--surface-1)] md:justify-start md:px-2"
+            aria-label={t.auth.loginAction}
+            title={t.auth.loginAction}
+          >
+            <LogIn className="h-5 w-5 text-[var(--text-tertiary)]" strokeWidth={1.6} />
+            <div className="hidden min-w-0 flex-1 md:block">
+              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{t.auth.loginAction}</p>
+              <p className="text-xs text-[var(--text-tertiary)]">{t.auth.loginSubtitle}</p>
+            </div>
+          </Link>
+        )}
+        {isAuthenticated ? (
+          <button
+            type="button"
+            onClick={logout}
+            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)] md:inline-flex"
+            aria-label={t.auth.logout}
+            title={t.auth.logout}
+          >
+            <LogOut className="h-4 w-4" strokeWidth={1.6} />
+          </button>
         ) : null}
-      </aside>
-
-      {/* Main Content */}
-      <main
-        className={`relative z-10 flex h-screen flex-1 flex-col overflow-hidden transition-[margin] duration-300 ${
-          sidebarCollapsed ? "ml-16" : "ml-20 md:ml-64"
-        }`}
-      >
-        <Outlet />
-      </main>
+      </div>
+    </div>
+  );
+  const overlays = (
+    <>
       {user ? (
         <WorkspaceOnboardingDialog
           open={onboardingOpen}
@@ -545,8 +403,83 @@ export default function WorkspaceLayout() {
           onClose={() => setRenewalNudgeHidden(true)}
         />
       ) : null}
+    </>
+  );
+
+  return (
+    <WorkspaceAppShell
+      sidebarCollapsed={sidebarCollapsed}
+      sidebar={
+        <WorkspaceSidebar
+          collapsed={sidebarCollapsed}
+          product={t.product}
+          showBusinessBrand={showBusinessBrand}
+          canCreateTask={!isAdminNavigation && access.canUseChat}
+            sections={navSections}
+          quickItems={visibleQuickItems}
+          businessItems={businessNavItems}
+          usageSlot={usageSlot}
+          profileSlot={profileSlot}
+          isActive={isActive}
+          onCollapsedChange={setSidebarCollapsed}
+        />
+      }
+      topbar={
+        <WorkspaceTopbar
+          title={pageContext.title}
+          section={pageContext.section}
+          showModelContext={showModelContext}
+          profileAvatar={profileAvatar}
+          profileLabel={user?.name || user?.email || t.auth.guest}
+          profileHref={profileHref}
+          showProfileButton={isAuthenticated}
+        />
+      }
+      commandPalette={<CommandPalette />}
+      mobileNavigation={!isAdminNavigation ? <MobileNavigation profileHref={profileHref} /> : null}
+      overlays={overlays}
+    >
+        {featureContent}
+    </WorkspaceAppShell>
+  );
+}
+
+function WorkspaceFeatureComingSoon({ currentPath }: { currentPath: string }) {
+  const basePath = currentPath.split("/").slice(0, 3).join("/");
+  const label = featureLabelForPath(basePath);
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-[#050505] px-5 py-10 text-white">
+      <div className="mx-auto flex min-h-[calc(100vh-7rem)] max-w-3xl flex-col justify-center gap-6">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-sm text-gray-300">
+          Раздел в разработке
+        </div>
+        <h1 className="text-3xl font-medium leading-tight text-white sm:text-4xl">Скоро будет доступно: {label}</h1>
+        <p className="text-sm leading-relaxed text-gray-400">
+          Этот раздел пока на этапе подготовки. Вы можете продолжить работу в чате — там доступен весь текущий функционал.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Link to="/workspace/chat" className="inline-flex h-11 items-center justify-center rounded-xl bg-white px-5 text-sm font-medium text-black transition-colors hover:bg-gray-200">
+            Перейти в чат
+          </Link>
+          <Link
+            to="/workspace/apps"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 px-5 text-sm font-medium text-gray-300 transition-colors hover:border-white/20 hover:text-white"
+          >
+            Открыть приложения
+          </Link>
+        </div>
+      </div>
     </div>
   );
+}
+
+function featureLabelForPath(path: string) {
+  if (path.startsWith("/workspace/avatar")) {
+    return "Аватар";
+  }
+
+  return path || "/workspace";
 }
 
 function WorkspaceOnboardingDialog({
@@ -835,29 +768,11 @@ function UsageLimitPanel({
   plans: PlanApiRecord[];
 }) {
   if (isGuest) {
-    return (
-      <div className="rounded-2xl border border-white/10 bg-[#070707] p-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-[0.12em] text-gray-600">Подписка</span>
-          <CreditCard className="h-4 w-4 text-gray-500" strokeWidth={1.6} />
-        </div>
-        <p className="mt-2 text-sm font-medium text-white">Текст, видео и песни доступны после подключения тарифа.</p>
-        <Link
-          to="/workspace/balance"
-          className="mt-3 inline-flex h-8 w-full items-center justify-center rounded-lg border border-white/10 text-xs font-medium text-gray-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-        >
-          Смотреть тарифы
-        </Link>
-      </div>
-    );
+    return null;
   }
 
   if (!usage) {
-    return (
-      <div className="rounded-2xl border border-white/10 bg-[#070707] p-3 text-xs text-gray-500">
-        Лимиты загрузятся после подключения API.
-      </div>
-    );
+    return null;
   }
 
   if (usage.hasActiveSubscription) {
@@ -869,25 +784,25 @@ function UsageLimitPanel({
       monthlyCredits > 0 ? Math.min(100, Math.max(0, (availableCredits / monthlyCredits) * 100)) : 0;
 
     return (
-      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.06] p-3">
+      <div className="ns-usage-meter" data-active="true">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-medium uppercase tracking-[0.12em] text-emerald-200/80">Подписка</span>
-          <span className="rounded-full bg-emerald-300 px-2 py-0.5 text-[11px] font-semibold text-black">
+          <span className="ns-overline text-[var(--signal-mint)]">Подписка</span>
+          <span className="rounded-full bg-[var(--signal-mint)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-inverse)]">
             Активна
           </span>
         </div>
-        <p className="mt-2 text-sm font-medium text-white">Текст, видео и песни доступны.</p>
+        <p className="mt-2 text-sm font-medium text-[var(--text-primary)]">Текст, видео и песни доступны.</p>
         <div className="mt-3 flex items-end justify-between gap-3">
           <div>
-            <p className="text-xl font-semibold text-white">{formatCredits(availableCredits)}</p>
-            <p className="text-xs text-emerald-100/60">nomduchat-кредитов</p>
+            <p className="text-xl font-semibold text-[var(--text-primary)]">{formatCredits(availableCredits)}</p>
+            <p className="text-xs text-[var(--text-secondary)]">nomduchat-кредитов</p>
           </div>
-          <p className="pb-0.5 text-xs text-emerald-100/60">{Math.round(remainingPercent)}%</p>
+          <p className="pb-0.5 text-xs text-[var(--text-tertiary)]">{Math.round(remainingPercent)}%</p>
         </div>
-        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${remainingPercent}%` }} />
+        <div className="ns-usage-progress mt-3">
+          <span style={{ width: `${remainingPercent}%` }} />
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-emerald-100/60">
+        <p className="mt-3 text-xs leading-relaxed text-[var(--text-secondary)]">
           {plan ? `${plan.name}: пакет на ${formatCredits(plan.monthlyCredits)} кредитов.` : "Баланс обновляется после каждого запроса."}
         </p>
       </div>
@@ -900,32 +815,26 @@ function UsageLimitPanel({
   const remainingProgress = limit > 0 ? Math.min(100, Math.max(0, (remaining / limit) * 100)) : 0;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#070707] p-3">
+    <div className="ns-usage-meter">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium uppercase tracking-[0.12em] text-gray-600">Сегодня</span>
-        <span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-gray-300">
+        <span className="ns-overline">Сегодня</span>
+        <span className="rounded-full border border-[var(--line-subtle)] px-2 py-0.5 text-[11px] text-[var(--text-secondary)]">
           Free
         </span>
       </div>
       <div className="mt-2 flex items-end justify-between gap-3">
         <div>
-          <p className="text-lg font-semibold text-white">{remaining}</p>
-          <p className="text-xs text-gray-500">текстовых осталось</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)]">{remaining}</p>
+          <p className="text-xs text-[var(--text-tertiary)]">текстовых осталось</p>
         </div>
-        <p className="pb-0.5 text-xs text-gray-500">{Math.round(remainingProgress)}%</p>
+        <p className="pb-0.5 text-xs text-[var(--text-tertiary)]">{Math.round(remainingProgress)}%</p>
       </div>
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${remainingProgress}%` }} />
+      <div className="ns-usage-progress mt-3">
+        <span style={{ width: `${remainingProgress}%` }} />
       </div>
-      <p className="mt-3 text-xs leading-relaxed text-gray-500">
+      <p className="mt-3 text-xs leading-relaxed text-[var(--text-tertiary)]">
         Использовано {used}/{limit}. Видео и песни откроются после подписки.
       </p>
-      <Link
-        to="/workspace/balance"
-        className="mt-3 inline-flex h-8 w-full items-center justify-center rounded-lg border border-white/10 text-xs font-medium text-gray-300 transition-colors hover:border-white/20 hover:bg-white/5 hover:text-white"
-      >
-        Открыть подписку
-      </Link>
     </div>
   );
 }
@@ -951,4 +860,51 @@ function formatCheckoutPrice(amountMinor: number, currency: "KZT" | "RUB") {
   }).format(amount);
 
   return `${formatted} ${currency === "KZT" ? "₸" : "₽"}`;
+}
+
+function getShellLabels(language: Language) {
+  const labels = {
+    ru: {
+      workspace: "Рабочее пространство",
+      work: "Работа",
+      create: "Создание",
+      manage: "Управление",
+      admin: "Администрирование",
+      localRole: "Локальная роль",
+    },
+    kk: {
+      workspace: "Жұмыс кеңістігі",
+      work: "Жұмыс",
+      create: "Жасау",
+      manage: "Басқару",
+      admin: "Әкімшілік",
+      localRole: "Жергілікті рөл",
+    },
+    en: {
+      workspace: "Workspace",
+      work: "Work",
+      create: "Create",
+      manage: "Manage",
+      admin: "Admin",
+      localRole: "Local role",
+    },
+  };
+
+  return labels[language];
+}
+
+function getPageContext(pathname: string, navItems: WorkspaceNavItem[], fallbackSection: string) {
+  const activeItem = navItems
+    .filter((item) => item.visible)
+    .sort((left, right) => right.path.length - left.path.length)
+    .find((item) => {
+      if (item.active) return item.active();
+      const path = item.path.split("?")[0];
+      return path === "/workspace" ? pathname === "/workspace" || pathname === "/workspace/" : pathname.startsWith(path);
+    });
+
+  return {
+    section: fallbackSection,
+    title: activeItem?.label ?? fallbackSection,
+  };
 }

@@ -43,7 +43,11 @@ import {
   MailingTransactionalMailer,
   type TransactionalMailer,
 } from "../modules/notifications/transactional-mailer.js";
+import { InMemoryProjectRepository, PostgresProjectRepository } from "../modules/projects/project.repository.js";
+import { ProjectService } from "../modules/projects/project.service.js";
 import { LifecycleNotificationsService } from "../modules/notifications/lifecycle-notifications.service.js";
+import { InMemorySupportRepository, PostgresSupportRepository } from "../modules/support/support.repository.js";
+import { SupportService } from "../modules/support/support.service.js";
 import {
   AbuseGuardService,
   createAbuseRateLimitRepository,
@@ -72,6 +76,7 @@ export type AppDependencies = {
   chat: ChatService;
   generation: GenerationService;
   subscriptions: SubscriptionService;
+  support: SupportService;
   mailings: MailingService;
   business: BusinessService;
   knowledgeBase: KnowledgeBaseService;
@@ -79,6 +84,7 @@ export type AppDependencies = {
   businessWebsites: BusinessWebsiteService;
   businessJobs: BusinessJobService;
   telegramBots: TelegramBotOrderService;
+  projects: ProjectService;
   admin: AdminService;
   lifecycleNotifications: LifecycleNotificationsService;
   abuseGuard: AbuseGuardService;
@@ -131,6 +137,10 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     persistence === "postgres"
       ? new PostgresTelegramBotOrderRepository(database)
       : new InMemoryTelegramBotOrderRepository();
+  const projectRepository =
+    persistence === "postgres" ? new PostgresProjectRepository(database) : new InMemoryProjectRepository();
+  const supportRepository =
+    persistence === "postgres" ? new PostgresSupportRepository(database) : new InMemorySupportRepository();
   const abuseRateLimitRepository =
     options.abuseRateLimitRepository ?? createAbuseRateLimitRepository(database, persistence);
 
@@ -146,6 +156,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
   const billing = new BillingService(walletRepository, agents);
   const aiGateway = new AiGatewayService(agents, billing, createCompletionProvider());
   const subscriptions = new SubscriptionService(subscriptionRepository, billing, transactionalMailer);
+  const support = new SupportService(supportRepository, mailingTransport);
   const generation = new GenerationService(
     generationRepository,
     aiGateway,
@@ -160,6 +171,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
   const businessOps = new BusinessOpsService(businessOpsRepository, business);
   const businessWebsites = new BusinessWebsiteService(businessWebsiteRepository);
   const telegramBots = new TelegramBotOrderService(telegramBotOrderRepository);
+  const projects = new ProjectService(projectRepository);
   const businessJobs = new BusinessJobService(
     businessJobRepository,
     business,
@@ -181,6 +193,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     chat,
     generation,
     subscriptions,
+    support,
     mailings,
     business,
     knowledgeBase,
@@ -188,6 +201,7 @@ export function createDependencies(options: CreateDependenciesOptions = {}): App
     businessWebsites,
     businessJobs,
     telegramBots,
+    projects,
     admin,
     lifecycleNotifications,
     abuseGuard,

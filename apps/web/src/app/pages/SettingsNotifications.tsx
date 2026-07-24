@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Bell, CalendarClock, CreditCard, Mail, MessageSquare } from "lucide-react";
+import { useAuth } from "../auth";
 import { useLanguage } from "../i18n";
 import { SettingsDetailShell } from "./SettingsProfile";
 
@@ -17,17 +18,22 @@ type NotificationState = {
 
 export default function SettingsNotifications() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const [settings, setSettings] = useState<NotificationState>(() => readSettings());
+  const canSeeMailScenarios = Boolean(user?.permissions.adminPanel || user?.permissions.mailings);
 
-  const rows = [
+  const userRows = [
     { id: "chat" as const, label: t.settings.chatNotifications, description: "Показывать уведомления по новым ответам.", icon: MessageSquare },
     { id: "billing" as const, label: t.settings.billingNotifications, description: "Платежи, чеки и статус подписки.", icon: CreditCard },
     { id: "product" as const, label: t.settings.productNotifications, description: "Обновления продукта и новые возможности.", icon: Bell },
+  ];
+  const adminRows = [
     { id: "registrationEmail" as const, label: "Письмо после регистрации", description: "Приветственное письмо с подсказками по началу работы.", icon: Mail },
     { id: "unpaidReminderDay1" as const, label: "Напоминание через 1 день", description: "Если пользователь зарегистрировался, но не оплатил тариф.", icon: CalendarClock },
     { id: "unpaidReminderDay3" as const, label: "Напоминание через 3 дня", description: "Повторное письмо с пользой тарифа и ссылкой на оплату.", icon: CalendarClock },
     { id: "tariffEndingReminder" as const, label: "Тариф скоро закончится", description: "Письмо до окончания оплаченного периода.", icon: CreditCard },
   ];
+  const rows = canSeeMailScenarios ? [...userRows, ...adminRows] : userRows;
   const mailScenarios = [
     {
       title: "После регистрации",
@@ -103,6 +109,7 @@ export default function SettingsNotifications() {
         ))}
       </div>
 
+      {canSeeMailScenarios ? (
       <section className="space-y-3">
         <div>
           <h3 className="text-base font-medium text-white">Сценарии писем</h3>
@@ -133,6 +140,7 @@ export default function SettingsNotifications() {
           ))}
         </div>
       </section>
+      ) : null}
     </SettingsDetailShell>
   );
 }

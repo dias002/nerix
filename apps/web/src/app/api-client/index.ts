@@ -5,6 +5,7 @@ export type UserApiRecord = {
   name: string;
   email: string | null;
   phone: string | null;
+  avatarUrl: string | null;
   country: "KZ" | "RU" | string;
   language: Language;
   systemRole: "user" | "admin";
@@ -468,6 +469,15 @@ export type AdminContentBlockApiRecord = {
   placement: string;
   active: boolean;
   updatedAt: string;
+};
+
+export type PublicContentBlockApiRecord = Pick<
+  AdminContentBlockApiRecord,
+  "key" | "locale" | "title" | "body" | "placement" | "updatedAt"
+>;
+
+export type PublicContentBlocksApiResponse = {
+  contentBlocks: PublicContentBlockApiRecord[];
 };
 
 export type AdminAuditApiRecord = {
@@ -1057,3 +1067,6 @@ export * from './mailings';
 export * from './business';
 export * from './telegram';
 export * from './geo';
+export * from './projects';
+export * from './support';
+export * from './content';

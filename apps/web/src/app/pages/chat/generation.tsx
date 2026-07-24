@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { CircleStop, Download, FileText, ImageIcon, Loader2, Music2, Share2, Video } from "lucide-react";
+import { CircleStop, Download, FileText, ImageIcon, Loader2, Music2, Share2, Video, Wand2 } from "lucide-react";
 import type { MediaGenerationJobApiRecord } from "../../api";
 
 export function GenerationJobCard({
@@ -7,12 +7,14 @@ export function GenerationJobCard({
   artifactUrl,
   isCancelling,
   onCancel,
+  onEdit,
   onShare,
 }: {
   job: MediaGenerationJobApiRecord;
   artifactUrl?: string;
   isCancelling?: boolean;
   onCancel?: () => void;
+  onEdit?: () => void;
   onShare?: () => void;
 }) {
   const isPending = job.status === "queued" || job.status === "running";
@@ -128,6 +130,16 @@ export function GenerationJobCard({
                   <CircleStop className="h-3.5 w-3.5" strokeWidth={1.7} />
                 )}
                 Остановить
+              </button>
+            ) : null}
+            {isReady && onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 px-3 text-xs text-gray-300 transition-colors hover:border-white/25 hover:text-white"
+              >
+                <Wand2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+                Править
               </button>
             ) : null}
             {isReady && onShare ? (

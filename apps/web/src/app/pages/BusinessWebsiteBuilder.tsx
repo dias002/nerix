@@ -763,15 +763,21 @@ export default function BusinessWebsiteBuilder() {
                         <Eye className="h-4 w-4" strokeWidth={1.7} />
                         Превью сайта
                       </div>
-                      <a
-                        href={publicUrl || "#"}
-                        target={publicUrl ? "_blank" : undefined}
-                        rel="noreferrer"
-                        className={`inline-flex items-center gap-1 text-sm ${publicUrl ? "text-black" : "pointer-events-none text-gray-400"}`}
-                      >
-                        Открыть
-                        <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
-                      </a>
+                      {publicUrl ? (
+                        <a
+                          href={publicUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-sm text-black"
+                        >
+                          Открыть
+                          <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
+                        </a>
+                      ) : (
+                        <button type="button" disabled className="text-sm text-gray-400" title="Ссылка появится после публикации">
+                          После публикации
+                        </button>
+                      )}
                     </div>
                     <div className="max-h-[760px] overflow-y-auto">
                       <BusinessWebsiteRenderer content={content} compact />

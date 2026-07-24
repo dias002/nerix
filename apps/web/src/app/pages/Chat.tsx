@@ -1,28 +1,30 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
-  ArrowRight,
   Bot,
   Check,
   Copy,
   FileText,
-  FolderKanban,
-  Grid2X2,
   ImageIcon,
+  LoaderCircle,
   MessageSquarePlus,
   Mic,
   Paperclip,
   RotateCcw,
   Send,
   Share2,
+  SlidersHorizontal,
+  Sparkles,
   Star,
-  UserRound,
+  Wand2,
   X,
 } from "lucide-react";
 import { useLanguage } from "../i18n";
 import AuthPromptDialog from "../components/AuthPromptDialog";
 import ShareSheet, { type SharePayload } from "../components/ShareSheet";
+import TaskProgress, { type TaskProgressStep } from "../components/TaskProgress";
+import TaskDock, { type TaskDockItem } from "../components/workspace/TaskDock";
 import {
   cancelGenerationJob,
   getChatConversation,
@@ -39,7 +41,6 @@ import {
 } from "../api";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme";
-import { readResponseStyle, responseStyleLabel, responseStyles, writeResponseStyle, type ResponseStyleId } from "../responsePreferences";
 import { formatFileSize, maxAttachedFileSize, maxAttachedFiles, readAttachment, speechLocale } from "./chat/attachments";
 import { GenerationJobCard, generationStatusText, mediaExtension, mediaTitle } from "./chat/generation";
 import { toApiAttachment, toAssistantMessage, toChatMessage } from "./chat/messageMappers";
@@ -53,6 +54,7 @@ const agentStarterPrompts: Record<string, string> = {
   code: "Помоги с кодом. Сначала найди проблему, затем предложи минимальное исправление и проверку.",
   study: "Объясни тему простыми словами, затем дай пример и 3 вопроса для самопроверки.",
   documents: "Проанализируй документ: сделай краткое резюме, выдели риски и предложи правки.",
+  presentations: "Собери презентацию: цель, аудитория, структура слайдов, тезисы и визуальные идеи.",
   image: "Собери промпт для изображения: стиль, композиция, объект, фон, свет и негативные ограничения.",
   video: "Сделай сценарий короткого видео: хук, сцены, текст ведущего и финальный призыв.",
   avatar: "Подготовь сценарий для avatar-video: кто говорит, тон, текст, фон и длительность.",
@@ -61,6 +63,30 @@ const agentStarterPrompts: Record<string, string> = {
   marketing: "Собери маркетинговый план: аудитория, сообщение, каналы, креативы и быстрый тест.",
   support: "Подготовь ответ клиенту: спокойно, по делу, с решением и следующим шагом.",
 };
+
+type TaskChip = {
+  label: string;
+  prompt: string;
+  icon: typeof Bot;
+};
+
+const taskChips: TaskChip[] = [
+  {
+    label: "Разобрать задачу",
+    prompt: "Помоги решить задачу. Сначала уточни контекст, затем дай короткий план и готовый результат.",
+    icon: Bot,
+  },
+  {
+    label: "Разобрать документ",
+    prompt: "Помоги разобрать документ: выдели главное, риски, спорные места и следующие действия.",
+    icon: FileText,
+  },
+  {
+    label: "Исследовать тему",
+    prompt: "Проведи исследование темы: сравни факты, покажи источники, сделай вывод и предложи следующий шаг.",
+    icon: Sparkles,
+  },
+];
 const fallbackModelOptions: AiModelOptionApiRecord[] = withModelAccess([
   {
     id: "openai:gpt-4.1",
@@ -257,6 +283,8 @@ export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [taskStartedAt, setTaskStartedAt] = useState<number | undefined>();
+  const [activeTaskFilesCount, setActiveTaskFilesCount] = useState(0);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedBestAnswerId, setSelectedBestAnswerId] = useState<string | null>(null);
   const [unavailableNotice, setUnavailableNotice] = useState<string | null>(null);
@@ -265,6 +293,7 @@ export default function Chat() {
   const [isListening, setIsListening] = useState(false);
   const [isAuthPromptOpen, setIsAuthPromptOpen] = useState(false);
   const [mediaObjectUrls, setMediaObjectUrls] = useState<Record<string, string>>({});
+  const [imageReferenceJob, setImageReferenceJob] = useState<MediaGenerationJobApiRecord | null>(null);
   const [cancellingGenerationIds, setCancellingGenerationIds] = useState<Set<string>>(() => new Set());
   const [sharePayload, setSharePayload] = useState<SharePayload | null>(null);
   const [modelOptions, setModelOptions] = useState<AiModelOptionApiRecord[]>([]);
@@ -272,14 +301,16 @@ export default function Chat() {
     if (typeof window === "undefined") return "auto";
     return window.localStorage.getItem(modelSelectionStorageKey) ?? "auto";
   });
-  const [responseStyleId, setResponseStyleId] = useState<ResponseStyleId>(() => readResponseStyle());
+  const [mobileControlsOpen, setMobileControlsOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const voiceBaseInputRef = useRef("");
   const mediaObjectUrlsRef = useRef<Record<string, string>>({});
   const promptParam = searchParams.get("prompt");
   const agentParam = searchParams.get("agent");
+  const networkParam = searchParams.get("network") ?? searchParams.get("model");
   const newChatParam = searchParams.get("new");
   const conversationParam = searchParams.get("conversationId");
 
@@ -352,10 +383,6 @@ export default function Chat() {
   }, [selectedModelId]);
 
   useEffect(() => {
-    writeResponseStyle(responseStyleId);
-  }, [responseStyleId]);
-
-  useEffect(() => {
     if (selectedModelId === "auto") return;
     if (isAuthenticated && !user) return;
 
@@ -386,18 +413,25 @@ export default function Chat() {
   }, [promptParam, setSearchParams]);
 
   useEffect(() => {
+    if (!networkParam) return;
+
+    setSelectedModelId(networkParam === "auto" ? "auto" : networkParam);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("network");
+      next.delete("model");
+      return next;
+    }, { replace: true });
+  }, [networkParam, setSearchParams]);
+
+  useEffect(() => {
     if (!agentParam) return;
 
     const starterPrompt = agentStarterPrompts[agentParam];
-    if (starterPrompt) {
-      setInputValue(starterPrompt);
+    if (starterPrompt && !promptParam) {
+      setInputValue((current) => current.trim() ? current : starterPrompt);
     }
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
-      next.delete("agent");
-      return next;
-    }, { replace: true });
-  }, [agentParam, setSearchParams]);
+  }, [agentParam, promptParam]);
 
   useEffect(() => {
     if (!newChatParam) return;
@@ -405,6 +439,7 @@ export default function Chat() {
     Object.values(mediaObjectUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
     mediaObjectUrlsRef.current = {};
     setMediaObjectUrls({});
+    setImageReferenceJob(null);
     setMessages([{ id: "intro", text: "nomduchat", sender: "ai" }]);
     setInputValue("");
     setAttachedFiles([]);
@@ -564,18 +599,23 @@ export default function Chat() {
 
     const messageText = inputValue.trim() || t.chat.filePrompt;
     const filesForMessage = attachedFiles;
+    const referencedImageJob = imageReferenceJob ?? inferImageReferenceJob(messages, messageText);
     const userMessage: Message = {
       id: Date.now().toString(),
       text: messageText,
       sender: "user",
       attachments: filesForMessage,
+      imageReferenceJob: referencedImageJob ?? undefined,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
     setAttachedFiles([]);
+    setImageReferenceJob(null);
     setUnavailableNotice(null);
     setIsThinking(true);
+    setTaskStartedAt(Date.now());
+    setActiveTaskFilesCount(filesForMessage.length);
 
     try {
       const assistantMessageId = `stream-${Date.now() + 1}`;
@@ -584,9 +624,10 @@ export default function Chat() {
       const response = await sendChatMessageStream({
         message: messageText,
         conversationId,
+        agentId: agentParam ?? undefined,
         selectedModelId: selectedModelForRequest,
-        responseStyle: responseStyleId,
         language: language === "kk" ? "kz" : language,
+        imageReferenceJobId: referencedImageJob?.id,
         attachments: filesForMessage.map(toApiAttachment),
       }, {
         onStart: (event) => {
@@ -594,6 +635,7 @@ export default function Chat() {
         },
         onDelta: (delta) => {
           setIsThinking(false);
+          setTaskStartedAt(undefined);
           if (!hasStreamingMessage) {
             hasStreamingMessage = true;
             setMessages((prev) => [...prev, { id: assistantMessageId, text: delta, sender: "ai" }]);
@@ -629,6 +671,8 @@ export default function Chat() {
       setMessages((prev) => [...prev, fallbackMessage]);
     } finally {
       setIsThinking(false);
+      setTaskStartedAt(undefined);
+      setActiveTaskFilesCount(0);
       promptGuestToRegister();
     }
   };
@@ -673,6 +717,12 @@ export default function Chat() {
     });
   };
 
+  const handleEditGenerationJob = (job: MediaGenerationJobApiRecord) => {
+    setImageReferenceJob(job);
+    setUnavailableNotice(null);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
   const handleRegenerate = async (message?: Message) => {
     if (message?.generationJob) {
       setUnavailableNotice(t.chat.mediaRegenerateUnavailable);
@@ -686,12 +736,14 @@ export default function Chat() {
 
     setUnavailableNotice(null);
     setIsThinking(true);
+    setTaskStartedAt(Date.now());
+    setActiveTaskFilesCount(0);
 
     try {
       const response = await regenerateChatMessage({
         conversationId,
+        agentId: agentParam ?? undefined,
         selectedModelId: selectedModelForRequest,
-        responseStyle: responseStyleId,
         language: language === "kk" ? "kz" : language,
       });
       setMessages((prev) => [...prev, toAssistantMessage(response, t.chat.regeneratedResponse)]);
@@ -699,6 +751,8 @@ export default function Chat() {
       setUnavailableNotice(toPublicApiError(error, t.chat.regenerateUnavailable));
     } finally {
       setIsThinking(false);
+      setTaskStartedAt(undefined);
+      setActiveTaskFilesCount(0);
     }
   };
 
@@ -737,11 +791,14 @@ export default function Chat() {
     Object.values(mediaObjectUrlsRef.current).forEach((url) => URL.revokeObjectURL(url));
     mediaObjectUrlsRef.current = {};
     setMediaObjectUrls({});
+    setImageReferenceJob(null);
     setInputValue("");
     setAttachedFiles([]);
     setConversationId(undefined);
     setUnavailableNotice(null);
     setIsThinking(false);
+    setTaskStartedAt(undefined);
+    setActiveTaskFilesCount(0);
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete("conversationId");
@@ -832,6 +889,18 @@ export default function Chat() {
     setUnavailableNotice(t.chat.voiceListening);
   };
 
+  const applyTaskChip = (chip: TaskChip) => {
+    setInputValue(chip.prompt);
+    setUnavailableNotice(null);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
+  const applyFollowUp = (prompt: string) => {
+    setInputValue(prompt);
+    setUnavailableNotice(null);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
+  };
+
   const showEmptyState = messages.length <= 1 && messages[0]?.id === "intro" && !conversationParam;
   const modelSelectorTitle =
     selectedModelLocked && selectedModelOption
@@ -841,43 +910,63 @@ export default function Chat() {
       : modelOptions.length === 0
         ? "Локальный список моделей. Доступность проверит API."
         : "Модель ответа";
+  const selectedModelShortLabel = selectedModelId === "auto" ? "Авто" : selectedModelOption?.label ?? "Сеть";
+  const progressSteps = useMemo(
+    () => buildProgressSteps(selectedModelId, selectedModelOption, activeTaskFilesCount),
+    [activeTaskFilesCount, selectedModelId, selectedModelOption]
+  );
+  const taskDockItems: TaskDockItem[] = [
+    ...(isThinking
+      ? [
+          {
+            id: "chat-response",
+            title: "Готовлю ответ",
+            subtitle: "NomduChat подбирает модель и собирает результат.",
+            status: "running" as const,
+            model: selectedModelShortLabel,
+            steps: progressSteps,
+          },
+        ]
+      : []),
+    ...activeGenerationJobs.slice(0, 1).map((job) => ({
+      id: job.id,
+      title: mediaTitle(job.modality, job.status),
+      subtitle: generationStatusText(job),
+      status: job.status === "queued" ? ("queued" as const) : ("running" as const),
+      model: job.model ?? job.provider,
+      progress: job.status === "queued" ? 14 : undefined,
+      onCancel: cancellingGenerationIds.has(job.id) ? undefined : () => void handleCancelGeneration(job),
+    })),
+  ];
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#050505] relative">
+    <div className="nd-shell-surface flex-1 flex flex-col h-full relative bg-[var(--canvas)]">
       <AuthPromptDialog open={isAuthPromptOpen} onClose={() => setIsAuthPromptOpen(false)} />
       <ShareSheet open={Boolean(sharePayload)} payload={sharePayload} onClose={() => setSharePayload(null)} />
+      <TaskDock items={taskDockItems} />
 
-      <header className="h-14 border-b border-white/10 flex items-center justify-between gap-3 px-4 md:px-6 shrink-0 bg-[#0A0A0A]/80 backdrop-blur-md absolute top-0 w-full z-10">
-        <div className="text-sm font-medium text-gray-300">nomduchat</div>
+      <header className="nd-topbar h-14 flex items-center justify-between gap-3 px-4 pr-28 sm:pr-36 md:px-6 shrink-0 bg-[#0A0A0A]/80 backdrop-blur-md absolute top-0 w-full z-10">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="nd-icon-tile h-8 w-8" data-accent="orange">
+            <Wand2 className="h-4 w-4" strokeWidth={1.8} />
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-gray-200">nomduchat</div>
+          </div>
+        </div>
 
-        <div className="flex items-center gap-2">
-          <label className="sr-only" htmlFor="chat-model-selector">
-            Модель ответа
+        <div className="hidden items-center gap-2 sm:flex">
+          <label className="hidden text-xs font-medium text-[var(--nd-orange)] md:inline" htmlFor="chat-model-selector">
+            Сеть
           </label>
-          <label className="sr-only" htmlFor="chat-style-selector">
-            Стиль ответа
-          </label>
-          <select
-            id="chat-style-selector"
-            value={responseStyleId}
-            onChange={(event) => setResponseStyleId(event.target.value as ResponseStyleId)}
-            className="hidden h-9 w-[9.5rem] rounded-full border border-white/10 bg-[#111111] px-3 text-xs font-medium text-gray-300 outline-none transition-colors hover:border-white/20 hover:text-white focus:border-white/30 md:block"
-            title={`Стиль ответа: ${responseStyleLabel(responseStyleId)}`}
-          >
-            {responseStyles.map((style) => (
-              <option key={style.id} value={style.id}>
-                {style.label}
-              </option>
-            ))}
-          </select>
           <select
             id="chat-model-selector"
             value={selectedModelId}
             onChange={(event) => setSelectedModelId(event.target.value)}
-            className="h-9 w-[9.5rem] rounded-full border border-white/10 bg-[#111111] px-3 text-xs font-medium text-gray-300 outline-none transition-colors hover:border-white/20 hover:text-white focus:border-white/30 sm:w-[18rem]"
+            className="nd-select h-9 w-[9.5rem] px-3 text-xs font-medium text-gray-300 transition-colors hover:border-white/20 hover:text-white sm:w-[18rem]"
             title={modelSelectorTitle}
           >
-            <option value="auto">Авто</option>
+            <option value="auto">Авто · подобрать сеть</option>
             {modelGroups.map((group) => (
               <optgroup key={group.providerCode} label={group.providerName}>
                 {group.models.map((option) => {
@@ -895,7 +984,7 @@ export default function Chat() {
           <button
             type="button"
             onClick={handleNewChat}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-gray-400 transition-colors hover:border-white/20 hover:text-white"
+            className="nd-secondary-action inline-flex h-9 w-9 items-center justify-center"
             aria-label={t.chat.newChat}
             title={t.chat.newChat}
           >
@@ -904,63 +993,62 @@ export default function Chat() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto pt-20 pb-40 px-4 md:px-8 custom-scrollbar">
+      {mobileControlsOpen ? (
+        <div
+          id="mobile-chat-controls"
+          className="absolute bottom-28 left-3 right-3 z-20 rounded-2xl border border-white/10 bg-[#080808]/95 p-3 text-white shadow-2xl shadow-black/60 backdrop-blur sm:hidden"
+        >
+          <label className="block">
+            <span className="mb-1.5 block text-xs text-[var(--nd-orange)]">Сеть</span>
+            <select
+              value={selectedModelId}
+              onChange={(event) => setSelectedModelId(event.target.value)}
+              className="nd-select h-10 w-full px-3 text-sm"
+              title={modelSelectorTitle}
+            >
+              <option value="auto">Авто · подобрать сеть</option>
+              {modelGroups.map((group) => (
+                <optgroup key={group.providerCode} label={group.providerName}>
+                  {group.models.map((option) => {
+                    const isLocked = !canUseModelOption(option, currentPlanId, hasAdminModelAccess);
+
+                    return (
+                      <option key={option.id} value={option.id} disabled={isLocked}>
+                        {modelOptionLabel(option, currentPlanId, hasAdminModelAccess)}
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
+
+      <div className="flex-1 overflow-y-auto px-4 pb-40 pt-20 custom-scrollbar md:px-8">
         <div className="max-w-3xl mx-auto space-y-6">
           {showEmptyState ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mx-auto flex min-h-[46vh] max-w-3xl flex-col justify-center py-8"
+              className="mx-auto flex min-h-[38vh] flex-col items-center justify-center py-6 text-center"
             >
-              <div className="text-center">
-                <div className="mx-auto mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-gray-400">
-                  <Bot className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  AI workspace
-                </div>
-                <h1 className="text-3xl font-medium leading-tight text-white md:text-5xl">Что нужно сделать?</h1>
-                <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-gray-500">
-                  Пишите задачу обычными словами или выберите быстрый сценарий. nomduchat сохранит контекст в чате,
-                  а нужные инструменты лежат рядом в проектах, приложениях и медиа.
-                </p>
-              </div>
-
-              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {[
-                  "Составь план запуска продукта",
-                  "Перепиши текст понятно и красиво",
-                  "Разбери документ и выдели главное",
-                ].map((prompt) => (
-                  <button
-                    key={prompt}
-                    type="button"
-                    onClick={() => setInputValue(prompt)}
-                    className="min-h-24 rounded-xl border border-white/10 bg-[#0D0D0D] p-4 text-left text-sm leading-relaxed text-gray-300 transition-colors hover:border-white/20 hover:bg-white/[0.05] hover:text-white"
-                  >
-                    {prompt}
-                  </button>
-                ))}
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
-                {[
-                  { to: "/workspace/agents", label: "Агенты", icon: Bot },
-                  { to: "/workspace/projects", label: "Проекты", icon: FolderKanban },
-                  { to: "/workspace/apps", label: "Приложения", icon: Grid2X2 },
-                  { to: "/workspace/media", label: "Медиа", icon: ImageIcon },
-                  { to: "/workspace/avatar", label: "Аватар", icon: UserRound },
-                ].map((item) => (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    className="group flex h-20 flex-col justify-between rounded-xl border border-white/10 bg-black px-3 py-3 text-sm text-gray-400 transition-colors hover:border-white/20 hover:text-white"
-                  >
-                    <item.icon className="h-4 w-4" strokeWidth={1.7} />
-                    <span className="flex items-center justify-between gap-2">
-                      {item.label}
-                      <ArrowRight className="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-100" strokeWidth={1.8} />
-                    </span>
-                  </Link>
-                ))}
+              <h1 className="text-2xl font-medium leading-tight text-white md:text-3xl">Что сделаем?</h1>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                {taskChips.map((chip) => {
+                  const Icon = chip.icon;
+                  return (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => applyTaskChip(chip)}
+                      className="nd-secondary-action inline-flex h-10 items-center gap-2 px-3.5 text-sm"
+                    >
+                      <Icon className="h-4 w-4" strokeWidth={1.8} />
+                      {chip.label}
+                    </button>
+                  );
+                })}
               </div>
             </motion.div>
           ) : null}
@@ -992,6 +1080,11 @@ export default function Chat() {
                       artifactUrl={mediaObjectUrls[msg.generationJob.id]}
                       isCancelling={cancellingGenerationIds.has(msg.generationJob.id)}
                       onCancel={() => handleCancelGeneration(msg.generationJob!)}
+                      onEdit={
+                        msg.generationJob.modality === "image" && msg.generationJob.status === "succeeded"
+                          ? () => handleEditGenerationJob(msg.generationJob!)
+                          : undefined
+                      }
                       onShare={() => handleShareGenerationJob(msg.generationJob!, mediaObjectUrls[msg.generationJob!.id])}
                     />
                   ) : (
@@ -1008,14 +1101,22 @@ export default function Chat() {
                       ))}
                     </div>
                   ) : null}
+                  {msg.imageReferenceJob ? (
+                    <ImageReferenceBadge
+                      job={msg.imageReferenceJob}
+                      artifactUrl={mediaObjectUrls[msg.imageReferenceJob.id]}
+                    />
+                  ) : null}
                 </div>
 
                 {msg.sender === "ai" && msg.id !== "intro" && !msg.generationJob && (
-                  <div className="mt-2 flex items-center gap-1">
+                  <>
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
                     <button
                       type="button"
                       onClick={() => handleCopy(msg)}
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                      aria-label="Копировать ответ"
                     >
                       {copiedId === msg.id ? (
                         <Check className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -1028,6 +1129,7 @@ export default function Chat() {
                       type="button"
                       onClick={() => handleShareMessage(msg)}
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                      aria-label="Поделиться ответом"
                     >
                       <Share2 className="h-3.5 w-3.5" strokeWidth={1.8} />
                       Поделиться
@@ -1036,6 +1138,7 @@ export default function Chat() {
                       type="button"
                       onClick={() => void handleRegenerate(msg)}
                       className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                      aria-label="Создать новый ответ"
                     >
                       <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.8} />
                       {t.chat.regenerate}
@@ -1048,12 +1151,35 @@ export default function Chat() {
                           ? "bg-white text-black hover:bg-gray-200"
                           : "text-gray-500 hover:bg-white/5 hover:text-white"
                       }`}
+                      aria-label="Отметить лучший ответ"
                     >
                       <Star className="h-3.5 w-3.5" strokeWidth={1.8} />
                       {msg.selectedBest || selectedBestAnswerId === msg.id ? t.chat.bestAnswerSelected : t.chat.bestAnswer}
                     </button>
                   </div>
+                  <MessageNextActions text={msg.text} onSelect={applyFollowUp} />
+                  </>
                 )}
+                {msg.sender === "user" ? (
+                  <div className="mt-2 flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => applyFollowUp(msg.text)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                      aria-label="Редактировать запрос"
+                    >
+                      Редактировать
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => applyFollowUp(msg.text)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                      aria-label="Повторить запрос"
+                    >
+                      Повторить
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </motion.div>
             );
@@ -1062,9 +1188,9 @@ export default function Chat() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-sm text-gray-500"
+              className="flex justify-start"
             >
-              {t.chat.thinking}
+              <TaskProgress steps={progressSteps} startedAt={taskStartedAt} />
             </motion.div>
           )}
           {unavailableNotice ? (
@@ -1085,12 +1211,12 @@ export default function Chat() {
           theme === "light" ? "from-[#F4F6FA] via-[#F4F6FA] to-transparent" : "from-[#050505] via-[#050505] to-transparent"
         }`}
       >
-        <div className="max-w-3xl mx-auto relative">
+        <div className="mx-auto max-w-3xl relative">
           {attachedFiles.length > 0 ? (
             <div className="mb-3 flex flex-wrap gap-2">
               {attachedFiles.map((file) => (
-                <div key={file.id} className="inline-flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-[#111111] px-3 py-2 text-sm text-gray-300">
-                  <FileText className="h-4 w-4 shrink-0 text-gray-500" strokeWidth={1.7} />
+                <div key={file.id} className="nd-card inline-flex max-w-full items-center gap-2 px-3 py-2 text-sm text-gray-300">
+                  <FileText className="h-4 w-4 shrink-0 text-[var(--nd-blue)]" strokeWidth={1.7} />
                   <span className="max-w-[13rem] truncate">{file.name}</span>
                   <span className="shrink-0 text-xs text-gray-600">{formatFileSize(file.size)}</span>
                   <button
@@ -1106,7 +1232,37 @@ export default function Chat() {
             </div>
           ) : null}
 
-          <div className="relative flex items-end bg-[#111111] border border-white/10 rounded-2xl overflow-hidden focus-within:border-white/20 transition-colors">
+          {imageReferenceJob ? (
+            <div className="nd-card mb-3 flex items-center gap-3 p-2.5">
+              <div className="h-12 w-12 overflow-hidden rounded-lg border border-white/10 bg-black">
+                {mediaObjectUrls[imageReferenceJob.id] ? (
+                  <img
+                    src={mediaObjectUrls[imageReferenceJob.id]}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-gray-500">
+                    <ImageIcon className="h-5 w-5" strokeWidth={1.7} />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-medium uppercase tracking-[0.16em] text-[var(--nd-orange)]">Редактируем изображение</div>
+                <div className="mt-1 truncate text-sm text-gray-300">{imageReferenceJob.prompt}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImageReferenceJob(null)}
+                aria-label="Не редактировать изображение"
+                className="nd-secondary-action inline-flex h-9 w-9 shrink-0 items-center justify-center"
+              >
+                <X className="h-4 w-4" strokeWidth={1.8} />
+              </button>
+            </div>
+          ) : null}
+
+          <div className="nd-card relative flex items-end overflow-hidden transition-colors focus-within:border-white/20">
             <input
               ref={fileInputRef}
               type="file"
@@ -1118,11 +1274,24 @@ export default function Chat() {
               type="button"
               onClick={handleFileButtonClick}
               aria-label={t.chat.attachFile}
-              className="p-3.5 text-gray-400 hover:text-white transition-colors"
+              className="p-2.5 text-gray-400 transition-colors hover:text-[var(--nd-blue)] sm:p-3.5"
             >
               <Paperclip className="w-5 h-5" />
             </button>
+            <button
+              type="button"
+              onClick={() => setMobileControlsOpen((open) => !open)}
+              aria-expanded={mobileControlsOpen}
+              aria-controls="mobile-chat-controls"
+              aria-label="Настройки ответа"
+              title="Настройки ответа"
+              className="p-2.5 text-gray-400 transition-colors hover:text-[var(--nd-orange)] sm:hidden"
+            >
+              <SlidersHorizontal className="h-5 w-5" strokeWidth={1.8} />
+              <span className="sr-only">{selectedModelShortLabel}</span>
+            </button>
             <textarea
+              ref={textareaRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => {
@@ -1132,25 +1301,27 @@ export default function Chat() {
                 }
               }}
               placeholder={t.chat.placeholder}
-              className="flex-1 max-h-48 min-h-[52px] resize-none border-none bg-transparent px-2 py-3.5 text-[15px] text-white outline-none ring-0 custom-scrollbar focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0"
+              className="min-w-0 flex-1 max-h-48 min-h-[52px] resize-none border-none bg-transparent px-1 py-3.5 text-sm text-white outline-none ring-0 custom-scrollbar focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 sm:px-2 sm:text-[15px]"
               rows={1}
             />
             <button
               type="button"
               onClick={handleVoiceInput}
               aria-label={isListening ? t.chat.stopVoice : t.chat.voiceInput}
-              className={`p-3.5 transition-colors ${
-                isListening ? "text-white" : "text-gray-400 hover:text-white"
+              className={`p-2.5 transition-colors sm:p-3.5 ${
+                isListening ? "text-[var(--nd-orange)]" : "text-gray-400 hover:text-[var(--nd-orange)]"
               }`}
             >
               <Mic className="h-5 w-5" />
             </button>
             <button
+              type="button"
               onClick={handleSend}
               disabled={!canSend}
-              className="p-3.5 text-gray-400 hover:text-white disabled:opacity-50 disabled:hover:text-gray-400 transition-colors"
+              aria-label={isThinking ? "Отправка запроса" : "Отправить запрос"}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-gray-400 transition-colors hover:text-white disabled:opacity-50 disabled:hover:text-gray-400 enabled:hover:text-[var(--nd-orange)] sm:h-12 sm:w-12"
             >
-              <Send className="w-5 h-5" />
+              {isThinking ? <LoaderCircle className="h-5 w-5 animate-spin" strokeWidth={1.8} /> : <Send className="w-5 h-5" />}
             </button>
           </div>
           <div className="text-center mt-3 text-xs text-gray-500">
@@ -1160,6 +1331,106 @@ export default function Chat() {
       </div>
     </div>
   );
+}
+
+type FollowUpAction = {
+  label: string;
+  prompt: string;
+};
+
+function MessageNextActions({ text, onSelect }: { text: string; onSelect: (prompt: string) => void }) {
+  const actions = buildMessageActions(text);
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {actions.map((action) => (
+        <button
+          key={action.label}
+          type="button"
+          onClick={() => onSelect(action.prompt)}
+          className="nd-secondary-action inline-flex h-9 items-center justify-center px-3 text-xs"
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function buildMessageActions(text: string): FollowUpAction[] {
+  const source = text.trim();
+  const excerpt = source.length > 1800 ? `${source.slice(0, 1800)}...` : source;
+  const normalized = source.toLowerCase();
+
+  if (source.includes("```") || containsAny(normalized, ["код", "ошибка", "api", "typescript", "react"])) {
+    return [
+      { label: "Найти риски", prompt: `Проверь этот ответ на ошибки, риски и пропущенные проверки:\n\n${excerpt}` },
+      { label: "Добавить тесты", prompt: `Предложи минимальные тесты для этого решения:\n\n${excerpt}` },
+      { label: "Сделать короче", prompt: `Сократи ответ и оставь только действия:\n\n${excerpt}` },
+    ];
+  }
+
+  if (containsAny(normalized, ["исслед", "источник", "рынок", "конкурент"])) {
+    return [
+      { label: "Собрать таблицу", prompt: `Собери выводы в таблицу с критериями и короткими комментариями:\n\n${excerpt}` },
+      { label: "Создать презентацию", prompt: `Преврати это в структуру презентации на 8-10 слайдов:\n\n${excerpt}` },
+      { label: "Проверить источники", prompt: `Проверь, какие утверждения требуют источников, и составь список проверки:\n\n${excerpt}` },
+    ];
+  }
+
+  if (source.length > 900) {
+    return [
+      { label: "Сократить", prompt: `Сократи текст без потери смысла:\n\n${excerpt}` },
+      { label: "Сделать официальнее", prompt: `Перепиши текст в деловом стиле:\n\n${excerpt}` },
+      { label: "Сохранить как план", prompt: `Сделай из этого пошаговый план с задачами и сроками:\n\n${excerpt}` },
+    ];
+  }
+
+  return [
+    { label: "Развернуть", prompt: `Раскрой ответ подробнее и добавь примеры:\n\n${excerpt}` },
+    { label: "Сделать план", prompt: `Преврати ответ в короткий план действий:\n\n${excerpt}` },
+    { label: "Перевести", prompt: `Переведи ответ на английский и сохрани смысл:\n\n${excerpt}` },
+  ];
+}
+
+function buildProgressSteps(
+  selectedModelId: string,
+  selectedModelOption: AiModelOptionApiRecord | null,
+  filesCount: number,
+): TaskProgressStep[] {
+  const modelLabel = selectedModelId === "auto" ? "Auto-режим" : selectedModelOption?.label ?? "выбранная сеть";
+  const steps: TaskProgressStep[] = [
+    {
+      id: "request",
+      label: "Запрос отправлен",
+      status: "completed",
+      detail: "Текст и доступные вложения переданы в API.",
+    },
+    {
+      id: "model",
+      label: selectedModelId === "auto" ? "Auto-режим получил задачу" : "Модель выбрана вручную",
+      status: "completed",
+      detail: modelLabel,
+    },
+  ];
+
+  if (filesCount > 0) {
+    steps.push({
+      id: "files",
+      label: "Вложения подготовлены",
+      status: "completed",
+      detail: `${filesCount} файл(ов) добавлено к запросу.`,
+    });
+  }
+
+  steps.push({
+    id: "stream",
+    label: "Жду первый фрагмент ответа",
+    status: "running",
+    detail: "Когда backend начнет streaming, карточка заменится ответом.",
+  });
+
+  return steps;
 }
 
 function FormattedMessageText({ text, sender }: { text: string; sender: Message["sender"] }) {
@@ -1262,6 +1533,85 @@ function FormattedMessageText({ text, sender }: { text: string; sender: Message[
       })}
     </div>
   );
+}
+
+function ImageReferenceBadge({ job, artifactUrl }: { job: MediaGenerationJobApiRecord; artifactUrl?: string }) {
+  return (
+    <div className="mt-3 flex max-w-full items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-2.5 py-2 text-xs text-gray-400">
+      <div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black">
+        {artifactUrl ? (
+          <img src={artifactUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <ImageIcon className="h-4 w-4" strokeWidth={1.7} />
+          </div>
+        )}
+      </div>
+      <span className="min-w-0 flex-1 truncate">Правка изображения: {job.prompt}</span>
+    </div>
+  );
+}
+
+function inferImageReferenceJob(messages: Message[], message: string) {
+  if (!looksLikeImageEditRequest(message)) return null;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const job = messages[index].generationJob;
+    if (job?.modality === "image" && job.status === "succeeded") return job;
+  }
+
+  return null;
+}
+
+function looksLikeImageEditRequest(message: string) {
+  const normalized = message.toLowerCase();
+  const hasImageReference = containsAny(normalized, [
+    "на этой картин",
+    "на этом изображ",
+    "на этом фото",
+    "эту картин",
+    "это изображ",
+    "this image",
+    "same image",
+    "картин",
+    "изображ",
+    "фото",
+    "image",
+    "picture",
+  ]);
+  const hasEditIntent = containsAny(normalized, [
+    "добавь",
+    "добавить",
+    "надпись",
+    "напиши",
+    "измени",
+    "поменяй",
+    "убери",
+    "замени",
+    "перерисуй",
+    "add",
+    "edit",
+    "remove",
+    "replace",
+    "change",
+  ]);
+
+  return hasImageReference && hasEditIntent || containsAny(normalized, [
+    "добавь надпись",
+    "добавить надпись",
+    "добавь текст",
+    "напиши на",
+    "убери фон",
+    "замени фон",
+    "поменяй фон",
+    "add text",
+    "remove background",
+    "change background",
+  ]);
+}
+
+function containsAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(needle));
 }
 
 type ReadableMessageItem =

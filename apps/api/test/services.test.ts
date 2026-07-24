@@ -33,7 +33,9 @@ import {
   GeminiMediaGenerationProvider,
   HeyGenMediaGenerationProvider,
   OpenAiVoiceGenerationProvider,
+  OpenAiMediaGenerationProvider,
 } from "../src/modules/generation/media-provider.js";
+import { applyGenerationPurposeRoute } from "../src/modules/generation/generation.service.js";
 import { InMemoryMailingRepository } from "../src/modules/mailings/mailing.repository.js";
 import { MailingService, parseContacts } from "../src/modules/mailings/mailing.service.js";
 import type { SmtpBzMessage } from "../src/modules/mailings/mailing.types.js";
@@ -646,6 +648,27 @@ test("generation service creates media jobs, stores artifacts, and can be starte
     if (blockedGenerationResponse.ok) return;
     assert.equal(blockedGenerationResponse.error.code, "subscription_required");
 
+    const freeAvatarProfileResponse = await dependencies.generation.createJob({
+      userId: "local-user",
+      country: "KZ",
+      language: "ru",
+      agentId: "avatar",
+      modality: "image",
+      purpose: "avatar_profile",
+      prompt: "создай красивый AI-аватар в фирменном 3D cartoon style",
+    });
+    assert.equal(freeAvatarProfileResponse.ok, true);
+    if (!freeAvatarProfileResponse.ok) return;
+    assert.equal(freeAvatarProfileResponse.value.job.status, "succeeded");
+    assert.equal(freeAvatarProfileResponse.value.job.modality, "image");
+    assert.equal(freeAvatarProfileResponse.value.job.reservedCredits, 0);
+    assert.equal(freeAvatarProfileResponse.value.job.finalCredits, 0);
+    assert.equal(freeAvatarProfileResponse.value.job.reservationId, undefined);
+    assert.equal(freeAvatarProfileResponse.value.job.metadata.purpose, "avatar_profile");
+    assert.equal(freeAvatarProfileResponse.value.job.metadata.providerCredentialSource, "server_config");
+    assert.equal(freeAvatarProfileResponse.value.job.metadata.budgetSource, "registration_avatar_budget");
+    assert.equal(freeAvatarProfileResponse.value.job.metadata.unmeteredReason, "avatar_profile");
+
     const adminGenerationResponse = await dependencies.generation.createJob({
       userId: "admin-user",
       country: "KZ",
@@ -696,6 +719,8 @@ test("generation service creates media jobs, stores artifacts, and can be starte
     assert.match(generationResponse.value.job.resultUrl ?? "", /\/generation\/jobs\/.+\/artifact$/);
     assert.ok((generationResponse.value.job.finalCredits ?? 0) > 0);
     assert.equal("artifactBase64" in generationResponse.value.job.metadata, false);
+    assert.equal(generationResponse.value.job.metadata.providerCredentialSource, "server_config");
+    assert.equal(generationResponse.value.job.metadata.budgetSource, "user_reserved_credits");
 
     const artifactResponse = await dependencies.generation.getArtifact({
       userId: "local-user",
@@ -708,8 +733,9 @@ test("generation service creates media jobs, stores artifacts, and can be starte
     const assetsResponse = await dependencies.generation.listAssets("local-user");
     assert.equal(assetsResponse.ok, true);
     if (!assetsResponse.ok) return;
-    assert.equal(assetsResponse.value.assets.length, 1);
-    assert.equal(assetsResponse.value.assets[0].mediaType, "music");
+    assert.equal(assetsResponse.value.assets.length, 2);
+    assert.ok(assetsResponse.value.assets.some((asset) => asset.mediaType === "image"));
+    assert.ok(assetsResponse.value.assets.some((asset) => asset.mediaType === "music"));
 
     const chatResponse = await dependencies.chat.sendMessage({
       userId: "local-user",
@@ -795,6 +821,80 @@ test("generation service creates media jobs, stores artifacts, and can be starte
     assert.match(contextualImageResponse.value.generationJob.prompt, /Казахстан просыпается под широким небом/);
     assert.match(contextualImageResponse.value.generationJob.prompt, /Последняя просьба пользователя/);
   });
+});
+
+test("generation purpose routes premium app covers and title videos to media models", async () => {
+  await withConfig(
+    {
+      OPENAI_API_KEY: "openai-key",
+      OPENAI_IMAGE_MODEL: undefined,
+      GOOGLE_AI_API_KEY: "gemini-key",
+      GEMINI_IMAGE_MODEL: undefined,
+      GEMINI_VIDEO_MODEL: undefined,
+    },
+    async () => {
+      const imageRoute = applyGenerationPurposeRoute({
+        purpose: "application_cover",
+        route: {
+          agentId: "image",
+          taskType: "media_generation",
+          provider: "openai",
+          model: "gpt-image-1",
+          policyMode: "dev_allow_all",
+          estimatedCredits: 100,
+          reserveCredits: 125,
+          asyncJob: true,
+          modality: "image",
+          routingReason: "default image route",
+        },
+      });
+
+      assert.equal(imageRoute.provider, "gemini");
+      assert.equal(imageRoute.model, "gemini-3.1-flash-image");
+      assert.match(imageRoute.routingReason, /Application cover generation/);
+
+      const avatarRoute = applyGenerationPurposeRoute({
+        purpose: "avatar_profile",
+        hasImageReferences: true,
+        route: {
+          agentId: "avatar",
+          taskType: "media_generation",
+          provider: "openai",
+          model: "gpt-image-1",
+          policyMode: "dev_allow_all",
+          estimatedCredits: 100,
+          reserveCredits: 125,
+          asyncJob: true,
+          modality: "image",
+          routingReason: "default avatar route",
+        },
+      });
+
+      assert.equal(avatarRoute.provider, "gemini");
+      assert.equal(avatarRoute.model, "gemini-3.1-flash-image");
+      assert.match(avatarRoute.routingReason, /Avatar profile image editing/);
+
+      const videoRoute = applyGenerationPurposeRoute({
+        purpose: "title_video",
+        route: {
+          agentId: "video",
+          taskType: "media_generation",
+          provider: "mock-provider",
+          model: "mock-video",
+          policyMode: "dev_allow_all",
+          estimatedCredits: 100,
+          reserveCredits: 125,
+          asyncJob: true,
+          modality: "video",
+          routingReason: "default video route",
+        },
+      });
+
+      assert.equal(videoRoute.provider, "gemini");
+      assert.equal(videoRoute.model, "veo-3.1-lite-generate-preview");
+      assert.match(videoRoute.routingReason, /Title-based video generation/);
+    }
+  );
 });
 
 test("database migrations include runtime columns for auth and subscriptions", async () => {
@@ -1079,6 +1179,290 @@ test("AI completion providers use backend company keys for OpenAI, Anthropic, an
   });
 });
 
+test("OpenAI media provider applies structured speech options and edits a referenced image", async () => {
+  await withConfig({ OPENAI_API_KEY: "sk-media-test", OPENAI_IMAGE_MODEL: undefined, OPENAI_VOICE_MODEL: undefined }, async () => {
+    const speechCalls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      speechCalls.push({ url: String(input), init });
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: {
+          "Content-Type": "audio/wav",
+        },
+      });
+    }, async () => {
+      const result = await new OpenAiMediaGenerationProvider().generate({
+        jobId: "voice-job-1",
+        provider: "openai",
+        model: "openai-voice-configured",
+        modality: "voice",
+        prompt: "озвучь мужским спокойным голосом: Добро пожаловать в nomduchat",
+        options: {
+          voice: "nova",
+          speechSpeed: 1.25,
+          audioFormat: "wav",
+        },
+      });
+
+      assert.equal(result.status, "succeeded");
+      assert.equal(result.mimeType, "audio/wav");
+      assert.equal(result.base64Data, Buffer.from([1, 2, 3]).toString("base64"));
+    });
+
+    assert.equal(speechCalls.length, 1);
+    assert.equal(speechCalls[0].url, "https://api.openai.com/v1/audio/speech");
+    const speechHeaders = speechCalls[0].init?.headers as Record<string, string>;
+    assert.equal(speechHeaders.Authorization, "Bearer sk-media-test");
+    const speechBody = JSON.parse(String(speechCalls[0].init?.body));
+    assert.equal(speechBody.model, "gpt-4o-mini-tts");
+    assert.equal(speechBody.voice, "nova");
+    assert.equal(speechBody.speed, 1.25);
+    assert.equal(speechBody.response_format, "wav");
+    assert.equal(speechBody.input, "мужским спокойным голосом: Добро пожаловать в nomduchat");
+
+    const editCalls: Array<{ url: string; init?: RequestInit }> = [];
+
+    await withFetchStub(async (input, init) => {
+      editCalls.push({ url: String(input), init });
+      return jsonResponse({
+        data: [
+          {
+            b64_json: Buffer.from("edited-image").toString("base64"),
+          },
+        ],
+      });
+    }, async () => {
+      const result = await new OpenAiMediaGenerationProvider().generate({
+        jobId: "image-edit-job-1",
+        provider: "openai",
+        model: "openai-image-configured",
+        modality: "image",
+        prompt: "добавь надпись с новым годом",
+        imageReference: {
+          jobId: "source-image-1",
+          prompt: "кот в костюме санты",
+          resultUrl: "http://127.0.0.1:4000/generation/jobs/source-image-1/artifact",
+          mimeType: "image/png",
+          data: Buffer.from("source-image"),
+        },
+      });
+
+      assert.equal(result.status, "succeeded");
+      assert.equal(result.mimeType, "image/png");
+      assert.equal(result.base64Data, Buffer.from("edited-image").toString("base64"));
+    });
+
+    assert.equal(editCalls.length, 1);
+    assert.equal(editCalls[0].url, "https://api.openai.com/v1/images/edits");
+    const editHeaders = editCalls[0].init?.headers as Record<string, string>;
+    assert.equal(editHeaders.Authorization, "Bearer sk-media-test");
+    assert.ok(editCalls[0].init?.body instanceof FormData);
+    const fields = Array.from((editCalls[0].init?.body as FormData).entries());
+    assert.equal(fields.find(([key]) => key === "model")?.[1], "gpt-image-1");
+    assert.match(String(fields.find(([key]) => key === "prompt")?.[1]), /Source image prompts/);
+    assert.ok(fields.some(([key, value]) => key === "image" && value instanceof Blob));
+  });
+});
+
+test("generation service creates avatar image jobs from uploaded references with consent", async () => {
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: false,
+      GOOGLE_AI_API_KEY: undefined,
+      OPENAI_API_KEY: "sk-avatar-image-test",
+      OPENAI_IMAGE_MODEL: undefined,
+      API_PUBLIC_URL: "http://127.0.0.1:4000",
+    },
+    async () => {
+      const dependencies = createDependencies();
+      const referenceImage = {
+        dataBase64: Buffer.from("portrait-reference").toString("base64"),
+        mimeType: "image/png" as const,
+        filename: "portrait.png",
+      };
+      const styleReferenceImage = {
+        dataBase64: Buffer.from("style-reference").toString("base64"),
+        mimeType: "image/png" as const,
+        filename: "style.png",
+      };
+
+      const noConsentResponse = await dependencies.generation.createJob({
+        userId: "admin-user",
+        country: "KZ",
+        language: "ru",
+        agentId: "image",
+        modality: "image",
+        prompt: "создай 3D аватар",
+        referenceImage,
+        isAdmin: true,
+      });
+      assert.equal(noConsentResponse.ok, false);
+      if (noConsentResponse.ok) return;
+      assert.equal(noConsentResponse.error.code, "validation_failed");
+
+      const editCalls: Array<{ url: string; init?: RequestInit }> = [];
+      await withFetchStub(async (input, init) => {
+        editCalls.push({ url: String(input), init });
+        return jsonResponse({
+          data: [
+            {
+              b64_json: Buffer.from("avatar-image").toString("base64"),
+            },
+          ],
+        });
+      }, async () => {
+        const response = await dependencies.generation.createJob({
+          userId: "admin-user",
+          country: "KZ",
+          language: "ru",
+          agentId: "avatar",
+          modality: "image",
+          purpose: "avatar_profile",
+          prompt: "создай 3D аватар",
+          referenceImages: [
+            {
+              ...referenceImage,
+              consentConfirmed: true,
+            },
+            {
+              ...styleReferenceImage,
+              consentConfirmed: true,
+            },
+          ],
+          isAdmin: true,
+        });
+
+        assert.equal(response.ok, true);
+        if (!response.ok) return;
+        assert.equal(response.value.job.status, "succeeded");
+        assert.equal(response.value.job.provider, "openai");
+        assert.equal(response.value.job.model, "openai-image-configured");
+        const imageReference = response.value.job.metadata.imageReference as Record<string, unknown>;
+        assert.equal(imageReference.jobId, "uploaded-1");
+        assert.equal(imageReference.mimeType, "image/png");
+        assert.equal(imageReference.dataBase64, undefined);
+        const imageReferences = response.value.job.metadata.imageReferences as Array<Record<string, unknown>>;
+        assert.equal(imageReferences.length, 2);
+        assert.equal(imageReferences[1].jobId, "uploaded-2");
+        const providerRaw = response.value.job.metadata.providerRaw as {
+          data: Array<{ b64_json: string }>;
+        };
+        assert.equal(providerRaw.data[0].b64_json, "[binary omitted]");
+
+        const artifact = await dependencies.generation.getArtifact({
+          userId: "admin-user",
+          jobId: response.value.job.id,
+        });
+        assert.equal(artifact.ok, true);
+        if (artifact.ok) {
+          assert.equal(artifact.value.data.toString("utf8"), "avatar-image");
+        }
+      });
+
+      assert.equal(editCalls.length, 1);
+      assert.equal(editCalls[0].url, "https://api.openai.com/v1/images/edits");
+      const fields = Array.from((editCalls[0].init?.body as FormData).entries());
+      assert.equal(fields.find(([key]) => key === "model")?.[1], "gpt-image-1");
+      assert.equal(fields.filter(([key, value]) => key === "image[]" && value instanceof Blob).length, 2);
+    }
+  );
+});
+
+test("avatar profile image references use Gemini inline image blocks", async () => {
+  await withConfig(
+    {
+      AI_MOCK_PROVIDER_ENABLED: false,
+      GOOGLE_AI_API_KEY: "gemini-avatar-key",
+      GEMINI_IMAGE_MODEL: undefined,
+      OPENAI_API_KEY: "sk-openai-fallback",
+      API_PUBLIC_URL: "http://127.0.0.1:4000",
+    },
+    async () => {
+      const dependencies = createDependencies();
+      const identityData = Buffer.from("avatar-identity").toString("base64");
+      const styleData = Buffer.from("avatar-style").toString("base64");
+      const generatedData = Buffer.from("gemini-avatar-result").toString("base64");
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+
+      await withFetchStub(async (input, init) => {
+        calls.push({ url: String(input), init });
+        return jsonResponse({
+          output_image: {
+            type: "image",
+            mime_type: "image/jpeg",
+            data: generatedData,
+          },
+          request_echo: {
+            input: [{ type: "image", data: identityData }],
+          },
+        });
+      }, async () => {
+        const response = await dependencies.generation.createJob({
+          userId: "admin-user",
+          country: "KZ",
+          language: "ru",
+          agentId: "avatar",
+          modality: "image",
+          purpose: "avatar_profile",
+          prompt: "Сохрани лицо и сделай аккуратный anime portrait.",
+          referenceImages: [
+            {
+              dataBase64: identityData,
+              mimeType: "image/jpeg",
+              filename: "identity.jpg",
+              consentConfirmed: true,
+            },
+            {
+              dataBase64: styleData,
+              mimeType: "image/png",
+              filename: "style.png",
+              consentConfirmed: true,
+            },
+          ],
+          isAdmin: true,
+        });
+
+        assert.equal(response.ok, true);
+        if (!response.ok) return;
+        assert.equal(response.value.job.status, "succeeded");
+        assert.equal(response.value.job.provider, "gemini");
+        assert.equal(response.value.job.model, "gemini-3.1-flash-image");
+        assert.match(response.value.route.routingReason, /Avatar profile image editing/);
+
+        const providerRaw = response.value.job.metadata.providerRaw as {
+          output_image: { data: string };
+          request_echo: { input: Array<{ data: string }> };
+        };
+        assert.equal(providerRaw.output_image.data, "[binary omitted]");
+        assert.equal(providerRaw.request_echo.input[0].data, "[binary omitted]");
+        assert.equal(JSON.stringify(providerRaw).includes(generatedData), false);
+        assert.equal(JSON.stringify(providerRaw).includes(identityData), false);
+
+        const artifact = await dependencies.generation.getArtifact({
+          userId: "admin-user",
+          jobId: response.value.job.id,
+        });
+        assert.equal(artifact.ok, true);
+        if (artifact.ok) {
+          assert.equal(artifact.value.data.toString("utf8"), "gemini-avatar-result");
+        }
+      });
+
+      assert.equal(calls.length, 1);
+      const requestUrl = new URL(calls[0].url);
+      assert.equal(requestUrl.pathname, "/v1beta/interactions");
+      assert.equal(requestUrl.searchParams.get("key"), "gemini-avatar-key");
+      const body = JSON.parse(String(calls[0].init?.body));
+      assert.deepEqual(body.input, [
+        { type: "text", text: "Сохрани лицо и сделай аккуратный anime portrait." },
+        { type: "image", mime_type: "image/jpeg", data: identityData },
+        { type: "image", mime_type: "image/png", data: styleData },
+      ]);
+    }
+  );
+});
+
 test("backend completion falls back to local mock in development when a real provider fails", async () => {
   await withConfig(
     {
@@ -1158,7 +1542,7 @@ test("OpenAI voice provider returns an MP3 artifact and normalizes the configure
   });
 });
 
-test("Gemini media provider sends interaction payloads without unsupported config", async () => {
+test("Gemini media provider sends structured image options and a minimal music payload", async () => {
   await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -1182,6 +1566,10 @@ test("Gemini media provider sends interaction payloads without unsupported confi
         model: "models/gemini-image-test",
         modality: "image",
         prompt: "сгенерируй картинку по тексту",
+        options: {
+          aspectRatio: "16:9",
+          imageSize: "2K",
+        },
       });
 
       assert.equal(imageResult.status, "succeeded");
@@ -1213,6 +1601,12 @@ test("Gemini media provider sends interaction payloads without unsupported confi
     assert.deepEqual(JSON.parse(String(calls[0].init?.body)), {
       model: "gemini-image-test",
       input: [{ type: "text", text: "сгенерируй картинку по тексту" }],
+      response_format: {
+        type: "image",
+        mime_type: "image/jpeg",
+        aspect_ratio: "16:9",
+        image_size: "2K",
+      },
     });
     assert.deepEqual(JSON.parse(String(calls[1].init?.body)), {
       model: "lyria-test",
@@ -1286,7 +1680,7 @@ test("Gemini media provider normalizes placeholder music model to Lyria", async 
   });
 });
 
-test("Gemini media provider starts video without unsupported numberOfVideos parameter", async () => {
+test("Gemini media provider starts video from a frame with structured output options", async () => {
   await withConfig({ GOOGLE_AI_API_KEY: "gemini-key" }, async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -1302,6 +1696,17 @@ test("Gemini media provider starts video without unsupported numberOfVideos para
         model: "veo-test",
         modality: "video",
         prompt: "создай короткое видео",
+        imageReference: {
+          jobId: "starting-frame",
+          prompt: "ночной город",
+          mimeType: "image/png",
+          data: Buffer.from("starting frame"),
+        },
+        options: {
+          aspectRatio: "9:16",
+          videoResolution: "1080p",
+          durationSeconds: 8,
+        },
       });
 
       assert.equal(videoResult.status, "running");
@@ -1316,15 +1721,23 @@ test("Gemini media provider starts video without unsupported numberOfVideos para
     assert.equal(calls[0].init?.method, "POST");
 
     const body = JSON.parse(String(calls[0].init?.body));
-    assert.equal(body.parameters.numberOfVideos, undefined);
     assert.deepEqual(body, {
       instances: [
         {
           prompt: "создай короткое видео",
+          image: {
+            inlineData: {
+              mimeType: "image/png",
+              data: Buffer.from("starting frame").toString("base64"),
+            },
+          },
         },
       ],
       parameters: {
-        resolution: "720p",
+        numberOfVideos: 1,
+        aspectRatio: "9:16",
+        resolution: "1080p",
+        durationSeconds: 8,
       },
     });
   });

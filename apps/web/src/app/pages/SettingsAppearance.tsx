@@ -2,13 +2,10 @@ import { Moon, Sun, Type } from "lucide-react";
 import { useLanguage } from "../i18n";
 import { SettingsDetailShell } from "./SettingsProfile";
 import { useTheme, type AppearanceMode, type FontSizeMode } from "../theme";
-import { readResponseStyle, responseStyles, writeResponseStyle, type ResponseStyleId } from "../responsePreferences";
-import { useState } from "react";
 
 export default function SettingsAppearance() {
   const { t } = useLanguage();
   const { theme, setTheme, fontSize, setFontSize } = useTheme();
-  const [responseStyle, setResponseStyle] = useState<ResponseStyleId>(() => readResponseStyle());
 
   const modes = [
     { id: "dark" as const, label: t.settings.dark, icon: Moon },
@@ -26,11 +23,6 @@ export default function SettingsAppearance() {
 
   const selectFontSize = (nextFontSize: FontSizeMode) => {
     setFontSize(nextFontSize);
-  };
-
-  const selectResponseStyle = (nextStyle: ResponseStyleId) => {
-    setResponseStyle(nextStyle);
-    writeResponseStyle(nextStyle);
   };
 
   return (
@@ -81,30 +73,6 @@ export default function SettingsAppearance() {
         </div>
       </section>
 
-      <section className="mt-6">
-        <div className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
-          <Type className="h-4 w-4" strokeWidth={1.7} />
-          Стиль ответа
-        </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {responseStyles.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => selectResponseStyle(item.id)}
-              className={`rounded-2xl border p-4 text-left transition-colors ${
-                responseStyle === item.id
-                  ? "border-white/25 bg-white/10 text-white"
-                  : "border-white/10 bg-[#0D0D0D] text-gray-400 hover:border-white/20 hover:text-white"
-              }`}
-              aria-pressed={responseStyle === item.id}
-            >
-              <span className="block text-sm font-medium">{item.label}</span>
-              <span className="mt-1 block text-xs leading-relaxed text-gray-500">{item.description}</span>
-            </button>
-          ))}
-        </div>
-      </section>
     </SettingsDetailShell>
   );
 }

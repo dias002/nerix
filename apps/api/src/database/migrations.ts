@@ -247,6 +247,26 @@ export async function runDatabaseMigrations(database: DatabaseClient) {
   `);
 
   await database.query(`
+    create table if not exists support_tickets (
+      id uuid primary key default uuid_generate_v4(),
+      user_id uuid references users(id) on delete set null,
+      contact_name text,
+      contact_email text not null,
+      topic text not null default 'other',
+      message text not null,
+      status text not null default 'open',
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await database.query(`
+    create index if not exists support_tickets_created_idx
+      on support_tickets(created_at desc)
+  `);
+
+  await database.query(`
     create table if not exists feature_flags (
       id uuid primary key default uuid_generate_v4(),
       key text not null unique,

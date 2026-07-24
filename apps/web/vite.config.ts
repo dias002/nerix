@@ -34,6 +34,20 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("@mediapipe/tasks-vision")) return "vendor-vision";
+          if (id.includes("/three/")) return "vendor-three";
+          if (id.includes("@mui/")) return "vendor-mui";
+          if (id.includes("recharts")) return "vendor-charts";
+          if (id.includes("/motion/")) return "vendor-motion";
+        },
+      },
+    },
+  },
 })
 
 function resolveBasePath() {

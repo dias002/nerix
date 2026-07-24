@@ -6,8 +6,9 @@ export async function registerUser(input: {
   email: string;
   password: string;
   name?: string;
-  country?: "KZ" | "RU";
+  country?: string;
   language?: Language;
+  avatarDataUrl?: string | null;
   turnstileToken?: string;
 }) {
   return request<AuthApiResponse>("/auth/register", {
@@ -54,6 +55,18 @@ export async function deleteCurrentUser(confirmation: string) {
   }>("/users/me/delete", {
     method: "POST",
     body: JSON.stringify({ confirmation }),
+  });
+}
+
+export async function updateCurrentUserProfile(input: {
+  name?: string;
+  country?: string;
+  language?: Language;
+  avatarDataUrl?: string | null;
+}) {
+  return request<{ user: UserApiRecord }>("/users/me", {
+    method: "PATCH",
+    body: JSON.stringify(input),
   });
 }
 

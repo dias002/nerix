@@ -74,7 +74,7 @@ const modalityLabels: Record<string, string> = {
 const providerModelCatalog = [
   {
     provider: "OpenAI",
-    accent: "border-sky-300/15 bg-sky-300/[0.04]",
+    accent: "border-white/10 bg-white/[0.03]",
     models: [
       { name: "gpt-4.1", type: "текст, код, документы" },
       { name: "gpt-4.1-mini", type: "быстрые рабочие задачи" },
@@ -94,7 +94,7 @@ const providerModelCatalog = [
   },
   {
     provider: "Anthropic",
-    accent: "border-orange-300/15 bg-orange-300/[0.04]",
+    accent: "border-white/10 bg-white/[0.03]",
     models: [
       { name: "claude-opus-4-20250514", type: "сложное рассуждение" },
       { name: "claude-sonnet-4-20250514", type: "код и рабочие задачи" },
@@ -108,7 +108,7 @@ const providerModelCatalog = [
   },
   {
     provider: "Google Gemini",
-    accent: "border-emerald-300/15 bg-emerald-300/[0.04]",
+    accent: "border-white/10 bg-white/[0.03]",
     models: [
       { name: "gemini-2.5-pro", type: "сложные задачи" },
       { name: "gemini-2.5-flash", type: "быстрый multimodal" },
@@ -266,13 +266,13 @@ export default function Models() {
                   <div className="rounded-xl border border-white/10 bg-black p-4 text-sm text-gray-500">Загружаю провайдеров...</div>
                 ) : activeProviders.length > 0 ? (
                   activeProviders.map((provider) => (
-                    <div key={provider.code} className="rounded-xl border border-emerald-400/15 bg-emerald-400/[0.04] p-4">
+                    <div key={provider.code} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
                           <h3 className="text-sm font-medium text-white">{provider.name}</h3>
-                          <p className="mt-1 text-xs text-emerald-100/60">Включен в production</p>
+                          <p className="mt-1 text-xs text-gray-500">Включен в production</p>
                         </div>
-                        <span className="rounded-full bg-emerald-300 px-2.5 py-1 text-xs font-semibold text-black">active</span>
+                        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-black">active</span>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {provider.modalities.map((modality) => (

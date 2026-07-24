@@ -13,6 +13,7 @@ const registerSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   country: countrySchema.default("KZ"),
   language: languageSchema.default("ru"),
+  avatarDataUrl: z.string().max(2_200_000).nullable().optional(),
   turnstileToken: z.string().trim().min(1).max(4096).optional(),
 });
 

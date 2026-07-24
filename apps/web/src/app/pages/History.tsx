@@ -1,25 +1,29 @@
 import { Link } from "react-router";
-import { motion } from "motion/react";
-import { MessageSquarePlus, Pin, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { MessageSquare, MessageSquarePlus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "../i18n";
 import { getChatConversations, type ChatConversationSummaryApiRecord } from "../api";
+import EmptyState from "../components/EmptyState";
+import FilterBar from "../components/workspace/FilterBar";
+import PageHeader from "../components/workspace/PageHeader";
+import SearchField from "../components/workspace/SearchField";
+import TimelineItem from "../components/workspace/TimelineItem";
+
+type HistoryFilter = "all" | "chat" | "favorites";
+
+const historyFilters: Array<{ id: HistoryFilter; label: string }> = [
+  { id: "all", label: "Все" },
+  { id: "chat", label: "Чаты" },
+  { id: "favorites", label: "Избранное" },
+];
 
 export default function History() {
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<HistoryFilter>("all");
   const [items, setItems] = useState<ChatConversationSummaryApiRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const normalizedQuery = normalizeSearchText(searchQuery);
-  const filteredItems = items.filter((item) => {
-    if (!normalizedQuery) return true;
-    const haystack = normalizeSearchText([item.title, item.preview, item.agentId, formatHistoryDate(item.updatedAt)].join(" "));
-    return normalizedQuery.split(" ").every((word) => haystack.includes(word));
-  });
-  const isSearching = Boolean(normalizedQuery);
-  const pinned = isSearching ? [] : filteredItems.slice(0, 1);
-  const recent = isSearching ? filteredItems : filteredItems.slice(1);
 
   useEffect(() => {
     let active = true;
@@ -33,7 +37,7 @@ export default function History() {
       })
       .catch(() => {
         if (!active) return;
-        setError(null);
+        setError("Не удалось загрузить историю. Попробуйте обновить страницу.");
         setItems([]);
       })
       .finally(() => {
@@ -45,92 +49,126 @@ export default function History() {
     };
   }, []);
 
-  const renderItem = (item: ChatConversationSummaryApiRecord, index: number) => (
-    <motion.div
-      key={item.id}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.05 }}
-    >
-      <Link
-        to={`/workspace/chat?conversationId=${encodeURIComponent(item.id)}`}
-        className="block rounded-2xl border border-white/5 bg-[#0A0A0A] p-4 transition-colors hover:border-white/15 hover:bg-[#101010]"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h3 className="truncate text-base font-medium text-white">{item.title}</h3>
-            <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-gray-500">{item.preview || "В чате пока нет сообщений."}</p>
-          </div>
-        </div>
-        <div className="mt-4 text-xs text-gray-600">
-          {formatHistoryDate(item.updatedAt)} · {item.messagesCount} сообщений
-        </div>
-      </Link>
-    </motion.div>
-  );
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(searchQuery);
+    if (filter === "favorites") return [];
+
+    return items.filter((item) => {
+      if (filter !== "all" && filter !== "chat") return false;
+      if (!normalizedQuery) return true;
+
+      const haystack = normalizeSearchText([item.title, item.preview, item.agentId, formatHistoryDate(item.updatedAt)].join(" "));
+      return normalizedQuery.split(" ").every((word) => haystack.includes(word));
+    });
+  }, [filter, items, searchQuery]);
+
+  const groups = useMemo(() => groupHistory(filteredItems), [filteredItems]);
+  const isSearching = Boolean(normalizeSearchText(searchQuery));
+  const favoritesSelected = filter === "favorites";
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#050505] p-6 md:p-12">
-      <div className="mx-auto max-w-4xl space-y-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-2xl font-medium text-white">{t.history.title}</h2>
-            <p className="mt-2 text-gray-400">{t.history.subtitle}</p>
-          </div>
-          <Link
-            to="/workspace/chat?new=1"
-            className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white text-black transition-colors hover:bg-gray-200"
-            aria-label={t.history.newChat}
-            title={t.history.newChat}
-          >
-            <MessageSquarePlus className="h-5 w-5" strokeWidth={1.8} />
-          </Link>
-        </div>
+    <div className="ns-page-scroll">
+      <main className="ns-page-text space-y-8">
+        <PageHeader
+          overline="История"
+          title={t.history.title}
+          subtitle={t.history.subtitle}
+          actions={
+            <Link to="/workspace/chat?new=1" className="nd-primary-action inline-flex h-11 items-center gap-2 px-5 text-sm font-medium">
+              <MessageSquarePlus className="h-4 w-4" strokeWidth={1.8} />
+              {t.history.newChat}
+            </Link>
+          }
+        />
 
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-          <input
-            type="text"
-            placeholder={t.history.search}
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            className="w-full rounded-xl border border-white/10 bg-[#0D0D0D] py-3 pl-10 pr-4 text-white placeholder-gray-600 transition-colors focus:border-white/20 focus:outline-none"
+        <section className="space-y-3">
+          <SearchField value={searchQuery} onChange={setSearchQuery} placeholder={t.history.search} />
+          <FilterBar<HistoryFilter> options={historyFilters} value={filter} onChange={setFilter} />
+        </section>
+
+        {error ? <div className="rounded-[var(--radius-card)] border border-[rgba(255,123,146,0.22)] bg-[rgba(255,123,146,0.08)] px-4 py-3 text-sm text-[var(--danger)]">{error}</div> : null}
+
+        {loading ? (
+          <section className="space-y-3" aria-label="Загрузка истории">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="ns-timeline-item p-4">
+                <div className="flex gap-3">
+                  <div className="h-10 w-10 rounded-[var(--radius-input)] bg-[var(--surface-2)]" />
+                  <div className="flex-1 space-y-3">
+                    <div className="h-3 w-2/5 rounded-full bg-[var(--surface-3)]" />
+                    <div className="h-3 w-4/5 rounded-full bg-[var(--surface-2)]" />
+                    <div className="h-3 w-1/3 rounded-full bg-[var(--surface-2)]" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {!loading && !favoritesSelected && groups.length > 0 ? (
+          <section className="space-y-7">
+            {groups.map((group) => (
+              <div key={group.label} className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-[var(--line-subtle)]" />
+                  <p className="ns-caption uppercase tracking-[0.12em]">{group.label}</p>
+                  <div className="h-px flex-1 bg-[var(--line-subtle)]" />
+                </div>
+                <div className="space-y-3">
+                  {group.items.map((item) => (
+                    <TimelineItem
+                      key={item.id}
+                      to={`/workspace/chat?conversationId=${encodeURIComponent(item.id)}`}
+                      icon={MessageSquare}
+                      title={item.title}
+                      preview={item.preview || "В чате пока нет сообщений."}
+                      meta={`${formatHistoryDate(item.updatedAt)} · ${item.messagesCount} сообщений`}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
+        ) : null}
+
+        {!loading && favoritesSelected ? (
+          <EmptyState
+            icon={MessageSquare}
+            title="Избранное — скоро"
+            text="Сохранение важных диалогов появится здесь после подключения избранного. Остальная история уже доступна во вкладках «Все» и «Чаты»."
           />
-        </div>
-
-        {error ? (
-          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-100">{error}</div>
         ) : null}
 
-        {loading ? <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-4 text-sm text-gray-500">Загружаю историю...</div> : null}
-
-        {pinned.length > 0 ? (
-          <section className="space-y-3">
-            <div className="flex items-center gap-2 px-1 text-sm font-medium text-gray-500">
-              <Pin className="h-4 w-4" strokeWidth={1.6} />
-              {t.history.pinned}
-            </div>
-            {pinned.map(renderItem)}
-          </section>
+        {!loading && !favoritesSelected && filteredItems.length === 0 ? (
+          <EmptyState
+            icon={MessageSquarePlus}
+            title={isSearching || filter !== "all" ? "Ничего не найдено" : "Здесь появятся ваши задачи"}
+            text={
+              isSearching || filter !== "all"
+                ? "Измените поиск или фильтр. Сейчас в истории доступны только сохраненные чаты."
+                : "Начните с одного рабочего сценария. После ответа чат сохранится здесь, и к нему можно будет вернуться."
+            }
+            examples={isSearching || filter !== "all" ? ["документ", "презентация", "проект"] : ["Проверить документ", "Создать изображение", "Изучить тему"]}
+            actions={isSearching || filter !== "all" ? [] : [{ label: t.history.newChat, href: "/workspace/chat?new=1" }]}
+          />
         ) : null}
-
-        {recent.length > 0 ? (
-          <section className="space-y-3">
-            <div className="px-1 text-sm font-medium text-gray-500">{isSearching ? "Результаты поиска" : t.history.recent}</div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {recent.map(renderItem)}
-            </div>
-          </section>
-        ) : null}
-
-        {!loading && filteredItems.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-[#0A0A0A] p-6 text-center text-sm text-gray-500">
-            Реальных чатов пока нет.
-          </div>
-        ) : null}
-      </div>
+      </main>
     </div>
   );
+}
+
+function groupHistory(items: ChatConversationSummaryApiRecord[]) {
+  const groups = new Map<string, ChatConversationSummaryApiRecord[]>();
+
+  items.forEach((item) => {
+    const label = formatGroupDate(item.updatedAt);
+    groups.set(label, [...(groups.get(label) ?? []), item]);
+  });
+
+  return Array.from(groups.entries()).map(([label, groupItems]) => ({
+    label,
+    items: groupItems,
+  }));
 }
 
 function normalizeSearchText(value: string) {
@@ -149,4 +187,23 @@ function formatHistoryDate(value: string) {
     minute: "2-digit",
     month: "short",
   }).format(new Date(value));
+}
+
+function formatGroupDate(value: string) {
+  const date = new Date(value);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+
+  if (sameDay(date, today)) return "Сегодня";
+  if (sameDay(date, yesterday)) return "Вчера";
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "long",
+  }).format(date);
+}
+
+function sameDay(left: Date, right: Date) {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
 }

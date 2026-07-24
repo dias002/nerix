@@ -54,16 +54,16 @@ export default function AvatarComingSoon() {
           </div>
 
           <div className="relative min-h-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#0B0B0B]">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_22%,rgba(32,227,178,0.2),transparent_32%),radial-gradient(circle_at_78%_70%,rgba(124,58,237,0.16),transparent_30%)]" />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_22%,rgba(255,255,255,0.08),transparent_32%),radial-gradient(circle_at_78%_70%,rgba(255,255,255,0.04),transparent_30%)]" />
             <div className="relative flex h-full min-h-[360px] flex-col items-center justify-center px-6 py-10 text-center">
               <div className="relative">
                 <div className="flex h-36 w-36 items-center justify-center rounded-full border border-white/15 bg-white/[0.06]">
                   <UserRound className="h-16 w-16 text-white" strokeWidth={1.35} />
                 </div>
-                <div className="absolute -right-4 top-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-300/25 bg-emerald-300/10 text-emerald-100">
+                <div className="absolute -right-4 top-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.06] text-white">
                   <Sparkles className="h-5 w-5" strokeWidth={1.7} />
                 </div>
-                <div className="absolute -bottom-3 -left-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-violet-300/25 bg-violet-300/10 text-violet-100">
+                <div className="absolute -bottom-3 -left-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/[0.06] text-white">
                   <Video className="h-5 w-5" strokeWidth={1.7} />
                 </div>
               </div>

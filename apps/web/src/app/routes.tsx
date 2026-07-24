@@ -20,10 +20,13 @@ const AuthPage = lazy(() => import("./pages/Auth"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const PasswordReset = lazy(() => import("./pages/PasswordReset"));
 const WorkspaceLayout = lazy(() => import("./components/WorkspaceLayout"));
+const WorkspaceHome = lazy(() => import("./pages/WorkspaceHome"));
+const WorkspaceArticle = lazy(() => import("./pages/WorkspaceArticle"));
 const Chat = lazy(() => import("./pages/Chat"));
-const AvatarComingSoon = lazy(() => import("./pages/AvatarComingSoon"));
+const AvatarStudio = lazy(() => import("./pages/AvatarStudio"));
 const Apps = lazy(() => import("./pages/Apps"));
 const Media = lazy(() => import("./pages/Media"));
+const MediaChat = lazy(() => import("./pages/media/MediaChat"));
 const Projects = lazy(() => import("./pages/Projects"));
 const Agents = lazy(() => import("./pages/Agents"));
 const History = lazy(() => import("./pages/History"));
@@ -215,11 +218,14 @@ const routes: RouteObject[] = [
     path: "/workspace",
     Component: WorkspaceLayout,
     children: [
-      { index: true, Component: Chat },
+      { index: true, Component: WorkspaceHome },
+      { path: "home", Component: WorkspaceHome },
+      { path: "articles/:slug", Component: WorkspaceArticle },
       { path: "chat", Component: Chat },
-      { path: "avatar", Component: AvatarComingSoon },
+      { path: "avatar", Component: AvatarStudio },
       { path: "apps", Component: Apps },
       { path: "media", Component: Media },
+      { path: "media/:kind", Component: MediaChat },
       { path: "projects", Component: Projects },
       { path: "history", Component: History },
       { path: "agents", Component: Agents },
@@ -260,11 +266,18 @@ function resolveRouterBasename(baseUrl: string) {
 }
 
 function withRouteErrorBoundary(route: RouteObject): RouteObject {
+  if (route.index) {
+    return {
+      ...route,
+      ErrorBoundary: RouteErrorBoundary,
+    } as RouteObject;
+  }
+
   return {
     ...route,
     ErrorBoundary: RouteErrorBoundary,
     children: route.children?.map(withRouteErrorBoundary),
-  };
+  } as RouteObject;
 }
 
 function BlogRedirect() {

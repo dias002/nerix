@@ -94,6 +94,7 @@ export class ChatService {
     message: string;
     agentId?: string;
     selectedModelId?: string;
+    imageReferenceJobId?: string;
     responseStyle?: ResponseStyle;
     attachments?: ChatAttachment[];
     isAdmin?: boolean;
@@ -109,6 +110,11 @@ export class ChatService {
     const existingConversation = input.conversationId
       ? await this.conversations.findById(input.conversationId)
       : null;
+    const imageReference = resolveImageReferenceForRequest(
+      input.imageReferenceJobId,
+      existingConversation?.messages ?? [],
+      message
+    );
     const routingPrompt = buildRoutingPrompt(existingConversation?.messages ?? [], prompt);
 
     if (input.conversationId && !existingConversation) {
@@ -126,6 +132,7 @@ export class ChatService {
       country: input.country ?? "KZ",
       language: input.language ?? "ru",
       agentId: routeAgentId,
+      modality: imageReference ? "image" : undefined,
       prompt: routingPrompt,
       selectedModelId: input.selectedModelId,
     });
@@ -175,6 +182,8 @@ export class ChatService {
       metadata: {
         requestedAgentId: input.agentId,
         requestedModelId: input.selectedModelId,
+        imageReferenceJobId: imageReference?.jobId,
+        imageReferenceJob: imageReference?.job,
         responseStyle: input.responseStyle ?? "auto",
         attachments,
       },
@@ -191,6 +200,7 @@ export class ChatService {
         conversationId: conversation.id,
         userMessageId: userMessage.id,
         prompt: buildMediaGenerationPrompt(previousMessages, prompt),
+        imageReferenceJobId: imageReference?.jobId,
         route: routeResult.value,
         isAdmin: input.isAdmin,
       });
@@ -253,6 +263,7 @@ export class ChatService {
     message: string;
     agentId?: string;
     selectedModelId?: string;
+    imageReferenceJobId?: string;
     responseStyle?: ResponseStyle;
     attachments?: ChatAttachment[];
     isAdmin?: boolean;
@@ -268,6 +279,11 @@ export class ChatService {
     const existingConversation = input.conversationId
       ? await this.conversations.findById(input.conversationId)
       : null;
+    const imageReference = resolveImageReferenceForRequest(
+      input.imageReferenceJobId,
+      existingConversation?.messages ?? [],
+      message
+    );
     const routingPrompt = buildRoutingPrompt(existingConversation?.messages ?? [], prompt);
 
     if (input.conversationId && !existingConversation) {
@@ -285,6 +301,7 @@ export class ChatService {
       country: input.country ?? "KZ",
       language: input.language ?? "ru",
       agentId: routeAgentId,
+      modality: imageReference ? "image" : undefined,
       prompt: routingPrompt,
       selectedModelId: input.selectedModelId,
     });
@@ -334,6 +351,8 @@ export class ChatService {
       metadata: {
         requestedAgentId: input.agentId,
         requestedModelId: input.selectedModelId,
+        imageReferenceJobId: imageReference?.jobId,
+        imageReferenceJob: imageReference?.job,
         responseStyle: input.responseStyle ?? "auto",
         attachments,
       },
@@ -361,6 +380,7 @@ export class ChatService {
         conversationId: conversation.id,
         userMessageId: userMessage.id,
         prompt: buildMediaGenerationPrompt(previousMessages, prompt),
+        imageReferenceJobId: imageReference?.jobId,
         route: routeResult.value,
         isAdmin: input.isAdmin,
       });
@@ -483,14 +503,18 @@ export class ChatService {
       return fail(new DomainError("validation_failed", "Media generation regeneration is not supported yet.", 400));
     }
 
+    const previousAnswers = collectAnswerTextsForUserMessage(conversation.messages, lastUserMessageIndex, userMessage.id);
     const completionResult = await this.completeSafely({
       userId: input.userId,
       conversationId: conversation.id,
       userMessageId: userMessage.id,
-      prompt: applyResponseStyle(
-        buildConversationPrompt(conversation.messages.slice(0, lastUserMessageIndex), prompt),
-        input.responseStyle ?? metadataResponseStyle,
-        input.language ?? "ru"
+      prompt: buildRegenerationPrompt(
+        applyResponseStyle(
+          buildConversationPrompt(conversation.messages.slice(0, lastUserMessageIndex), prompt),
+          input.responseStyle ?? metadataResponseStyle,
+          input.language ?? "ru"
+        ),
+        previousAnswers
       ),
       route: routeResult.value,
       stage: "regenerate_complete",
@@ -502,6 +526,7 @@ export class ChatService {
       content: completionResult.value.content,
       metadata: {
         regeneratedFromMessageId: userMessage.id,
+        previousAnswerCount: previousAnswers.length,
         route: routeResult.value,
         providerUsage: completionResult.value.rawUsage,
       },
@@ -741,6 +766,7 @@ export class ChatService {
     conversationId: string;
     userMessageId: string;
     prompt: string;
+    imageReferenceJobId?: string;
     route: {
       agentId: string;
       provider: string;
@@ -767,6 +793,7 @@ export class ChatService {
         agentId: input.route.agentId,
         modality: input.route.modality,
         prompt: input.prompt,
+        imageReferenceJobId: input.imageReferenceJobId,
         isAdmin: input.isAdmin,
       });
     } catch (error) {
@@ -824,6 +851,7 @@ export class ChatService {
       routeMetadata: {
         ...input.route,
         generationJobId: job.id,
+        imageReferenceJobId: input.imageReferenceJobId,
       },
       providerUsage: {
         generationJobId: job.id,
@@ -859,6 +887,151 @@ function findLastUserMessageIndex(messages: ConversationMessage[]) {
   return -1;
 }
 
+function resolveImageReferenceForRequest(explicitJobId: string | undefined, messages: ConversationMessage[], message: string) {
+  const explicit = explicitJobId?.trim();
+  if (explicit) {
+    return {
+      jobId: explicit,
+      job: findImageJobSnapshot(messages, explicit),
+    };
+  }
+
+  const job = findLastReadyImageJobSnapshot(messages);
+  if (!job || (!looksLikeImageEditRequest(message) && !looksLikeInlineImageEditInstruction(message))) return null;
+
+  return {
+    jobId: job.id,
+    job,
+  };
+}
+
+function collectAnswerTextsForUserMessage(messages: ConversationMessage[], userMessageIndex: number, userMessageId: string) {
+  const answers: string[] = [];
+
+  for (let index = userMessageIndex + 1; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message.role === "user") break;
+    if (message.role !== "assistant") continue;
+
+    const regeneratedFrom = message.metadata?.regeneratedFromMessageId;
+    if (answers.length === 0 || regeneratedFrom === userMessageId) {
+      answers.push(message.content);
+    }
+  }
+
+  return answers.filter((answer) => answer.trim()).slice(-4);
+}
+
+function buildRegenerationPrompt(prompt: string, previousAnswers: string[]) {
+  if (previousAnswers.length === 0) return prompt;
+
+  return [
+    prompt,
+    "",
+    "Это запрос на новый вариант ответа.",
+    "Не повторяй предыдущий ответ дословно и не копируй его структуру. Если факты должны остаться теми же, измени подачу, порядок, примеры и формулировки.",
+    "Сохрани точность и полезность, но дай пользователю ощущение нового варианта.",
+    "",
+    "Предыдущие варианты, которые нельзя повторять:",
+    previousAnswers.map((answer, index) => `Вариант ${index + 1}: ${trimRegenerationAnswer(answer)}`).join("\n\n"),
+  ].join("\n");
+}
+
+function trimRegenerationAnswer(answer: string) {
+  const normalized = answer.replace(/\s+/g, " ").trim();
+  return normalized.length > 1_000 ? `${normalized.slice(0, 997)}...` : normalized;
+}
+
+function findLastReadyImageJobSnapshot(messages: ConversationMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const job = coerceGenerationJobSnapshot(messages[index].metadata?.generationJob);
+    if (job?.modality === "image" && job.status === "succeeded") return job;
+  }
+
+  return null;
+}
+
+function findImageJobSnapshot(messages: ConversationMessage[], jobId: string) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const job = coerceGenerationJobSnapshot(messages[index].metadata?.generationJob);
+    if (job?.id === jobId && job.modality === "image") return job;
+  }
+
+  return undefined;
+}
+
+function coerceGenerationJobSnapshot(value: unknown) {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.modality !== "string" || typeof record.status !== "string") {
+    return null;
+  }
+
+  return {
+    ...record,
+    id: record.id,
+    modality: record.modality,
+    status: record.status,
+    prompt: typeof record.prompt === "string" ? record.prompt : "",
+    resultUrl: typeof record.resultUrl === "string" ? record.resultUrl : undefined,
+    resultMimeType: typeof record.resultMimeType === "string" ? record.resultMimeType : undefined,
+  };
+}
+
+function looksLikeImageEditRequest(message: string) {
+  const normalized = message.toLowerCase();
+  const referencesImage = containsAny(normalized, [
+    "на этой картин",
+    "на этом изображ",
+    "на этом фото",
+    "эту картин",
+    "это изображ",
+    "этот рисун",
+    "this image",
+    "this picture",
+    "same image",
+  ]);
+  const editIntent = containsAny(normalized, [
+    "добав",
+    "напиши",
+    "надпись",
+    "текст",
+    "измени",
+    "поменяй",
+    "убери",
+    "замени",
+    "перерис",
+    "сделай",
+    "edit",
+    "add",
+    "remove",
+    "replace",
+    "change",
+  ]);
+
+  return referencesImage || editIntent && containsAny(normalized, ["картин", "изображ", "фото", "рисун", "image", "picture", "photo"]);
+}
+
+function looksLikeInlineImageEditInstruction(message: string) {
+  const normalized = message.toLowerCase();
+  return containsAny(normalized, [
+    "добавь надпись",
+    "добавить надпись",
+    "напиши на",
+    "добавь текст",
+    "убери фон",
+    "замени фон",
+    "поменяй фон",
+    "сделай фон",
+    "измени цвет",
+    "добавь логотип",
+    "remove background",
+    "add text",
+    "add logo",
+    "change background",
+  ]);
+}
+
 function mediaLabel(modality: string) {
   if (modality === "image") return "изображение";
   if (modality === "avatar_video") return "видео с аватаром";
@@ -866,4 +1039,8 @@ function mediaLabel(modality: string) {
   if (modality === "music") return "трек";
   if (modality === "voice") return "озвучку";
   return "медиа";
+}
+
+function containsAny(value: string, needles: string[]) {
+  return needles.some((needle) => value.includes(needle));
 }

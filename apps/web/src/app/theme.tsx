@@ -61,7 +61,9 @@ export function useTheme() {
 
 function readStoredTheme(): AppearanceMode {
   if (typeof window === "undefined") return "dark";
-  return window.localStorage.getItem(storageKey) === "light" ? "light" : "dark";
+  const stored = window.localStorage.getItem(storageKey);
+  if (stored === "light" || stored === "dark") return stored;
+  return "dark";
 }
 
 function readStoredFontSize(): FontSizeMode {

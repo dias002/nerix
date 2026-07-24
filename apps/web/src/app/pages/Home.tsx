@@ -1,281 +1,431 @@
 import { Link } from "react-router";
-import { motion } from "motion/react";
-import { ArrowRight, BookOpen, Building2, ChevronDown, CreditCard, FileText, HelpCircle, LifeBuoy, Mail, Sparkles } from "lucide-react";
-import StarsBackground from "../components/StarsBackground";
-import LanguageSwitch from "../components/LanguageSwitch";
-import DownloadAppBanner from "../components/DownloadAppBanner";
-import { useLanguage } from "../i18n";
+import { useEffect } from "react";
+import {
+  ArrowRight,
+  Bot,
+  Brain,
+  Building2,
+  CheckCircle2,
+  CircleDollarSign,
+  FileText,
+  FolderKanban,
+  Globe2,
+  ImageIcon,
+  Layers3,
+  LifeBuoy,
+  Mail,
+  PlayCircle,
+  SearchCheck,
+  ShieldCheck,
+  Sparkles,
+  Video,
+  Volume2,
+  WandSparkles,
+  type LucideIcon,
+} from "lucide-react";
 import { reachAnalyticsGoal } from "../analytics";
+import { useAuth } from "../auth";
+import { languageOptions, useLanguage } from "../i18n";
+
+type Tone = "mint" | "blue" | "violet";
+
+const scenarioMeta: Array<{ icon: LucideIcon; tone: Tone }> = [
+  { icon: FileText, tone: "blue" },
+  { icon: SearchCheck, tone: "mint" },
+  { icon: Layers3, tone: "violet" },
+  { icon: ImageIcon, tone: "mint" },
+  { icon: Video, tone: "blue" },
+  { icon: Building2, tone: "violet" },
+];
+
+const mediaIcons: LucideIcon[] = [ImageIcon, Video, Volume2, Bot];
+
+type WorkflowDemoCopy = {
+  requestLabel: string;
+  request: string;
+  auto: string;
+  modelLabel: string;
+  model: string;
+  modelReason: string;
+  quality: string;
+  cost: string;
+  resultLabel: string;
+  result: string;
+  saveProject: string;
+  createEmail: string;
+  steps: ReadonlyArray<{
+    title: string;
+    text: string;
+    state: string;
+  }>;
+};
 
 export default function Home() {
-  const { t } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
+  const { isAuthenticated } = useAuth();
+  const landing = t.home.landing;
+  const projectsHref = isAuthenticated
+    ? "/workspace/projects"
+    : "/auth?mode=register&returnTo=%2Fworkspace%2Fprojects";
+
+  useEffect(() => {
+    document.documentElement.dataset.landingShell = "true";
+    return () => {
+      delete document.documentElement.dataset.landingShell;
+    };
+  }, []);
 
   return (
-    <div className="relative min-h-dvh overflow-x-hidden bg-black text-white">
-      <StarsBackground />
-
-      {/* Header */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        className="fixed top-8 left-8 z-20"
-      >
-        <h1 className="text-xl font-medium">
-          {t.product}
-        </h1>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.35 }}
-        className="fixed right-6 top-8 z-30"
-      >
-        <LanguageSwitch />
-      </motion.div>
-
-      {/* Hero Section */}
-      <section className="relative z-10 flex min-h-[760px] flex-col items-center justify-start px-6 pb-20 pt-24 md:min-h-[820px] md:justify-center md:py-0">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-          className="max-w-3xl mx-auto text-center space-y-6"
-        >
-          <Link
-            to="/models"
-            className="mx-auto inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-white/25 hover:bg-white/10 hover:text-white"
-          >
-            <Sparkles className="h-4 w-4" strokeWidth={1.7} />
-            {t.home.eyebrow}
+    <div className="landing-shell min-h-dvh overflow-x-hidden text-[var(--text-primary)]">
+      <header className="landing-header">
+        <div className="landing-header-inner">
+          <Link to="/" className="landing-brand" aria-label="nomduchat">
+            <img src="/favicon.png" alt="" className="landing-brand-icon" />
+            <span>nomduchat</span>
           </Link>
-          <h2 className="text-4xl md:text-6xl font-semibold">
-            {t.home.welcome}
-          </h2>
-          <p className="mx-auto max-w-2xl text-lg md:text-xl text-gray-400 font-light leading-relaxed">
-            {t.home.subtitle}
-          </p>
+          <nav className="landing-nav" aria-label={landing.nav.workflow}>
+            <a href="#workflow">{landing.nav.workflow}</a>
+            <a href="#scenarios">{landing.nav.scenarios}</a>
+            <a href="#pricing">{landing.nav.pricing}</a>
+            <Link to="/support">{landing.nav.support}</Link>
+          </nav>
+          <div className="landing-header-actions">
+            <div className="landing-locale" aria-label="Язык интерфейса">
+              {languageOptions.map((option) => (
+                <button
+                  key={option.code}
+                  type="button"
+                  onClick={() => setLanguage(option.code)}
+                  aria-pressed={language === option.code}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <Link to="/workspace" className="landing-primary landing-header-cta">
+              {landing.cta.try}
+              <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+            </Link>
+          </div>
+        </div>
+      </header>
 
-          <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-3">
-            {t.home.metrics.map((metric) => {
-              const isModelsMetric = metric.value === "40+";
-              const content = (
-                <>
-                  <div className="text-2xl font-medium text-white">{metric.value}</div>
-                  <div className="mt-1 text-xs leading-relaxed text-gray-500 transition-colors group-hover:text-gray-300">
-                    {metric.label}
-                  </div>
-                </>
-              );
+      <main>
+        <section className="landing-hero">
+          <div className="landing-ambient" aria-hidden="true" />
+          <div className="landing-hero-copy">
+            <div className="landing-kicker">
+              <Sparkles className="h-4 w-4" strokeWidth={1.8} />
+              {landing.hero.eyebrow}
+            </div>
+            <h1>{landing.hero.title}</h1>
+            <p>{landing.hero.subtitle}</p>
+            <div className="landing-actions">
+              <Link to="/workspace" className="landing-primary">
+                {landing.cta.free}
+                <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+              </Link>
+              <a href="#workflow" className="landing-secondary">
+                <PlayCircle className="h-4 w-4" strokeWidth={1.8} />
+                {landing.cta.demo}
+              </a>
+            </div>
+            <div className="landing-signal-list">
+              {landing.signals.map((signal) => (
+                <span key={signal}>{signal}</span>
+              ))}
+            </div>
+          </div>
+          <WorkflowDemo demo={landing.demo} projectsHref={projectsHref} />
+        </section>
 
-              if (isModelsMetric) {
-                return (
-                  <Link
-                    key={metric.label}
-                    to="/models"
-                    aria-label={`${t.home.eyebrow}. Открыть список моделей`}
-                    className="group rounded-2xl border border-white/10 bg-black/40 px-4 py-3 transition-colors hover:border-white/25 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70"
-                  >
-                    {content}
-                  </Link>
-                );
-              }
+        <section id="workflow" className="landing-section">
+          <SectionHeader
+            eyebrow={landing.workflow.eyebrow}
+            title={landing.workflow.title}
+            text={landing.workflow.text}
+          />
+          <div className="landing-process-grid">
+            {landing.workflow.items.map((item, index) => (
+              <article key={item.title} className="landing-process-card">
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <h3>{item.title}</h3>
+                <p>{item.text}</p>
+              </article>
+            ))}
+          </div>
+        </section>
 
+        <section id="scenarios" className="landing-section">
+          <SectionHeader
+            eyebrow={landing.scenarios.eyebrow}
+            title={landing.scenarios.title}
+            text={landing.scenarios.text}
+          />
+          <div className="landing-scenario-grid">
+            {landing.scenarios.items.map((scenario, index) => {
+              const meta = scenarioMeta[index] ?? scenarioMeta[0];
+              const Icon = meta.icon;
               return (
-                <div key={metric.label} className="rounded-2xl border border-white/10 bg-black/40 px-4 py-3">
-                  {content}
-                </div>
+                <article key={scenario.title} className="landing-scenario-card" data-tone={meta.tone}>
+                  <span className="landing-icon-tile">
+                    <Icon className="h-5 w-5" strokeWidth={1.8} />
+                  </span>
+                  <h3>{scenario.title}</h3>
+                  <p>{scenario.text}</p>
+                </article>
               );
             })}
           </div>
+        </section>
 
-          <div className="pt-8">
-            <Link
-              to="/workspace/chat"
-              className="inline-flex items-center justify-center px-10 py-3.5 rounded-full bg-white text-black text-base font-medium hover:bg-gray-200 transition-colors"
-            >
-              {t.home.enter}
-            </Link>
-            <div className="mt-4">
-              <div className="flex flex-wrap items-center justify-center gap-4">
-                <Link
-                  to="/about"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <BookOpen className="h-4 w-4" strokeWidth={1.6} />
-                  {t.home.aboutProject}
-                </Link>
-                <Link
-                  to="/business"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <ArrowRight className="h-4 w-4" strokeWidth={1.6} />
-                  {t.home.forBusiness}
-                </Link>
-                <Link
-                  to="/pricing"
-                  onClick={() => reachAnalyticsGoal("pricing_open", { source: "home_hero" })}
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <CreditCard className="h-4 w-4" strokeWidth={1.6} />
-                  Каталог и цены
-                </Link>
-                <Link
-                  to="/requisites"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <Building2 className="h-4 w-4" strokeWidth={1.6} />
-                  Реквизиты
-                </Link>
-                <Link
-                  to="/legal/terms"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <FileText className="h-4 w-4" strokeWidth={1.6} />
-                  Документы
-                </Link>
-                <Link
-                  to="/support"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <LifeBuoy className="h-4 w-4" strokeWidth={1.6} />
-                  Поддержка
-                </Link>
-                <Link
-                  to="/faq"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <HelpCircle className="h-4 w-4" strokeWidth={1.6} />
-                  FAQ
-                </Link>
-                <Link
-                  to="/contacts"
-                  className="inline-flex items-center gap-2 text-sm text-gray-500 transition-colors hover:text-white"
-                >
-                  <Mail className="h-4 w-4" strokeWidth={1.6} />
-                  Контакты
-                </Link>
-              </div>
+        <section className="landing-section landing-split">
+          <article className="landing-feature-panel">
+            <div className="landing-kicker landing-kicker-quiet">
+              <Brain className="h-4 w-4" strokeWidth={1.8} />
+              {landing.routing.eyebrow}
             </div>
-          </div>
-        </motion.div>
-      </section>
-
-      <section className="relative z-10 px-6 pb-28">
-        <div className="mx-auto max-w-5xl space-y-8">
-          <motion.div
-            initial={{ opacity: 1, y: 0 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-120px" }}
-            transition={{ duration: 0.55, ease: "easeOut" }}
-            className="max-w-2xl"
-          >
-            <h2 className="text-3xl md:text-4xl font-medium text-white">
-              {t.home.explainTitle}
-            </h2>
-            <p className="mt-4 text-base md:text-lg leading-relaxed text-gray-400">
-              {t.home.explainText}
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 1, y: 0 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-120px" }}
-            transition={{ duration: 0.55, ease: "easeOut" }}
-            className="rounded-3xl border border-white/10 bg-[#070707]/85 p-5 md:p-6 backdrop-blur-md"
-          >
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="max-w-2xl">
-                <h2 className="text-2xl md:text-3xl font-medium text-white">
-                  {t.home.servicesTitle}
-                </h2>
-                <p className="mt-3 text-sm md:text-base leading-relaxed text-gray-500">
-                  {t.home.servicesText}
-                </p>
-              </div>
-              <Link
-                to="/about"
-                className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-4 py-2.5 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-              >
-                {t.home.aboutProject}
-                <ArrowRight className="h-4 w-4" strokeWidth={1.7} />
-              </Link>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
-              {t.home.services.map((service, index) => (
-                <motion.div
-                  key={service.title}
-                  initial={{ opacity: 1, y: 0 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: "-120px" }}
-                  transition={{ duration: 0.35, delay: index * 0.05 }}
-                  className="rounded-2xl border border-white/5 bg-white/[0.03] p-4"
-                >
-                  <div className="mb-4 text-sm text-gray-500">
-                    {String(index + 1).padStart(2, "0")}
-                  </div>
-                  <h3 className="text-base font-medium text-white">{service.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-gray-500">{service.text}</p>
-                </motion.div>
+            <h2>{landing.routing.title}</h2>
+            <p>{landing.routing.text}</p>
+            <div className="landing-model-board">
+              {landing.routing.items.map(([task, model, reason]) => (
+                <div key={task}>
+                  <span>{task}</span>
+                  <strong>{model}</strong>
+                  <small>{reason}</small>
+                </div>
               ))}
             </div>
-          </motion.div>
+          </article>
+          <article className="landing-feature-panel landing-media-panel">
+            <div className="landing-kicker landing-kicker-quiet">
+              <WandSparkles className="h-4 w-4" strokeWidth={1.8} />
+              {landing.media.eyebrow}
+            </div>
+            <h2>{landing.media.title}</h2>
+            <div className="landing-media-grid">
+              {landing.media.items.map((item, index) => {
+                const Icon = mediaIcons[index] ?? ImageIcon;
+                return (
+                  <div key={item.label}>
+                    <Icon className="h-5 w-5" strokeWidth={1.8} />
+                    <strong>{item.label}</strong>
+                    <span>{item.detail}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+        </section>
 
-          <DownloadAppBanner />
+        <section className="landing-section landing-project-band">
+          <div>
+            <div className="landing-kicker landing-kicker-quiet">
+              <FolderKanban className="h-4 w-4" strokeWidth={1.8} />
+              {landing.projects.eyebrow}
+            </div>
+            <h2>{landing.projects.title}</h2>
+            <p>{landing.projects.text}</p>
+          </div>
+          <div className="landing-project-preview" aria-label={landing.projects.sample}>
+            <div>
+              <span>{landing.projects.label}</span>
+              <strong>{landing.projects.sample}</strong>
+            </div>
+            <ul>
+              {landing.projects.facts.map((fact) => (
+                <li key={fact}>{fact}</li>
+              ))}
+            </ul>
+          </div>
+        </section>
 
-          <nav className="flex flex-wrap items-center justify-center gap-4 text-sm text-gray-500">
-            <Link to="/legal/terms" className="transition-colors hover:text-white">
-              Пользовательское соглашение
+        <section className="landing-section landing-split">
+          <article className="landing-feature-panel">
+            <div className="landing-kicker landing-kicker-quiet">
+              <ShieldCheck className="h-4 w-4" strokeWidth={1.8} />
+              {landing.business.eyebrow}
+            </div>
+            <h2>{landing.business.title}</h2>
+            <div className="landing-business-list">
+              {landing.business.products.map((item) => (
+                <div key={item.title}>
+                  <strong>{item.title}</strong>
+                  <span>{item.text}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+          <article className="landing-feature-panel">
+            <div className="landing-kicker landing-kicker-quiet">
+              <Globe2 className="h-4 w-4" strokeWidth={1.8} />
+              {landing.devices.eyebrow}
+            </div>
+            <h2>{landing.devices.title}</h2>
+            <p>{landing.devices.text}</p>
+            <Link to="/workspace" className="landing-secondary landing-inline-link">
+              {landing.cta.workspace}
+              <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
             </Link>
-            <Link to="/legal/privacy" className="transition-colors hover:text-white">
-              Политика конфиденциальности
+          </article>
+        </section>
+
+        <section id="pricing" className="landing-section">
+          <div className="landing-section-row">
+            <SectionHeader
+              eyebrow={landing.pricing.eyebrow}
+              title={landing.pricing.title}
+              text={landing.pricing.text}
+            />
+            <Link
+              to="/legal/pricing"
+              onClick={() => reachAnalyticsGoal("pricing_open", { source: "home_pricing" })}
+              className="landing-secondary"
+            >
+              {landing.cta.catalog}
+              <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
             </Link>
-            <Link to="/legal/refund" className="transition-colors hover:text-white">
-              Возвраты
-            </Link>
-            <Link to="/legal/pricing" className="transition-colors hover:text-white">
-              Каталог и цены
-            </Link>
-            <Link to="/translate" className="transition-colors hover:text-white">
-              Переводчик
-            </Link>
-            <Link to="/blog" className="transition-colors hover:text-white">
-              Блог
-            </Link>
-            <Link to="/about-referral-program" className="transition-colors hover:text-white">
-              Реферальная программа
-            </Link>
-            <Link to="/legal/cookies" className="transition-colors hover:text-white">
-              Cookies
-            </Link>
-            <Link to="/faq" className="transition-colors hover:text-white">
-              FAQ
-            </Link>
-            <Link to="/contacts" className="transition-colors hover:text-white">
-              Контакты
-            </Link>
-            <Link to="/support" className="transition-colors hover:text-white">
-              Поддержка
-            </Link>
-            <Link to="/data-deletion" className="transition-colors hover:text-white">
-              Удаление данных
-            </Link>
-          </nav>
+          </div>
+          <div className="landing-pricing-grid">
+            {landing.pricing.plans.map((plan) => (
+              <article key={plan.name} className="landing-price-card" data-recommended={plan.recommended ? "true" : undefined}>
+                {plan.recommended ? <span className="landing-plan-badge">{landing.pricing.recommended}</span> : null}
+                <h3>{plan.name}</h3>
+                <strong>{plan.price}</strong>
+                <p>{plan.note}</p>
+                <ul>
+                  {plan.capacity.map((line) => (
+                    <li key={line}>
+                      <CheckCircle2 className="h-4 w-4" strokeWidth={1.8} />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="landing-section landing-news-faq">
+          <article className="landing-feature-panel">
+            <div className="landing-kicker landing-kicker-quiet">
+              <CircleDollarSign className="h-4 w-4" strokeWidth={1.8} />
+              {landing.updates.eyebrow}
+            </div>
+            <div className="landing-update-list">
+              {landing.updates.items.map((update) => (
+                <div key={update.title}>
+                  <span>{update.date}</span>
+                  <strong>{update.title}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+          <article className="landing-feature-panel">
+            <h2>{landing.faq.title}</h2>
+            <div className="landing-faq-list">
+              {landing.faq.items.map((item) => (
+                <div key={item.question}>
+                  <strong>{item.question}</strong>
+                  <span>{item.answer}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+
+        <section className="landing-final">
+          <div>
+            <h2>{landing.final.title}</h2>
+            <p>{landing.final.text}</p>
+          </div>
+          <Link to="/workspace" className="landing-primary">
+            {landing.cta.final}
+            <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+          </Link>
+        </section>
+      </main>
+
+      <footer className="landing-footer">
+        <div>nomduchat</div>
+        <nav aria-label={landing.nav.support}>
+          <Link to="/legal/terms">{landing.footer.terms}</Link>
+          <Link to="/legal/privacy">{landing.footer.privacy}</Link>
+          <Link to="/legal/pricing">{landing.footer.prices}</Link>
+          <Link to="/support">
+            <LifeBuoy className="h-4 w-4" strokeWidth={1.7} />
+            {landing.footer.support}
+          </Link>
+          <Link to="/contacts">
+            <Mail className="h-4 w-4" strokeWidth={1.7} />
+            {landing.footer.contacts}
+          </Link>
+          <Link to="/requisites">{landing.footer.requisites}</Link>
+        </nav>
+      </footer>
+    </div>
+  );
+}
+
+function WorkflowDemo({ demo, projectsHref }: { demo: WorkflowDemoCopy; projectsHref: string }) {
+  const emailPrompt = `Создай письмо на основе результата: ${demo.result}`;
+  const actionClassName = "inline-flex min-h-[34px] items-center rounded-[var(--radius-pill)] bg-[var(--surface-active)] px-[11px] text-xs text-[var(--text-primary)] transition-colors hover:bg-[var(--surface-hover)] [font-weight:540]";
+
+  return (
+    <section className="landing-workflow-demo" aria-label={demo.request}>
+      <div className="landing-workflow-header">
+        <div>
+          <span>{demo.requestLabel}</span>
+          <strong>{demo.request}</strong>
         </div>
-      </section>
+        <span className="landing-status-pill">{demo.auto}</span>
+      </div>
+      <div className="landing-demo-body">
+        <div className="landing-model-card">
+          <span>{demo.modelLabel}</span>
+          <strong>{demo.model}</strong>
+          <p>{demo.modelReason}</p>
+          <div>
+            <small>{demo.quality}</small>
+            <small>{demo.cost}</small>
+          </div>
+        </div>
+        <div className="landing-step-list">
+          {demo.steps.map((step) => (
+            <article key={step.title} data-state={step.state}>
+              <span />
+              <div>
+                <strong>{step.title}</strong>
+                <p>{step.text}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+      <div className="landing-result-card">
+        <div>
+          <span>{demo.resultLabel}</span>
+          <strong>{demo.result}</strong>
+        </div>
+        <div className="landing-result-actions">
+          <Link to={projectsHref} className={actionClassName}>
+            {demo.saveProject}
+          </Link>
+          <Link to={`/workspace/chat?prompt=${encodeURIComponent(emailPrompt)}`} className={actionClassName}>
+            {demo.createEmail}
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.8, delay: 0.9 }}
-        className="fixed bottom-8 left-8 z-20 hidden items-center gap-2 text-xs text-gray-500 md:flex"
-      >
-        <ChevronDown className="w-4 h-4 animate-bounce" />
-        <span>{t.home.scroll}</span>
-      </motion.div>
+function SectionHeader({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
+  return (
+    <div className="landing-section-header">
+      <p>{eyebrow}</p>
+      <h2>{title}</h2>
+      <span>{text}</span>
     </div>
   );
 }

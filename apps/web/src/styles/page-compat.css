@@ -1,0 +1,278 @@
+/*
+ * Older screens still carry literal Tailwind colors. Keep their markup stable
+ * while routing those values through the workspace design tokens.
+ */
+
+html body,
+#root {
+  background-color: var(--canvas);
+  color: var(--text-primary);
+}
+
+html.light body,
+html.light #root {
+  background-color: var(--canvas) !important;
+  color: var(--text-primary) !important;
+}
+
+#root > :is([class*="min-h-screen"], [class*="min-h-dvh"]):not(.landing-shell, .ns-workspace-shell) {
+  background:
+    radial-gradient(circle at 12% 4%, color-mix(in srgb, var(--signal-mint) 8%, transparent), transparent 32rem),
+    radial-gradient(circle at 88% 10%, color-mix(in srgb, var(--signal-violet) 7%, transparent), transparent 30rem),
+    linear-gradient(var(--line-subtle) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-subtle) 1px, transparent 1px),
+    var(--canvas) !important;
+  background-size:
+    auto,
+    auto,
+    56px 56px,
+    56px 56px,
+    auto !important;
+}
+
+html[data-workspace-shell="true"] .ns-shell-content > [class~="flex-1"][class~="overflow-y-auto"] {
+  min-height: 100%;
+  background: transparent !important;
+  color: var(--text-primary);
+}
+
+html[data-workspace-shell="true"] .ns-shell-content :is(h1, h2, h3) {
+  color: var(--text-primary);
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+html [class~="bg-black"],
+html [class*="bg-[#050505]"] {
+  background-color: var(--canvas) !important;
+}
+
+html [class*="bg-[#070707]"],
+html [class*="bg-[#080808]"],
+html [class*="bg-[#0A0A0A]"],
+html [class*="bg-[#0B0B0B]"] {
+  background-color: color-mix(in srgb, var(--surface-1) 92%, transparent) !important;
+}
+
+html [class*="bg-[#0D0D0D]"],
+html [class*="bg-[#0E0E0E]"],
+html [class*="bg-[#111111]"] {
+  background-color: color-mix(in srgb, var(--surface-2) 92%, transparent) !important;
+}
+
+html [class*="bg-[#1A1A1A]"],
+html [class*="bg-[#2A2A2A]"],
+html [class*="bg-[#2C2C2C]"] {
+  background-color: var(--surface-3) !important;
+}
+
+html [class~="bg-black/20"],
+html [class~="bg-black/25"],
+html [class~="bg-black/30"],
+html [class~="bg-black/35"],
+html [class~="bg-black/40"],
+html [class~="bg-black/45"],
+html [class~="bg-black/50"],
+html [class~="bg-black/60"] {
+  background-color: color-mix(in srgb, var(--canvas) 72%, transparent) !important;
+}
+
+html [class~="bg-white/[0.02]"],
+html [class~="bg-white/[0.03]"],
+html [class~="bg-white/[0.04]"],
+html [class~="bg-white/[0.05]"],
+html [class~="bg-white/5"] {
+  background-color: color-mix(in srgb, var(--surface-2) 70%, transparent) !important;
+}
+
+html [class~="bg-white/[0.06]"],
+html [class~="bg-white/[0.07]"],
+html [class~="bg-white/[0.08]"],
+html [class~="bg-white/10"],
+html [class~="bg-white/15"] {
+  background-color: var(--surface-active) !important;
+}
+
+html [class~="bg-white"] {
+  background-color: var(--primary-button) !important;
+}
+
+html [class~="text-white"],
+html [class~="text-gray-100"],
+html [class~="text-gray-200"] {
+  color: var(--text-primary) !important;
+}
+
+html [class~="text-gray-300"],
+html [class~="text-gray-400"],
+html [class~="text-white/70"],
+html [class~="text-white/75"],
+html [class~="text-white/80"] {
+  color: var(--text-secondary) !important;
+}
+
+html [class~="text-gray-500"],
+html [class~="text-gray-600"],
+html [class~="text-gray-700"],
+html [class~="text-white/40"],
+html [class~="text-white/50"],
+html [class~="text-white/60"] {
+  color: var(--text-tertiary) !important;
+}
+
+html [class~="text-gray-800"] {
+  color: var(--text-disabled) !important;
+}
+
+html [class~="text-black"] {
+  color: var(--primary-button-text) !important;
+}
+
+html [class~="border-white/5"],
+html [class~="border-white/10"],
+html [class~="border-white/15"],
+html [class~="divide-white/5"] > :not(:last-child),
+html [class~="divide-white/10"] > :not(:last-child) {
+  border-color: var(--line-subtle) !important;
+}
+
+html [class~="border-white/20"],
+html [class~="border-white/25"],
+html [class~="border-white/30"],
+html [class~="divide-white/20"] > :not(:last-child) {
+  border-color: var(--line-default) !important;
+}
+
+html :is(input, textarea, select)[class~="bg-black"],
+html :is(input, textarea, select)[class*="bg-[#050505]"],
+html :is(input, textarea, select)[class*="bg-[#0A0A0A]"],
+html :is(input, textarea, select)[class*="bg-[#0D0D0D]"] {
+  border-color: var(--line-subtle) !important;
+  background-color: color-mix(in srgb, var(--surface-1) 88%, var(--canvas)) !important;
+  color: var(--text-primary) !important;
+  caret-color: var(--signal-mint);
+}
+
+html :is(input, textarea)[class*="placeholder:text-gray"]::placeholder,
+html .placeholder\:text-gray-500::placeholder,
+html .placeholder\:text-gray-600::placeholder,
+html .placeholder\:text-gray-700::placeholder {
+  color: var(--text-tertiary) !important;
+  opacity: 1;
+}
+
+html :is(input, textarea, select)[class*="focus:border-white"]:focus,
+html :is(input, textarea, select):focus-visible {
+  border-color: color-mix(in srgb, var(--signal-mint) 58%, var(--line-default)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal-mint) 10%, transparent);
+}
+
+html :is(button, a)[class~="bg-white"] {
+  background-color: var(--primary-button) !important;
+  color: var(--primary-button-text) !important;
+}
+
+html :is(button, a)[class~="bg-white"]:hover {
+  background-color: var(--primary-button-hover) !important;
+}
+
+html [class*="hover:border-white"]:hover {
+  border-color: var(--line-strong) !important;
+}
+
+html [class*="hover:bg-white"]:hover {
+  background-color: var(--surface-hover) !important;
+}
+
+html [class~="rounded-xl"] {
+  border-radius: var(--radius-input) !important;
+}
+
+html [class~="rounded-2xl"] {
+  border-radius: var(--radius-card) !important;
+}
+
+html [class~="rounded-3xl"] {
+  border-radius: var(--radius-panel) !important;
+}
+
+html :is(article, section, div)[class*="border-white/"][class*="bg-[#"] {
+  box-shadow: 0 16px 46px rgba(0, 0, 0, 0.16);
+}
+
+html.light [class~="bg-black"],
+html.light [class*="bg-[#050505]"] {
+  background-color: var(--canvas) !important;
+}
+
+html.light [class*="bg-[#070707]"],
+html.light [class*="bg-[#080808]"],
+html.light [class*="bg-[#0A0A0A]"],
+html.light [class*="bg-[#0B0B0B]"] {
+  background-color: var(--surface-1) !important;
+}
+
+html.light [class*="bg-[#0D0D0D]"],
+html.light [class*="bg-[#0E0E0E]"],
+html.light [class*="bg-[#111111]"] {
+  background-color: var(--surface-2) !important;
+}
+
+html.light [class~="bg-white"] {
+  background-color: var(--primary-button) !important;
+}
+
+html.light [class~="text-white"],
+html.light [class~="text-gray-100"],
+html.light [class~="text-gray-200"] {
+  color: var(--text-primary) !important;
+}
+
+html.light [class~="text-gray-300"],
+html.light [class~="text-gray-400"] {
+  color: var(--text-secondary) !important;
+}
+
+html.light [class~="text-gray-500"],
+html.light [class~="text-gray-600"],
+html.light [class~="text-gray-700"] {
+  color: var(--text-tertiary) !important;
+}
+
+html.light [class~="text-black"] {
+  color: var(--primary-button-text) !important;
+}
+
+html.light [class~="border-white/5"],
+html.light [class~="border-white/10"],
+html.light [class~="border-white/15"] {
+  border-color: var(--line-subtle) !important;
+}
+
+html.light [class~="border-white/20"],
+html.light [class~="border-white/25"],
+html.light [class~="border-white/30"] {
+  border-color: var(--line-default) !important;
+}
+
+@media (max-width: 767px) {
+  #root > :is([class*="min-h-screen"], [class*="min-h-dvh"]):not(.landing-shell, .ns-workspace-shell) {
+    background-size:
+      auto,
+      auto,
+      40px 40px,
+      40px 40px,
+      auto !important;
+  }
+
+  html[data-workspace-shell="true"] .ns-shell-content > [class~="flex-1"][class~="overflow-y-auto"] {
+    padding-right: 1rem !important;
+    padding-left: 1rem !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html :is(article, section, div, a, button, input, textarea, select) {
+    scroll-behavior: auto;
+  }
+}

@@ -17,6 +17,7 @@ const sendMessageSchema = z.object({
   message: z.string().min(1),
   agentId: z.string().optional(),
   selectedModelId: z.string().trim().min(1).max(160).optional(),
+  imageReferenceJobId: z.string().trim().min(1).max(120).optional(),
   responseStyle: z.enum(["auto", "business", "business_visual", "conversational", "brief", "detailed"]).optional(),
   attachments: z
     .array(

@@ -29,7 +29,37 @@ import {
   type Matrix,
   type NormalizedLandmark,
 } from "@mediapipe/tasks-vision";
-import * as THREE from "three";
+import { ACESFilmicToneMapping, PCFSoftShadowMap, SRGBColorSpace } from "three/src/constants.js";
+import { PerspectiveCamera } from "three/src/cameras/PerspectiveCamera.js";
+import { Group } from "three/src/objects/Group.js";
+import { Mesh } from "three/src/objects/Mesh.js";
+import { BoxGeometry } from "three/src/geometries/BoxGeometry.js";
+import { CapsuleGeometry } from "three/src/geometries/CapsuleGeometry.js";
+import { CircleGeometry } from "three/src/geometries/CircleGeometry.js";
+import { CylinderGeometry } from "three/src/geometries/CylinderGeometry.js";
+import { PlaneGeometry } from "three/src/geometries/PlaneGeometry.js";
+import { ShapeGeometry } from "three/src/geometries/ShapeGeometry.js";
+import { SphereGeometry } from "three/src/geometries/SphereGeometry.js";
+import { TorusGeometry } from "three/src/geometries/TorusGeometry.js";
+import { TubeGeometry } from "three/src/geometries/TubeGeometry.js";
+import { MeshBasicMaterial } from "three/src/materials/MeshBasicMaterial.js";
+import { MeshPhysicalMaterial } from "three/src/materials/MeshPhysicalMaterial.js";
+import { MeshStandardMaterial } from "three/src/materials/MeshStandardMaterial.js";
+import { Material } from "three/src/materials/Material.js";
+import { Color } from "three/src/math/Color.js";
+import { Euler } from "three/src/math/Euler.js";
+import { Matrix4 } from "three/src/math/Matrix4.js";
+import { Vector3 } from "three/src/math/Vector3.js";
+import { Object3D } from "three/src/core/Object3D.js";
+import { Shape } from "three/src/extras/core/Shape.js";
+import { CatmullRomCurve3 } from "three/src/extras/curves/CatmullRomCurve3.js";
+import { DirectionalLight } from "three/src/lights/DirectionalLight.js";
+import { HemisphereLight } from "three/src/lights/HemisphereLight.js";
+import { PointLight } from "three/src/lights/PointLight.js";
+import { Scene } from "three/src/scenes/Scene.js";
+import { FogExp2 } from "three/src/scenes/FogExp2.js";
+import { CanvasTexture } from "three/src/textures/CanvasTexture.js";
+import { WebGLRenderer } from "three/src/renderers/WebGLRenderer.js";
 import type { MediaGenerationJobApiRecord } from "../api-client";
 import {
   cancelGenerationJob,
@@ -37,6 +67,7 @@ import {
   fetchGenerationArtifact,
   refreshGenerationJob,
 } from "../api-client/generation";
+import { useAuth } from "../auth";
 import { toPublicApiError } from "../api-client/transport";
 
 type HairStyle = "short" | "soft" | "bun" | "none";
@@ -46,6 +77,14 @@ type BrowStyle = "soft" | "straight" | "arched" | "thick";
 type EyeStyle = "calm" | "open" | "focused";
 type GlassesStyle = "none" | "round" | "square" | "thin";
 type FacialHairStyle = "none" | "mustache" | "beard";
+type AvatarReferenceId =
+  | "soft-3d"
+  | "anime"
+  | "pixel"
+  | "clay"
+  | "editorial"
+  | "cinematic";
+type AvatarExpressionId = "neutral" | "smile" | "thinking" | "wave" | "wink" | "talking";
 
 type AvatarConfig = {
   skin: string;
@@ -78,6 +117,28 @@ type AvatarSculpt = {
   hasGlasses: boolean;
 };
 
+type AvatarReferencePreset = {
+  id: AvatarReferenceId;
+  title: string;
+  imageSrc: string;
+  promptNotes: string;
+  configPatch: Partial<AvatarConfig>;
+};
+
+type AvatarExpressionPreset = {
+  id: AvatarExpressionId;
+  title: string;
+  prompt: string;
+};
+
+type AvatarExpressionRender = {
+  expressionId: AvatarExpressionId;
+  job?: MediaGenerationJobApiRecord;
+  imageUrl?: string;
+  error?: string;
+  busy?: boolean;
+};
+
 type TrackingState = {
   yaw: number;
   pitch: number;
@@ -98,45 +159,45 @@ type PremiumAvatarTextureState = {
   photoSource: string | null;
   canvas: HTMLCanvasElement;
   context: CanvasRenderingContext2D;
-  texture: THREE.CanvasTexture;
+  texture: CanvasTexture;
 };
 
 type AvatarSceneHandles = {
-  root: THREE.Group;
-  premiumAvatar: THREE.Group;
-  head: THREE.Group;
-  face: THREE.Mesh;
-  jaw: THREE.Mesh;
-  nose: THREE.Mesh;
-  noseBridge: THREE.Mesh;
-  mouth: THREE.Mesh;
-  leftEye: THREE.Group;
-  rightEye: THREE.Group;
-  leftLid: THREE.Mesh;
-  rightLid: THREE.Mesh;
-  leftBrow: THREE.Mesh;
-  rightBrow: THREE.Mesh;
-  facialHair: THREE.Group;
-  mustache: THREE.Group;
-  beard: THREE.Group;
-  glasses: THREE.Group;
-  glassesRound: THREE.Group;
-  glassesSquare: THREE.Group;
-  glassesThin: THREE.Group;
-  leftCheek: THREE.Mesh;
-  rightCheek: THREE.Mesh;
-  body: THREE.Group;
+  root: Group;
+  premiumAvatar: Group;
+  head: Group;
+  face: Mesh;
+  jaw: Mesh;
+  nose: Mesh;
+  noseBridge: Mesh;
+  mouth: Mesh;
+  leftEye: Group;
+  rightEye: Group;
+  leftLid: Mesh;
+  rightLid: Mesh;
+  leftBrow: Mesh;
+  rightBrow: Mesh;
+  facialHair: Group;
+  mustache: Group;
+  beard: Group;
+  glasses: Group;
+  glassesRound: Group;
+  glassesSquare: Group;
+  glassesThin: Group;
+  leftCheek: Mesh;
+  rightCheek: Mesh;
+  body: Group;
   materials: {
-    skin: THREE.MeshStandardMaterial;
-    shadowSkin: THREE.MeshStandardMaterial;
-    hair: THREE.MeshStandardMaterial;
-    outfit: THREE.MeshStandardMaterial;
-    accent: THREE.MeshStandardMaterial;
+    skin: MeshStandardMaterial;
+    shadowSkin: MeshStandardMaterial;
+    hair: MeshStandardMaterial;
+    outfit: MeshStandardMaterial;
+    accent: MeshStandardMaterial;
   };
-  hairParts: THREE.Object3D[];
-  renderer: THREE.WebGLRenderer;
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
+  hairParts: Object3D[];
+  renderer: WebGLRenderer;
+  scene: Scene;
+  camera: PerspectiveCamera;
   premiumTextureState: PremiumAvatarTextureState | null;
   premiumBaseScale: number;
 };
@@ -178,6 +239,128 @@ const skinSwatches = ["#F0C7A8", "#D8A27A", "#B87552", "#7A4A35", "#F3D7BF"];
 const hairSwatches = ["#111111", "#4B2E21", "#C07A3D", "#B6B6B6", "#7C3AED"];
 const outfitSwatches = ["#1E3A5F", "#123B35", "#3B1F47", "#4A1D1F", "#F6F7F9"];
 const accentSwatches = ["#20E3B2", "#7C3AED", "#F59E0B", "#38BDF8", "#F43F5E"];
+
+const avatarReferencePresets: AvatarReferencePreset[] = [
+  {
+    id: "soft-3d",
+    title: "Мягкий 3D",
+    imageSrc: "/avatar/references/style-soft-3d.jpg",
+    promptNotes: "premium soft 3D character portrait, rounded forms, sculpted hair, expressive eyes, polished studio materials",
+    configPatch: {
+      skin: "#D8A27A",
+      hair: "#4B2E21",
+      outfit: "#111111",
+      accent: "#FF7664",
+      hairStyle: "soft",
+      faceShape: "round",
+      browStyle: "soft",
+      eyeStyle: "open",
+      glassesStyle: "round",
+      facialHairStyle: "none",
+    },
+  },
+  {
+    id: "anime",
+    title: "Аниме",
+    imageSrc: "/avatar/references/style-anime.jpg",
+    promptNotes: "refined contemporary anime portrait, elegant clean linework, sophisticated cel shading, expressive natural eyes",
+    configPatch: {
+      skin: "#F0C7A8",
+      hair: "#22172F",
+      outfit: "#171126",
+      accent: "#A78BFA",
+      hairStyle: "soft",
+      faceShape: "oval",
+      browStyle: "arched",
+      eyeStyle: "open",
+      glassesStyle: "none",
+      facialHairStyle: "none",
+    },
+  },
+  {
+    id: "pixel",
+    title: "Пиксельный",
+    imageSrc: "/avatar/references/style-pixel.jpg",
+    promptNotes: "refined modern pixel art portrait, deliberate crisp pixels, premium game profile quality, expressive face",
+    configPatch: {
+      skin: "#D8A27A",
+      hair: "#2E1829",
+      outfit: "#161127",
+      accent: "#FF7664",
+      hairStyle: "short",
+      faceShape: "angular",
+      browStyle: "straight",
+      eyeStyle: "focused",
+      glassesStyle: "none",
+      facialHairStyle: "none",
+    },
+  },
+  {
+    id: "clay",
+    title: "Clay",
+    imageSrc: "/avatar/references/style-clay.jpg",
+    promptNotes: "tactile premium polymer clay character portrait, subtle handmade texture, stop motion studio quality",
+    configPatch: {
+      skin: "#F0C7A8",
+      hair: "#6A3A27",
+      outfit: "#2A1B38",
+      accent: "#F59E0B",
+      hairStyle: "bun",
+      faceShape: "oval",
+      browStyle: "soft",
+      eyeStyle: "calm",
+      glassesStyle: "none",
+      facialHairStyle: "none",
+    },
+  },
+  {
+    id: "editorial",
+    title: "Иллюстрация",
+    imageSrc: "/avatar/references/style-editorial.jpg",
+    promptNotes: "bold premium editorial portrait, geometric shapes, subtle grain, sophisticated magazine illustration",
+    configPatch: {
+      skin: "#D8A27A",
+      hair: "#311C2C",
+      outfit: "#121526",
+      accent: "#73E6C2",
+      hairStyle: "short",
+      faceShape: "oval",
+      browStyle: "thick",
+      eyeStyle: "calm",
+      glassesStyle: "none",
+      facialHairStyle: "none",
+    },
+  },
+  {
+    id: "cinematic",
+    title: "Cinematic",
+    imageSrc: "/avatar/references/style-cinematic.jpg",
+    promptNotes: "cinematic semi-realistic digital portrait, realistic proportions with tasteful stylization, premium creator profile quality",
+    configPatch: {
+      skin: "#F0C7A8",
+      hair: "#3A221D",
+      outfit: "#111523",
+      accent: "#FF7664",
+      hairStyle: "soft",
+      faceShape: "oval",
+      browStyle: "soft",
+      eyeStyle: "focused",
+      glassesStyle: "none",
+      facialHairStyle: "none",
+    },
+  },
+];
+
+const avatarExpressionPresets: AvatarExpressionPreset[] = [
+  { id: "neutral", title: "Профиль", prompt: "neutral friendly expression, facing camera, clean profile avatar crop" },
+  { id: "smile", title: "Улыбка", prompt: "warm smile, friendly eye contact, relaxed shoulders" },
+  { id: "thinking", title: "Думает", prompt: "thoughtful expression, hand near chin, focused eyes" },
+  { id: "wave", title: "Привет", prompt: "waving hand, welcoming smile, energetic but clean composition" },
+  { id: "wink", title: "Подмигивает", prompt: "one eye wink, playful smile, same outfit and character identity" },
+  { id: "talking", title: "Говорит", prompt: "speaking mouth pose, natural presenter expression, ready for light talking animation" },
+];
+
+const defaultExpressionIds: AvatarExpressionId[] = ["neutral", "smile", "thinking", "wave", "wink", "talking"];
 
 const backgroundStyles: Record<MeetingBackground, string> = {
   studio: "radial-gradient(circle at 50% 20%, #22313f 0%, #07090b 46%, #000 100%)",
@@ -236,15 +419,19 @@ const mediaPipeFaceLandmarkerUrl =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
 
 export default function AvatarStudio() {
+  const { isAuthenticated, updateProfile } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const sceneRef = useRef<AvatarSceneHandles | null>(null);
+  const mobileStylePaletteRef = useRef<HTMLDivElement>(null);
+  const desktopStylePaletteRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const generatedObjectUrlsRef = useRef<Set<string>>(new Set());
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioDataRef = useRef<Uint8Array | null>(null);
+  const audioDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const previousFrameRef = useRef<Uint8ClampedArray | null>(null);
   const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const faceLandmarkerPromiseRef = useRef<Promise<FaceLandmarker | null> | null>(null);
@@ -267,17 +454,37 @@ export default function AvatarStudio() {
   const [cameraStatus, setCameraStatus] = useState<"off" | "starting" | "live" | "error">("off");
   const [micStatus, setMicStatus] = useState<"off" | "live" | "blocked">("off");
   const [trackingBackend, setTrackingBackend] = useState<TrackingBackend>("fallback");
-  const [statusText, setStatusText] = useState("Аватар готов к локальной сессии.");
+  const [statusText, setStatusText] = useState("Загрузите фото, выберите стиль и создайте AI-портрет.");
   const [savedNotice, setSavedNotice] = useState("");
   const [videoScript, setVideoScript] = useState(
     "Здравствуйте! Это мой AI-аватар в nomduchat. Я могу быстро объяснить продукт, записать приветствие или сделать короткое видео для клиента."
   );
   const [videoMotion, setVideoMotion] = useState("спокойно говорит в камеру, мягко кивает, уверенная деловая подача");
   const [faceConsent, setFaceConsent] = useState(false);
+  const [avatarBrief, setAvatarBrief] = useState(
+    "дружелюбный современный AI-ассистент, аккуратная одежда, выразительные глаза, чистый студийный фон"
+  );
   const [renderJob, setRenderJob] = useState<MediaGenerationJobApiRecord | null>(null);
   const [renderBusy, setRenderBusy] = useState(false);
   const [renderError, setRenderError] = useState("");
   const [renderVideoUrl, setRenderVideoUrl] = useState("");
+  const [stageMode, setStageMode] = useState<"portrait" | "liveRig">("portrait");
+  const isLiveRigEnabled = false;
+  const [selectedReferenceId, setSelectedReferenceId] = useState<AvatarReferenceId>("soft-3d");
+  const [isStylePaletteOpen, setIsStylePaletteOpen] = useState(false);
+  const stylePaletteHoverTimerRef = useRef<number | null>(null);
+  const [activePanel, setActivePanel] = useState<"avatar" | "video" | "live">("avatar");
+  const [selectedExpressionIds, setSelectedExpressionIds] = useState<AvatarExpressionId[]>(defaultExpressionIds);
+  const [activePreview, setActivePreview] = useState<"base" | AvatarExpressionId>("base");
+  const [avatarImageJob, setAvatarImageJob] = useState<MediaGenerationJobApiRecord | null>(null);
+  const [avatarImageUrl, setAvatarImageUrl] = useState("");
+  const [avatarImageBlob, setAvatarImageBlob] = useState<Blob | null>(null);
+  const [avatarImageBusy, setAvatarImageBusy] = useState(false);
+  const [avatarImageError, setAvatarImageError] = useState("");
+  const [expressionRenders, setExpressionRenders] = useState<AvatarExpressionRender[]>([]);
+  const [expressionBusy, setExpressionBusy] = useState(false);
+  const [profileSaveBusy, setProfileSaveBusy] = useState(false);
+  const [profileSaveNotice, setProfileSaveNotice] = useState("");
 
   const activeStatus = useMemo(() => {
     if (cameraStatus === "starting") return "Запускаю камеру";
@@ -288,6 +495,87 @@ export default function AvatarStudio() {
     if (cameraStatus === "error") return "Камера недоступна";
     return "Локальный режим";
   }, [cameraStatus, micStatus, trackingBackend]);
+
+  const selectedReference = useMemo(
+    () => avatarReferencePresets.find((preset) => preset.id === selectedReferenceId) ?? avatarReferencePresets[0],
+    [selectedReferenceId]
+  );
+
+  const isInsideStylePalette = (target: EventTarget | null) => {
+    if (!(target instanceof Node)) return false;
+    return (
+      (mobileStylePaletteRef.current && mobileStylePaletteRef.current.contains(target)) ||
+      (desktopStylePaletteRef.current && desktopStylePaletteRef.current.contains(target))
+    );
+  };
+
+  const clearStylePaletteHoverTimer = () => {
+    if (stylePaletteHoverTimerRef.current !== null) {
+      window.clearTimeout(stylePaletteHoverTimerRef.current);
+      stylePaletteHoverTimerRef.current = null;
+    }
+  };
+
+  const openStylePalette = () => {
+    clearStylePaletteHoverTimer();
+    setIsStylePaletteOpen(true);
+  };
+
+  const closeStylePalette = (event?: React.MouseEvent) => {
+    if (event && isInsideStylePalette(event.relatedTarget)) {
+      return;
+    }
+
+    clearStylePaletteHoverTimer();
+    stylePaletteHoverTimerRef.current = window.setTimeout(() => setIsStylePaletteOpen(false), 230);
+  };
+
+  const toggleStylePalette = () => {
+    clearStylePaletteHoverTimer();
+    setIsStylePaletteOpen((current) => !current);
+  };
+
+  useEffect(() => {
+    if (!isStylePaletteOpen) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (!event.target) return;
+      if (
+        (mobileStylePaletteRef.current && mobileStylePaletteRef.current.contains(event.target as Node)) ||
+        (desktopStylePaletteRef.current && desktopStylePaletteRef.current.contains(event.target as Node))
+      ) {
+        return;
+      }
+      setIsStylePaletteOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsStylePaletteOpen(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isStylePaletteOpen]);
+
+  useEffect(() => {
+    return () => clearStylePaletteHoverTimer();
+  }, []);
+
+  const activeExpressionRender = useMemo(
+    () => activePreview === "base" ? null : expressionRenders.find((item) => item.expressionId === activePreview) ?? null,
+    [activePreview, expressionRenders]
+  );
+
+  const generatedPreviewUrl = activeExpressionRender?.imageUrl || avatarImageUrl || selectedReference.imageSrc;
+  const portraitStateLabel = avatarImageJob
+    ? avatarRenderStatusLabel(avatarImageJob.status)
+    : config.photoDataUrl
+      ? "Фото готово к AI-стилизации"
+      : "Загрузите фото";
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -308,7 +596,7 @@ export default function AvatarStudio() {
       resizeObserver.disconnect();
       handles.renderer.dispose();
       handles.scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
+        if (object instanceof Mesh) {
           object.geometry.dispose();
           if (Array.isArray(object.material)) {
             object.material.forEach((material) => material.dispose());
@@ -391,6 +679,14 @@ export default function AvatarStudio() {
     [renderVideoUrl]
   );
 
+  useEffect(
+    () => () => {
+      generatedObjectUrlsRef.current.forEach((url) => window.URL.revokeObjectURL(url));
+      generatedObjectUrlsRef.current.clear();
+    },
+    []
+  );
+
   useEffect(() => {
     if (!renderJob || renderJob.status !== "running") return;
 
@@ -401,9 +697,212 @@ export default function AvatarStudio() {
     return () => window.clearInterval(interval);
   }, [renderJob?.id, renderJob?.status]);
 
+  useEffect(() => {
+    if (!avatarImageJob || (avatarImageJob.status !== "queued" && avatarImageJob.status !== "running")) return;
+
+    const interval = window.setInterval(() => {
+      void refreshAvatarImageJob();
+    }, 6000);
+
+    return () => window.clearInterval(interval);
+  }, [avatarImageJob?.id, avatarImageJob?.status]);
+
   const updateConfig = (patch: Partial<AvatarConfig>) => {
     setConfig((current) => ({ ...current, ...patch }));
     setSavedNotice("");
+  };
+
+  const rememberObjectUrl = (blob: Blob) => {
+    const url = window.URL.createObjectURL(blob);
+    generatedObjectUrlsRef.current.add(url);
+    return url;
+  };
+
+  const clearGeneratedAvatar = () => {
+    setAvatarImageJob(null);
+    setAvatarImageUrl("");
+    setAvatarImageBlob(null);
+    setExpressionRenders([]);
+    setActivePreview("base");
+    setProfileSaveNotice("");
+    setAvatarImageError("");
+  };
+
+  const selectReferencePreset = (preset: AvatarReferencePreset) => {
+    if (preset.id !== selectedReference.id) clearGeneratedAvatar();
+    setSelectedReferenceId(preset.id);
+    updateConfig(preset.configPatch);
+    setProfileSaveNotice("");
+    setStatusText(`Выбран стиль: ${preset.title}.`);
+  };
+
+  const toggleExpressionId = (expressionId: AvatarExpressionId) => {
+    setSelectedExpressionIds((current) => {
+      if (current.includes(expressionId)) {
+        return current.length > 1 ? current.filter((id) => id !== expressionId) : current;
+      }
+      return [...current, expressionId];
+    });
+  };
+
+  const startAvatarImageRender = async () => {
+    const usesUserPhoto = Boolean(config.photoDataUrl);
+    if (!usesUserPhoto) {
+      setAvatarImageError("Сначала загрузите портретное фото.");
+      return;
+    }
+    if (usesUserPhoto && !faceConsent) {
+      setAvatarImageError("Подтвердите разрешение на использование фото для AI-аватара.");
+      return;
+    }
+
+    setAvatarImageBusy(true);
+    setAvatarImageError("");
+    setProfileSaveNotice("");
+    setActivePreview("base");
+    setStatusText("Готовлю AI-портрет в стиле выбранного референса.");
+
+    try {
+      const styleReference = {
+        ...(await imageUrlToReferenceImage(selectedReference.imageSrc, `${selectedReference.id}-style.png`)),
+        consentConfirmed: true,
+      };
+      const identityReference = config.photoDataUrl
+        ? {
+            ...dataUrlToReferenceImage(config.photoDataUrl),
+            filename: "identity-reference.jpg",
+            consentConfirmed: true,
+          }
+        : null;
+      const response = await createGenerationJob({
+        agentId: "avatar",
+        modality: "image",
+        purpose: "avatar_profile",
+        prompt: buildAvatarImagePrompt(selectedReference, config, usesUserPhoto ? "identity" : "style", avatarBrief),
+        referenceImage: identityReference ? undefined : styleReference,
+        referenceImages: identityReference ? [identityReference, styleReference] : undefined,
+      });
+
+      setAvatarImageJob(response.job);
+      setExpressionRenders([]);
+      if (response.job.status === "succeeded") {
+        await loadAvatarImageArtifact(response.job.id);
+        setStatusText("AI-аватар готов. Теперь можно сделать набор эмоций или сохранить в профиль.");
+      } else {
+        setStatusText("AI-аватар поставлен в очередь. Обновите статус через несколько секунд.");
+      }
+    } catch (error) {
+      setAvatarImageError(toPublicApiError(error, "Не удалось создать AI-аватар."));
+      setStatusText("Генерация AI-аватара не запущена.");
+    } finally {
+      setAvatarImageBusy(false);
+    }
+  };
+
+  const refreshAvatarImageJob = async () => {
+    if (!avatarImageJob) return;
+
+    setAvatarImageBusy(true);
+    setAvatarImageError("");
+    try {
+      const response = await refreshGenerationJob(avatarImageJob.id);
+      setAvatarImageJob(response.job);
+      if (response.job.status === "succeeded") {
+        await loadAvatarImageArtifact(response.job.id);
+        setStatusText("AI-аватар готов.");
+      } else if (response.job.status === "failed" || response.job.status === "refunded") {
+        setAvatarImageError(response.job.errorMessage ?? "Провайдер не смог создать AI-аватар.");
+      }
+    } catch (error) {
+      setAvatarImageError(toPublicApiError(error, "Не удалось обновить AI-аватар."));
+    } finally {
+      setAvatarImageBusy(false);
+    }
+  };
+
+  const loadAvatarImageArtifact = async (jobId: string) => {
+    const blob = await fetchGenerationArtifact(jobId);
+    if (!blob.type.startsWith("image/")) {
+      throw new Error("Провайдер вернул не изображение. Проверьте настройки image generation.");
+    }
+    const url = rememberObjectUrl(blob);
+    setAvatarImageBlob(blob);
+    setAvatarImageUrl(url);
+  };
+
+  const startExpressionSetRender = async () => {
+    if (!avatarImageJob || avatarImageJob.status !== "succeeded") {
+      setAvatarImageError("Сначала создайте базовый AI-аватар.");
+      return;
+    }
+
+    const expressions = avatarExpressionPresets.filter((expression) => selectedExpressionIds.includes(expression.id));
+    setExpressionBusy(true);
+    setAvatarImageError("");
+    setProfileSaveNotice("");
+    setStatusText("Создаю набор эмоций на основе готового аватара.");
+    setExpressionRenders(expressions.map((expression) => ({ expressionId: expression.id, busy: true })));
+
+    for (const expression of expressions) {
+      try {
+        const response = await createGenerationJob({
+          agentId: "avatar",
+          modality: "image",
+          purpose: "avatar_profile",
+          prompt: buildAvatarExpressionPrompt(selectedReference, expression),
+          imageReferenceJobId: avatarImageJob.id,
+        });
+        setExpressionRenders((current) => upsertExpressionRender(current, expression.id, { job: response.job }));
+        if (response.job.status === "succeeded") {
+          await loadExpressionArtifact(expression.id, response.job.id);
+        } else {
+          setExpressionRenders((current) => upsertExpressionRender(current, expression.id, { busy: false }));
+        }
+      } catch (error) {
+        setExpressionRenders((current) =>
+          upsertExpressionRender(current, expression.id, {
+            busy: false,
+            error: toPublicApiError(error, "Не удалось создать эмоцию."),
+          })
+        );
+      }
+    }
+
+    setExpressionBusy(false);
+    setStatusText("Набор эмоций обработан. Готовые варианты можно использовать для UI-анимации.");
+  };
+
+  const loadExpressionArtifact = async (expressionId: AvatarExpressionId, jobId: string) => {
+    const blob = await fetchGenerationArtifact(jobId);
+    if (!blob.type.startsWith("image/")) {
+      throw new Error("Провайдер вернул не изображение.");
+    }
+    const imageUrl = rememberObjectUrl(blob);
+    setExpressionRenders((current) => upsertExpressionRender(current, expressionId, { busy: false, imageUrl }));
+    if (activePreview === "base") setActivePreview(expressionId);
+  };
+
+  const saveGeneratedAvatarToProfile = async () => {
+    if (!avatarImageBlob) {
+      setProfileSaveNotice("Сначала создайте AI-аватар.");
+      return;
+    }
+    if (!isAuthenticated) {
+      setProfileSaveNotice("Войдите в аккаунт, чтобы сохранить аватар в профиль.");
+      return;
+    }
+
+    setProfileSaveBusy(true);
+    setProfileSaveNotice("");
+    try {
+      const avatarDataUrl = await blobToProfileAvatarDataUrl(avatarImageBlob);
+      await updateProfile({ avatarDataUrl });
+      setProfileSaveNotice("AI-аватар сохранен в профиле.");
+    } catch (error) {
+      setProfileSaveNotice(toPublicApiError(error, "Не удалось сохранить AI-аватар в профиль."));
+    } finally {
+      setProfileSaveBusy(false);
+    }
   };
 
   const startLiveSession = async () => {
@@ -485,6 +984,18 @@ export default function AvatarStudio() {
     setStatusText("Live-режим остановлен.");
   };
 
+  useEffect(() => {
+    if (!isLiveRigEnabled) {
+      if (stageMode !== "portrait") {
+        setStageMode("portrait");
+      }
+      setActivePanel((current) => (current === "live" ? "avatar" : current));
+      if (cameraStatus === "live" || cameraStatus === "starting") {
+        stopLiveSession();
+      }
+    }
+  }, [cameraStatus, isLiveRigEnabled, stageMode, stopLiveSession]);
+
   const cleanupLiveSession = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -526,12 +1037,13 @@ export default function AvatarStudio() {
   };
 
   const saveAvatar = () => {
-    window.localStorage.setItem(storageKey, JSON.stringify(config));
-    setSavedNotice("Аватар сохранен на этом устройстве.");
+    window.localStorage.setItem(storageKey, JSON.stringify({ ...config, photoDataUrl: null }));
+    setSavedNotice("Настройки сохранены. Исходное фото не хранится в браузере.");
   };
 
   const resetAvatar = () => {
     setConfig(defaultConfig);
+    clearGeneratedAvatar();
     window.localStorage.removeItem(storageKey);
     setSavedNotice("Настройки сброшены.");
   };
@@ -548,9 +1060,11 @@ export default function AvatarStudio() {
       const photoDataUrl = await prepareAvatarPhoto(file);
       const photoProfile = await extractPhotoProfile(photoDataUrl);
       photoAnalysisSourceRef.current = photoDataUrl;
+      clearGeneratedAvatar();
       setConfig((current) => ({ ...current, ...photoProfile, photoDataUrl }));
+      setFaceConsent(false);
       setSavedNotice("");
-      setStatusText("Фото разобрано в локальную форму 3D-аватара.");
+      setStatusText("Фото готово. Выберите направление и подтвердите использование лица.");
     } catch {
       setStatusText("Не удалось прочитать фото. Попробуйте другой файл.");
     } finally {
@@ -559,7 +1073,9 @@ export default function AvatarStudio() {
   };
 
   const resetReferencePhoto = () => {
+    clearGeneratedAvatar();
     updateConfig({ photoDataUrl: null, sculpt: defaultSculpt });
+    setFaceConsent(false);
     setStatusText("Фото-основа отключена.");
   };
 
@@ -665,7 +1181,7 @@ export default function AvatarStudio() {
   };
 
   return (
-    <div className="flex h-full min-h-0 bg-black text-white">
+    <div className="ns-avatar-root flex h-full min-h-0 text-[var(--text-primary)]">
       <input
         ref={photoInputRef}
         type="file"
@@ -673,106 +1189,373 @@ export default function AvatarStudio() {
         className="hidden"
         onChange={(event) => void uploadReferencePhoto(event.target.files?.[0])}
       />
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 p-5 md:p-6">
+      <div className="relative flex min-w-0 flex-1 flex-col p-4 md:p-5">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-5 md:p-6">
           <div className="max-w-lg">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 text-sm text-gray-300 backdrop-blur">
               <UserRound className="h-4 w-4" strokeWidth={1.7} />
-              Avatar Studio
+              AI Avatar
             </div>
-            <h1 className="mt-3 text-2xl font-medium tracking-normal md:text-3xl">3D-аватар внутри nomduchat</h1>
-          </div>
-          <div className="hidden rounded-2xl border border-white/10 bg-black/45 px-4 py-3 text-right text-sm backdrop-blur md:block">
-            <div className="font-medium text-white">{activeStatus}</div>
-            <div className="mt-1 text-gray-500">Live-трекинг локальный</div>
+            <h1 className="ns-avatar-headline mt-3 text-2xl font-medium tracking-normal md:text-3xl">Аватар в вашем стиле</h1>
           </div>
         </div>
 
-        <div
-          ref={containerRef}
-          data-avatar-canvas-root
-          className="min-h-[560px] flex-1 overflow-hidden"
-          style={{ background: backgroundStyles[config.background] }}
-        />
-
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black via-black/55 to-transparent p-5 md:p-7">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div className="pointer-events-auto flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={startLiveSession}
-                disabled={cameraStatus === "starting" || cameraStatus === "live"}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-black transition-colors hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {cameraStatus === "starting" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" strokeWidth={1.8} />}
-                Включить live
-              </button>
-              <button
-                type="button"
-                onClick={stopLiveSession}
-                disabled={cameraStatus !== "live"}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/40 px-4 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <CircleStop className="h-4 w-4" strokeWidth={1.8} />
-                Остановить
-              </button>
-              <button
-                type="button"
-                onClick={saveAvatar}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/40 px-4 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-              >
-                <Save className="h-4 w-4" strokeWidth={1.8} />
-                Сохранить
-              </button>
-              <button
-                type="button"
-                onClick={() => photoInputRef.current?.click()}
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/40 px-4 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-              >
-                <ImageUp className="h-4 w-4" strokeWidth={1.8} />
-                Фото
-              </button>
-            </div>
-            <div className="pointer-events-auto rounded-2xl border border-white/10 bg-black/45 px-4 py-3 text-sm text-gray-400 backdrop-blur md:max-w-md">
-              <div>{statusText}</div>
-              {savedNotice ? <div className="mt-1 text-emerald-300">{savedNotice}</div> : null}
+        <div className="ns-avatar-stage relative min-h-[560px] flex-1 overflow-hidden" style={{ background: backgroundStyles[config.background] }}>
+          <div
+            ref={containerRef}
+            data-avatar-canvas-root
+            className={`absolute inset-0 transition-opacity duration-300 ${stageMode === "liveRig" ? "opacity-100" : "pointer-events-none opacity-0"}`}
+          />
+          <div
+            className={`absolute inset-0 flex items-center justify-center px-6 pb-40 pt-28 transition-opacity duration-300 md:px-12 md:pb-32 md:pt-32 ${
+              stageMode === "portrait" ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+          >
+            <div className="relative flex h-full max-h-[780px] w-full max-w-[820px] items-center justify-center">
+              <div className="absolute inset-0 rounded-[48px] bg-white/[0.02] blur-3xl" />
+              <div className="relative aspect-square w-full max-w-[620px] overflow-hidden rounded-[42px] border border-white/10 bg-black shadow-2xl shadow-black/60">
+                <img
+                  key={generatedPreviewUrl}
+                  src={generatedPreviewUrl}
+                  alt="AI-аватар nomduchat"
+                  className={`h-full w-full object-cover ${activePreview === "talking" ? "avatar-talk-preview" : "avatar-portrait-preview"}`}
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent px-5 py-4">
+                  <div className="flex items-center justify-between gap-3 text-sm">
+                    <div>
+                      <div className="font-medium text-white">
+                        {activePreview === "base"
+                          ? selectedReference.title
+                          : avatarExpressionPresets.find((item) => item.id === activePreview)?.title}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-400">{portraitStateLabel}</div>
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-black/55 px-3 py-1 text-xs text-gray-300 backdrop-blur">
+                      {avatarImageUrl || activeExpressionRender?.imageUrl ? "По вашему фото" : "Пример стиля"}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="pointer-events-auto mt-4 flex gap-2 overflow-x-auto pb-1 xl:hidden">
-            <MobileColorButton label="Кожа" value={config.skin} options={skinSwatches} onChange={(skin) => updateConfig({ skin })} />
-            <MobileColorButton label="Волосы" value={config.hair} options={hairSwatches} onChange={(hair) => updateConfig({ hair })} />
-            <MobileColorButton label="Одежда" value={config.outfit} options={outfitSwatches} onChange={(outfit) => updateConfig({ outfit })} />
-            <MobileCycleButton
-              label="Фон"
-              value={backgroundLabels[config.background]}
-              onClick={() => updateConfig({ background: nextFrom<MeetingBackground>(["studio", "office", "dark"], config.background) })}
-            />
-            <MobileCycleButton
-              label="Волосы"
-              value={hairStyleLabels[config.hairStyle]}
-              onClick={() => updateConfig({ hairStyle: nextFrom<HairStyle>(["soft", "short", "bun", "none"], config.hairStyle) })}
-            />
-            <MobileCycleButton
-              label="Лицо"
-              value={faceShapeLabels[config.faceShape]}
-              onClick={() => updateConfig({ faceShape: nextFrom<FaceShape>(["oval", "round", "angular", "long"], config.faceShape) })}
-            />
-            <MobileCycleButton
-              label="Очки"
-              value={glassesStyleLabels[config.glassesStyle]}
-              onClick={() => updateConfig({ glassesStyle: nextFrom<GlassesStyle>(["none", "round", "square", "thin"], config.glassesStyle) })}
-            />
-            <MobileCycleButton
-              label="Борода"
-              value={facialHairStyleLabels[config.facialHairStyle]}
-              onClick={() => updateConfig({ facialHairStyle: nextFrom<FacialHairStyle>(["none", "mustache", "beard"], config.facialHairStyle) })}
-            />
+        </div>
+
+        <div className="pointer-events-none absolute inset-x-4 bottom-4 z-10 md:inset-x-5">
+          {stageMode === "portrait" ? (
+            <div className="ns-avatar-mobile-styles pointer-events-auto mb-2 flex gap-2 overflow-x-auto pb-1 xl:hidden">
+              <div
+                ref={mobileStylePaletteRef}
+                className={`ns-avatar-style-palette ns-avatar-style-palette--mobile ${isStylePaletteOpen ? "is-open" : ""}`}
+                onMouseEnter={openStylePalette}
+                onMouseLeave={closeStylePalette}
+              >
+                <button
+                  type="button"
+                  className="ns-avatar-style-palette-trigger"
+                  onClick={toggleStylePalette}
+                  onMouseEnter={openStylePalette}
+                  aria-expanded={isStylePaletteOpen}
+                  aria-label="Выбор стиля аватара"
+                >
+                  <img src={selectedReference.imageSrc} alt="" />
+                  <span>{selectedReference.title}</span>
+                  <Palette className="h-4 w-4" strokeWidth={1.8} />
+                </button>
+
+                {avatarReferencePresets.map((preset, index) => {
+                  const angle = ((360 / avatarReferencePresets.length) * index - 90) * (Math.PI / 180);
+                  const radius = 56;
+                  const itemHalf = 32;
+                  const railLength = radius + itemHalf;
+                  const offsetX = Math.round(Math.cos(angle) * radius);
+                  const offsetY = Math.round(Math.sin(angle) * radius);
+                  return (
+                    <span key={`${preset.id}-rail`}>
+                      <span
+                        aria-hidden="true"
+                        className="ns-avatar-style-palette-rail"
+                        onMouseEnter={openStylePalette}
+                        style={{
+                          transform: `translate(-50%, -${railLength}px) rotate(${(angle * 180) / Math.PI}deg)`,
+                          transitionDelay: `${Math.min(index * 25, 180)}ms`,
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className={`ns-avatar-style-palette-item ${preset.id === selectedReference.id ? "is-active" : ""}`}
+                        onClick={() => {
+                          selectReferencePreset(preset);
+                          setIsStylePaletteOpen(false);
+                        }}
+                        onMouseEnter={openStylePalette}
+                        style={{
+                          transform: isStylePaletteOpen
+                            ? `translate(calc(${offsetX}px - 50%), calc(${offsetY}px - 50%)) scale(1)`
+                            : "translate(-50%, -50%) scale(0.6)",
+                          transitionDelay: `${Math.min(index * 25, 180)}ms`,
+                        }}
+                      >
+                        <img src={preset.imageSrc} alt={preset.title} loading="lazy" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="ns-avatar-dock pointer-events-auto flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between md:p-4">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => { setStageMode("portrait"); setActivePanel("avatar"); }}
+                className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-colors ${
+                  stageMode === "portrait" ? "bg-white text-black hover:bg-gray-200" : "border border-white/10 bg-black/40 text-gray-300 hover:border-white/20 hover:text-white"
+                }`}
+              >
+                <Sparkles className="h-4 w-4" strokeWidth={1.8} />
+                Портрет
+              </button>
+              {isLiveRigEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => { setStageMode("liveRig"); setActivePanel("live"); }}
+                  className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-medium transition-colors ${
+                    stageMode === "liveRig" ? "bg-white text-black hover:bg-gray-200" : "border border-white/10 bg-black/40 text-gray-300 hover:border-white/20 hover:text-white"
+                  }`}
+                >
+                  <UserRound className="h-4 w-4" strokeWidth={1.8} />
+                  3D
+                </button>
+              ) : null}
+              {stageMode === "portrait" ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/40 px-4 text-sm text-gray-200 transition-colors hover:border-white/25 hover:text-white"
+                  >
+                    <ImageUp className="h-4 w-4" strokeWidth={1.8} />
+                    {config.photoDataUrl ? "Заменить фото" : "Загрузить фото"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void startAvatarImageRender()}
+                    disabled={avatarImageBusy || !config.photoDataUrl || !faceConsent}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--signal-coral)] px-4 text-sm font-semibold text-[#160E1F] disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {avatarImageBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" strokeWidth={1.8} />}
+                    Создать
+                  </button>
+                </>
+              ) : null}
+            </div>
+
+            <div className="min-w-0 md:max-w-[360px]">
+              {stageMode === "portrait" && config.photoDataUrl ? (
+                <label className="flex items-start gap-2 text-xs leading-snug text-gray-300">
+                  <input type="checkbox" checked={faceConsent} onChange={(event) => setFaceConsent(event.target.checked)} className="mt-0.5 h-3.5 w-3.5 accent-white" />
+                  <span>Разрешаю использовать это фото.</span>
+                </label>
+              ) : null}
+              <p className={`mt-1 line-clamp-2 text-xs ${avatarImageError ? "text-red-200" : "text-gray-500"}`}>
+                {avatarImageError || statusText}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <aside className="custom-scrollbar hidden w-[360px] shrink-0 overflow-y-auto border-l border-white/10 bg-[#050505] p-5 xl:block">
+      <aside className="custom-scrollbar hidden w-[360px] shrink-0 overflow-y-auto border-l border-[var(--line-subtle)] bg-[var(--surface-1)] p-5 xl:block">
         <section className="space-y-5">
+          <nav className="ns-avatar-panel-tabs" aria-label="Режим Avatar Studio">
+            <button type="button" data-active={activePanel === "avatar"} onClick={() => { setActivePanel("avatar"); setStageMode("portrait"); }}>Аватар</button>
+            <button type="button" data-active={activePanel === "video"} onClick={() => setActivePanel("video")}>Видео</button>
+            {isLiveRigEnabled ? (
+              <button type="button" data-active={activePanel === "live"} onClick={() => { setActivePanel("live"); setStageMode("liveRig"); }}>Live</button>
+            ) : null}
+          </nav>
+
+          {activePanel === "avatar" ? <div className="space-y-5">
+          <PanelTitle icon={Sparkles} title="Стиль по вашему фото" />
+          <div className="ns-avatar-photo-row">
+            <button type="button" onClick={() => photoInputRef.current?.click()}>
+              {config.photoDataUrl ? <img src={config.photoDataUrl} alt="Загруженное фото" /> : <ImageUp className="h-5 w-5" strokeWidth={1.8} />}
+              <span>{config.photoDataUrl ? "Заменить фото" : "Загрузить фото"}</span>
+            </button>
+            {config.photoDataUrl ? (
+              <button type="button" onClick={resetReferencePhoto} aria-label="Убрать фото" title="Убрать фото">
+                <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+              </button>
+            ) : null}
+          </div>
+          <div className="space-y-4">
+            <div
+              ref={desktopStylePaletteRef}
+              className={`ns-avatar-style-palette ns-avatar-style-palette--desktop ${isStylePaletteOpen ? "is-open" : ""}`}
+              onMouseEnter={openStylePalette}
+              onMouseLeave={closeStylePalette}
+            >
+              <button
+                type="button"
+                className="ns-avatar-style-palette-trigger"
+                onClick={toggleStylePalette}
+                onMouseEnter={openStylePalette}
+                aria-expanded={isStylePaletteOpen}
+                aria-label="Выбор стиля аватара"
+              >
+                <img src={selectedReference.imageSrc} alt="" />
+                <span>Стиль: {selectedReference.title}</span>
+                <Palette className="h-4 w-4" strokeWidth={1.8} />
+              </button>
+
+              {avatarReferencePresets.map((preset, index) => {
+                const angle = ((360 / avatarReferencePresets.length) * index - 90) * (Math.PI / 180);
+                const radius = 124;
+                const itemHalf = 38;
+                const railLength = radius + itemHalf;
+                const offsetX = Math.round(Math.cos(angle) * radius);
+                const offsetY = Math.round(Math.sin(angle) * radius);
+                return (
+                  <span key={`${preset.id}-rail`}>
+                    <span
+                      aria-hidden="true"
+                      className="ns-avatar-style-palette-rail"
+                      onMouseEnter={openStylePalette}
+                      style={{
+                        transform: `translate(-50%, -${railLength}px) rotate(${(angle * 180) / Math.PI}deg)`,
+                        transitionDelay: `${Math.min(index * 25, 180)}ms`,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={`ns-avatar-style-palette-item ${preset.id === selectedReference.id ? "is-active" : ""}`}
+                      onClick={() => {
+                        selectReferencePreset(preset);
+                        setIsStylePaletteOpen(false);
+                      }}
+                      onMouseEnter={openStylePalette}
+                      style={{
+                        transform: isStylePaletteOpen
+                          ? `translate(calc(${offsetX}px - 50%), calc(${offsetY}px - 50%)) scale(1)`
+                          : "translate(-50%, -50%) scale(0.6)",
+                        transitionDelay: `${Math.min(index * 25, 180)}ms`,
+                      }}
+                    >
+                      <img src={preset.imageSrc} alt={preset.title} loading="lazy" />
+                      <span>{preset.title}</span>
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+
+            <details className="ns-avatar-disclosure">
+              <summary>
+                <span>Уточнить образ</span>
+                <span>+</span>
+              </summary>
+              <textarea
+                value={avatarBrief}
+                onChange={(event) => setAvatarBrief(event.target.value)}
+                rows={3}
+                maxLength={600}
+                className="mb-3 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm leading-relaxed text-white outline-none transition-colors placeholder:text-gray-700 focus:border-white/25"
+                placeholder="Одежда, характер, фон, настроение"
+              />
+            </details>
+
+            {config.photoDataUrl ? (
+              <label className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-xs leading-relaxed text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={faceConsent}
+                  onChange={(event) => setFaceConsent(event.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-white"
+                />
+                <span>Подтверждаю право использовать это фото.</span>
+              </label>
+            ) : null}
+
+            {avatarImageError ? <div className="rounded-2xl border border-red-300/20 bg-red-950/20 p-3 text-xs text-red-200">{avatarImageError}</div> : null}
+
+            <details className="ns-avatar-disclosure">
+              <summary>
+                <span>Эмоции</span>
+                <span>{avatarExpressionPresets.length}</span>
+              </summary>
+              <div className="mt-3">
+                <div className="mb-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void startExpressionSetRender()}
+                  disabled={expressionBusy || !avatarImageJob || avatarImageJob.status !== "succeeded"}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-xs text-gray-300 transition-colors hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {expressionBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />}
+                  Набор
+                </button>
+                </div>
+              <div className="grid grid-cols-2 gap-2">
+                {avatarExpressionPresets.map((expression) => {
+                  const selected = selectedExpressionIds.includes(expression.id);
+                  const render = expressionRenders.find((item) => item.expressionId === expression.id);
+                  return (
+                    <button
+                      key={expression.id}
+                      type="button"
+                      onClick={() => render?.imageUrl ? setActivePreview(expression.id) : toggleExpressionId(expression.id)}
+                      className={`flex h-10 items-center justify-between gap-2 rounded-xl border px-3 text-sm transition-colors ${
+                        activePreview === expression.id
+                          ? "border-white bg-white text-black"
+                          : selected
+                            ? "border-white/20 bg-white/[0.06] text-gray-200"
+                            : "border-white/10 bg-black text-gray-500 hover:border-white/20 hover:text-white"
+                      }`}
+                    >
+                      <span>{expression.title}</span>
+                      {render?.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : render?.imageUrl ? <Check className="h-3.5 w-3.5" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {expressionRenders.some((item) => item.error) ? (
+                <div className="mt-3 space-y-1 text-xs text-red-200">
+                  {expressionRenders.filter((item) => item.error).map((item) => (
+                    <div key={item.expressionId}>{avatarExpressionPresets.find((expression) => expression.id === item.expressionId)?.title}: {item.error}</div>
+                  ))}
+                </div>
+              ) : null}
+              </div>
+            </details>
+
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <button
+                type="button"
+                onClick={() => void saveGeneratedAvatarToProfile()}
+                disabled={profileSaveBusy || !avatarImageBlob}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {profileSaveBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserRound className="h-4 w-4" strokeWidth={1.8} />}
+                В профиль
+              </button>
+              {avatarImageUrl ? (
+                <a
+                  href={avatarImageUrl}
+                  download="nomduchat-ai-avatar.png"
+                  className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 px-3 text-gray-400 transition-colors hover:border-white/20 hover:text-white"
+                  aria-label="Скачать AI-аватар"
+                  title="Скачать AI-аватар"
+                >
+                  <Download className="h-4 w-4" strokeWidth={1.8} />
+                </a>
+              ) : null}
+            </div>
+            {profileSaveNotice ? <div className="rounded-2xl border border-white/10 bg-black p-3 text-xs text-gray-300">{profileSaveNotice}</div> : null}
+          </div>
+          </div> : null}
+
+          {activePanel === "video" ? <div className="space-y-5">
           <PanelTitle icon={Film} title="AI-видео с лицом" />
           <div className="space-y-3">
             <textarea
@@ -864,11 +1647,13 @@ export default function AvatarStudio() {
               </div>
             ) : null}
           </div>
+          </div> : null}
 
+          {isLiveRigEnabled && activePanel === "live" ? <div className="space-y-5">
           <div>
             <div className="flex items-center gap-2 text-sm text-gray-500">
               <Video className="h-4 w-4" strokeWidth={1.7} />
-              Live source
+              {activeStatus}
             </div>
             <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-black">
               <video
@@ -1004,6 +1789,7 @@ export default function AvatarStudio() {
               <RefreshCw className="h-4 w-4" strokeWidth={1.8} />
             </button>
           </div>
+          </div> : null}
         </section>
       </aside>
     </div>
@@ -1130,115 +1916,74 @@ function RangeControl({
   );
 }
 
-function MobileColorButton({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(nextFrom(options, value))}
-      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-black/50 px-3 text-sm text-gray-300 backdrop-blur"
-    >
-      <span className="h-4 w-4 rounded-full border border-white/20" style={{ backgroundColor: value }} />
-      {label}
-    </button>
-  );
-}
-
-function MobileCycleButton({ label, value, onClick }: { label: string; value: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-black/50 px-3 text-sm text-gray-300 backdrop-blur"
-    >
-      <span className="text-gray-500">{label}</span>
-      {value}
-    </button>
-  );
-}
-
-function nextFrom<T extends string>(options: T[], value: T) {
-  const index = options.indexOf(value);
-  return options[(index + 1) % options.length];
-}
-
 function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): AvatarSceneHandles {
-  const scene = new THREE.Scene();
+  const scene = new Scene();
   scene.background = makeSceneBackground(config.background);
-  scene.fog = new THREE.FogExp2(0x050505, 0.034);
+  scene.fog = new FogExp2(0x050505, 0.034);
 
-  const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
+  const camera = new PerspectiveCamera(30, 1, 0.1, 100);
   camera.position.set(0, 1.24, 8.4);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.outputColorSpace = SRGBColorSpace;
+  renderer.toneMapping = ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.26;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
 
-  const keyLight = new THREE.DirectionalLight(0xffffff, 3.65);
+  const keyLight = new DirectionalLight(0xffffff, 3.65);
   keyLight.position.set(3.1, 4.9, 5.6);
   keyLight.castShadow = true;
   keyLight.shadow.mapSize.set(1024, 1024);
   scene.add(keyLight);
-  scene.add(new THREE.HemisphereLight(0xf0f5ff, 0x302016, 1.78));
-  const fill = new THREE.DirectionalLight(0xb4ccff, 1.38);
+  scene.add(new HemisphereLight(0xf0f5ff, 0x302016, 1.78));
+  const fill = new DirectionalLight(0xb4ccff, 1.38);
   fill.position.set(-3.2, 2.2, 3);
   scene.add(fill);
-  const rim = new THREE.PointLight(config.accent, 5.2, 8);
+  const rim = new PointLight(config.accent, 5.2, 8);
   rim.position.set(-2.8, 1.8, 2.6);
   scene.add(rim);
 
-  const shadowSkinMaterial = new THREE.MeshStandardMaterial({ color: config.skin, roughness: 0.68, metalness: 0.01 });
+  const shadowSkinMaterial = new MeshStandardMaterial({ color: config.skin, roughness: 0.68, metalness: 0.01 });
   shadowSkinMaterial.color.offsetHSL(0, -0.025, -0.035);
   const materials = {
-    skin: new THREE.MeshPhysicalMaterial({ color: config.skin, roughness: 0.54, metalness: 0.01, sheen: 0.22, sheenColor: new THREE.Color("#ffffff"), clearcoat: 0.04 }),
+    skin: new MeshPhysicalMaterial({ color: config.skin, roughness: 0.54, metalness: 0.01, sheen: 0.22, sheenColor: new Color("#ffffff"), clearcoat: 0.04 }),
     shadowSkin: shadowSkinMaterial,
-    hair: new THREE.MeshPhysicalMaterial({ color: config.hair, roughness: 0.68, metalness: 0.01, clearcoat: 0.08, clearcoatRoughness: 0.9 }),
-    outfit: new THREE.MeshPhysicalMaterial({ color: config.outfit, roughness: 0.38, metalness: 0.04, sheen: 0.35 }),
-    accent: new THREE.MeshStandardMaterial({ color: config.accent, emissive: config.accent, emissiveIntensity: 0.18, roughness: 0.32 }),
+    hair: new MeshPhysicalMaterial({ color: config.hair, roughness: 0.68, metalness: 0.01, clearcoat: 0.08, clearcoatRoughness: 0.9 }),
+    outfit: new MeshPhysicalMaterial({ color: config.outfit, roughness: 0.38, metalness: 0.04, sheen: 0.35 }),
+    accent: new MeshStandardMaterial({ color: config.accent, emissive: config.accent, emissiveIntensity: 0.18, roughness: 0.32 }),
   };
-  const shirtMaterial = new THREE.MeshStandardMaterial({ color: "#F5F7FA", roughness: 0.52, metalness: 0.01 });
+  const shirtMaterial = new MeshStandardMaterial({ color: "#F5F7FA", roughness: 0.52, metalness: 0.01 });
 
-  const root = new THREE.Group();
+  const root = new Group();
   root.position.y = -0.08;
   root.scale.setScalar(0.68);
   scene.add(root);
 
-  const body = new THREE.Group();
+  const body = new Group();
   body.position.y = -1.08;
   root.add(body);
 
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.96, 1.82, 48), materials.outfit);
+  const torso = new Mesh(new CylinderGeometry(0.52, 0.96, 1.82, 48), materials.outfit);
   torso.position.set(0, -0.1, 0);
   torso.scale.set(1.02, 1, 0.46);
   torso.castShadow = true;
   torso.receiveShadow = true;
   body.add(torso);
 
-  const shirt = new THREE.Mesh(new THREE.BoxGeometry(0.42, 1.36, 0.035), shirtMaterial);
+  const shirt = new Mesh(new BoxGeometry(0.42, 1.36, 0.035), shirtMaterial);
   shirt.position.set(0, 0.04, 0.45);
   shirt.castShadow = true;
   body.add(shirt);
 
-  const tie = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.86, 0.045), materials.accent);
+  const tie = new Mesh(new BoxGeometry(0.11, 0.86, 0.045), materials.accent);
   tie.position.set(0, -0.08, 0.49);
   tie.rotation.z = 0.02;
   body.add(tie);
 
-  const leftLapel = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.3, 0.05), materials.outfit);
+  const leftLapel = new Mesh(new BoxGeometry(0.12, 1.3, 0.05), materials.outfit);
   leftLapel.position.set(-0.24, 0.08, 0.52);
   leftLapel.rotation.z = -0.18;
   body.add(leftLapel);
@@ -1247,14 +1992,14 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   rightLapel.rotation.z = 0.18;
   body.add(rightLapel);
 
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.29, 0.52, 32), materials.skin);
+  const neck = new Mesh(new CylinderGeometry(0.24, 0.29, 0.52, 32), materials.skin);
   neck.position.set(0, 0.96, 0.01);
   neck.castShadow = true;
   neck.receiveShadow = true;
   body.add(neck);
 
-  const shoulderGeometry = new THREE.SphereGeometry(0.5, 36, 18);
-  const leftShoulder = new THREE.Mesh(shoulderGeometry, materials.outfit);
+  const shoulderGeometry = new SphereGeometry(0.5, 36, 18);
+  const leftShoulder = new Mesh(shoulderGeometry, materials.outfit);
   leftShoulder.position.set(-0.66, 0.26, 0.04);
   leftShoulder.scale.set(1.15, 0.34, 0.5);
   leftShoulder.castShadow = true;
@@ -1263,7 +2008,7 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   rightShoulder.position.x = 0.66;
   body.add(rightShoulder);
 
-  const leftArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.82, 8, 24), materials.outfit);
+  const leftArm = new Mesh(new CapsuleGeometry(0.2, 0.82, 8, 24), materials.outfit);
   leftArm.position.set(-0.86, -0.42, -0.06);
   leftArm.rotation.z = 0.08;
   leftArm.scale.set(0.72, 0.74, 0.48);
@@ -1274,17 +2019,17 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   rightArm.rotation.z = -0.08;
   body.add(rightArm);
 
-  const head = new THREE.Group();
+  const head = new Group();
   head.position.y = 0.72;
   root.add(head);
 
-  const face = new THREE.Mesh(new THREE.SphereGeometry(0.86, 96, 64), materials.skin);
+  const face = new Mesh(new SphereGeometry(0.86, 96, 64), materials.skin);
   face.scale.set(0.8, 0.98, 0.66);
   face.castShadow = true;
   face.receiveShadow = true;
   head.add(face);
 
-  const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.34, 48, 24), materials.skin);
+  const jaw = new Mesh(new SphereGeometry(0.34, 48, 24), materials.skin);
   jaw.position.set(0, -0.68, 0.28);
   jaw.scale.set(1.1, 0.34, 0.46);
   jaw.castShadow = false;
@@ -1292,7 +2037,7 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   jaw.visible = false;
   head.add(jaw);
 
-  const leftEar = new THREE.Mesh(new THREE.SphereGeometry(0.17, 28, 20), shadowSkinMaterial);
+  const leftEar = new Mesh(new SphereGeometry(0.17, 28, 20), shadowSkinMaterial);
   leftEar.position.set(-0.65, -0.06, -0.04);
   leftEar.scale.set(0.48, 0.96, 0.24);
   leftEar.castShadow = true;
@@ -1301,8 +2046,8 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   rightEar.position.x = 0.65;
   head.add(rightEar);
 
-  const hairParts: THREE.Object3D[] = [];
-  const hairCap = new THREE.Mesh(new THREE.SphereGeometry(0.88, 96, 38, 0, Math.PI * 2, 0, Math.PI * 0.5), materials.hair);
+  const hairParts: Object3D[] = [];
+  const hairCap = new Mesh(new SphereGeometry(0.88, 96, 38, 0, Math.PI * 2, 0, Math.PI * 0.5), materials.hair);
   hairCap.name = "hair-cap";
   hairCap.position.set(0, 0.43, -0.06);
   hairCap.scale.set(0.8, 0.68, 0.66);
@@ -1310,7 +2055,7 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   head.add(hairCap);
   hairParts.push(hairCap);
 
-  const crownHair = new THREE.Mesh(new THREE.SphereGeometry(0.42, 40, 18), materials.hair);
+  const crownHair = new Mesh(new SphereGeometry(0.42, 40, 18), materials.hair);
   crownHair.name = "hair-cap";
   crownHair.position.set(0.04, 0.6, -0.05);
   crownHair.scale.set(1.04, 0.32, 0.78);
@@ -1318,7 +2063,7 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   head.add(crownHair);
   hairParts.push(crownHair);
 
-  const shortHairline = new THREE.Mesh(new THREE.CapsuleGeometry(0.018, 0.72, 6, 18), materials.hair);
+  const shortHairline = new Mesh(new CapsuleGeometry(0.018, 0.72, 6, 18), materials.hair);
   shortHairline.name = "hair-short";
   shortHairline.position.set(0, 0.39, 0.49);
   shortHairline.rotation.z = Math.PI / 2;
@@ -1327,7 +2072,7 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   head.add(shortHairline);
   hairParts.push(shortHairline);
 
-  const leftHair = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.52, 8, 20), materials.hair);
+  const leftHair = new Mesh(new CapsuleGeometry(0.12, 0.52, 8, 20), materials.hair);
   leftHair.name = "hair-side";
   leftHair.position.set(-0.57, -0.1, 0.08);
   leftHair.rotation.z = 0.08;
@@ -1342,7 +2087,7 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   head.add(rightHair);
   hairParts.push(rightHair);
 
-  const bun = new THREE.Mesh(new THREE.SphereGeometry(0.24, 28, 20), materials.hair);
+  const bun = new Mesh(new SphereGeometry(0.24, 28, 20), materials.hair);
   bun.name = "hair-bun";
   bun.position.set(0, 0.26, -0.64);
   bun.scale.set(1.18, 1.04, 0.9);
@@ -1350,9 +2095,9 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   head.add(bun);
   hairParts.push(bun);
 
-  const eyeMaterial = new THREE.MeshStandardMaterial({ color: "#F8FAFC", roughness: 0.14 });
-  const pupilMaterial = new THREE.MeshStandardMaterial({ color: "#101113", roughness: 0.22 });
-  const irisMaterial = new THREE.MeshStandardMaterial({ color: "#4B6477", roughness: 0.18 });
+  const eyeMaterial = new MeshStandardMaterial({ color: "#F8FAFC", roughness: 0.14 });
+  const pupilMaterial = new MeshStandardMaterial({ color: "#101113", roughness: 0.22 });
+  const irisMaterial = new MeshStandardMaterial({ color: "#4B6477", roughness: 0.18 });
   const leftEye = createEye(eyeMaterial, pupilMaterial);
   const leftIris = createIris(irisMaterial);
   leftEye.add(leftIris);
@@ -1380,14 +2125,14 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   rightBrow.rotation.z = 0.06;
   head.add(rightBrow);
 
-  const glasses = new THREE.Group();
+  const glasses = new Group();
   const glassesRound = createGlasses("round");
   const glassesSquare = createGlasses("square");
   const glassesThin = createGlasses("thin");
   glasses.add(glassesRound, glassesSquare, glassesThin);
   head.add(glasses);
 
-  const mouth = createMemojiMouth(new THREE.MeshStandardMaterial({ color: "#2A171D", roughness: 0.42 }));
+  const mouth = createMemojiMouth(new MeshStandardMaterial({ color: "#2A171D", roughness: 0.42 }));
   mouth.position.set(0, -0.38, 0.646);
   mouth.scale.set(1, 1, 1);
   head.add(mouth);
@@ -1395,24 +2140,24 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   const lipMaterial = shadowSkinMaterial.clone();
   lipMaterial.transparent = true;
   lipMaterial.opacity = 0.34;
-  const lowerLip = new THREE.Mesh(new THREE.CapsuleGeometry(0.006, 0.15, 4, 16), lipMaterial);
+  const lowerLip = new Mesh(new CapsuleGeometry(0.006, 0.15, 4, 16), lipMaterial);
   lowerLip.position.set(0, -0.423, 0.586);
   lowerLip.rotation.z = Math.PI / 2;
   lowerLip.scale.set(0.9, 0.26, 0.22);
   head.add(lowerLip);
 
-  const facialHair = new THREE.Group();
+  const facialHair = new Group();
   const { mustache, beard } = createFacialHair(materials.hair);
   facialHair.add(mustache, beard);
   head.add(facialHair);
 
-  const nose = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.055, 8, 18), shadowSkinMaterial);
+  const nose = new Mesh(new CapsuleGeometry(0.035, 0.055, 8, 18), shadowSkinMaterial);
   nose.position.set(0, -0.11, 0.606);
   nose.scale.set(0.82, 0.96, 0.5);
   nose.castShadow = true;
   head.add(nose);
-  const nostrilMaterial = new THREE.MeshBasicMaterial({ color: "#2A171D", transparent: true, opacity: 0.36, depthWrite: false });
-  const leftNostril = new THREE.Mesh(new THREE.CircleGeometry(0.008, 14), nostrilMaterial);
+  const nostrilMaterial = new MeshBasicMaterial({ color: "#2A171D", transparent: true, opacity: 0.36, depthWrite: false });
+  const leftNostril = new Mesh(new CircleGeometry(0.008, 14), nostrilMaterial);
   leftNostril.position.set(-0.022, -0.147, 0.646);
   leftNostril.scale.set(1.2, 0.7, 1);
   head.add(leftNostril);
@@ -1423,7 +2168,7 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   const noseBridgeMaterial = shadowSkinMaterial.clone();
   noseBridgeMaterial.transparent = true;
   noseBridgeMaterial.opacity = 0.42;
-  const noseBridge = new THREE.Mesh(new THREE.CapsuleGeometry(0.009, 0.17, 6, 16), noseBridgeMaterial);
+  const noseBridge = new Mesh(new CapsuleGeometry(0.009, 0.17, 6, 16), noseBridgeMaterial);
   noseBridge.position.set(0, 0.02, 0.588);
   noseBridge.scale.set(0.72, 1, 0.32);
   noseBridge.castShadow = false;
@@ -1432,13 +2177,13 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   const chinShadowMaterial = shadowSkinMaterial.clone();
   chinShadowMaterial.transparent = true;
   chinShadowMaterial.opacity = 0.18;
-  const chinShadow = new THREE.Mesh(new THREE.CapsuleGeometry(0.008, 0.18, 4, 16), chinShadowMaterial);
+  const chinShadow = new Mesh(new CapsuleGeometry(0.008, 0.18, 4, 16), chinShadowMaterial);
   chinShadow.position.set(0, -0.66, 0.51);
   chinShadow.rotation.z = Math.PI / 2;
   chinShadow.scale.set(0.72, 0.22, 0.18);
   head.add(chinShadow);
 
-  const cheekMaterial = new THREE.MeshBasicMaterial({ color: "#F2B49D", transparent: true, opacity: 0.16, depthWrite: false });
+  const cheekMaterial = new MeshBasicMaterial({ color: "#F2B49D", transparent: true, opacity: 0.16, depthWrite: false });
   const leftCheek = createCheek(cheekMaterial);
   leftCheek.position.set(-0.32, -0.18, 0.565);
   head.add(leftCheek);
@@ -1446,9 +2191,9 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   rightCheek.position.set(0.32, -0.18, 0.565);
   head.add(rightCheek);
 
-  const floor = new THREE.Mesh(
-    new THREE.CircleGeometry(3.1, 96),
-    new THREE.MeshStandardMaterial({ color: "#111417", roughness: 0.9, metalness: 0.02 })
+  const floor = new Mesh(
+    new CircleGeometry(3.1, 96),
+    new MeshStandardMaterial({ color: "#111417", roughness: 0.9, metalness: 0.02 })
   );
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -2.12;
@@ -1501,8 +2246,8 @@ function createAvatarScene(container: HTMLDivElement, config: AvatarConfig): Ava
   return handles;
 }
 
-function createPremiumAvatarBillboard(scene: THREE.Scene, fallbackRoot: THREE.Group, config: AvatarConfig) {
-  const premiumAvatar = new THREE.Group();
+function createPremiumAvatarBillboard(scene: Scene, fallbackRoot: Group, config: AvatarConfig) {
+  const premiumAvatar = new Group();
   premiumAvatar.position.set(0, 0.28, 0.72);
   premiumAvatar.visible = false;
   scene.add(premiumAvatar);
@@ -1516,12 +2261,12 @@ function createPremiumAvatarBillboard(scene: THREE.Scene, fallbackRoot: THREE.Gr
     throw new Error("Avatar canvas context is unavailable.");
   }
   context.clearRect(0, 0, canvas.width, canvas.height);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  const texture = new CanvasTexture(canvas);
+  texture.colorSpace = SRGBColorSpace;
   texture.anisotropy = 8;
   const premiumTextureState: PremiumAvatarTextureState = { image: null, photoImage: null, photoSource: null, canvas, context, texture };
 
-  const material = new THREE.MeshBasicMaterial({
+  const material = new MeshBasicMaterial({
     map: texture,
     transparent: true,
     alphaTest: 0.04,
@@ -1529,7 +2274,7 @@ function createPremiumAvatarBillboard(scene: THREE.Scene, fallbackRoot: THREE.Gr
     toneMapped: true,
   });
 
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(4.32, 3.46), material);
+  const plane = new Mesh(new PlaneGeometry(4.32, 3.46), material);
   plane.visible = false;
   premiumAvatar.add(plane);
 
@@ -1546,8 +2291,8 @@ function createPremiumAvatarBillboard(scene: THREE.Scene, fallbackRoot: THREE.Gr
   };
   image.src = "/avatar/premium-business-avatar.png";
 
-  const glowMaterial = new THREE.MeshBasicMaterial({ color: "#20E3B2", transparent: true, opacity: 0.08, depthWrite: false });
-  const glow = new THREE.Mesh(new THREE.CircleGeometry(1.55, 80), glowMaterial);
+  const glowMaterial = new MeshBasicMaterial({ color: "#20E3B2", transparent: true, opacity: 0.08, depthWrite: false });
+  const glow = new Mesh(new CircleGeometry(1.55, 80), glowMaterial);
   glow.position.set(0, -1.46, -0.04);
   glow.scale.set(1.9, 0.34, 1);
   premiumAvatar.add(glow);
@@ -1887,10 +2632,10 @@ function getBrowStyleTuning(browStyle: BrowStyle) {
 }
 
 function createGlasses(style: Exclude<GlassesStyle, "none">) {
-  const group = new THREE.Group();
+  const group = new Group();
 
-  const material = new THREE.MeshStandardMaterial({ color: style === "round" ? "#F4C84A" : style === "thin" ? "#31343A" : "#17181C", roughness: 0.24, metalness: style === "round" ? 0.55 : 0.35 });
-  const lensMaterial = new THREE.MeshPhysicalMaterial({
+  const material = new MeshStandardMaterial({ color: style === "round" ? "#F4C84A" : style === "thin" ? "#31343A" : "#17181C", roughness: 0.24, metalness: style === "round" ? 0.55 : 0.35 });
+  const lensMaterial = new MeshPhysicalMaterial({
     color: "#DDE7F5",
     transparent: true,
     opacity: style === "thin" ? 0.11 : 0.16,
@@ -1906,7 +2651,7 @@ function createGlasses(style: Exclude<GlassesStyle, "none">) {
   } else {
     const rimTube = style === "thin" ? 0.0045 : 0.0085;
     const rimRadius = style === "round" ? 0.112 : 0.095;
-    const leftRim = new THREE.Mesh(new THREE.TorusGeometry(rimRadius, rimTube, 8, 42), material);
+    const leftRim = new Mesh(new TorusGeometry(rimRadius, rimTube, 8, 42), material);
     leftRim.position.x = -0.25;
     leftRim.scale.set(style === "round" ? 1.05 : 1.32, style === "round" ? 1 : 0.72, 1);
     group.add(leftRim);
@@ -1914,7 +2659,7 @@ function createGlasses(style: Exclude<GlassesStyle, "none">) {
     rightRim.position.x = 0.25;
     group.add(rightRim);
 
-    const leftLens = new THREE.Mesh(new THREE.CircleGeometry(style === "round" ? 0.102 : 0.092, 42), lensMaterial);
+    const leftLens = new Mesh(new CircleGeometry(style === "round" ? 0.102 : 0.092, 42), lensMaterial);
     leftLens.position.set(-0.25, 0, -0.004);
     leftLens.scale.set(style === "round" ? 1.06 : 1.32, style === "round" ? 1 : 0.72, 1);
     group.add(leftLens);
@@ -1923,12 +2668,12 @@ function createGlasses(style: Exclude<GlassesStyle, "none">) {
     group.add(rightLens);
   }
 
-  const bridge = new THREE.Mesh(new THREE.CapsuleGeometry(style === "thin" ? 0.004 : 0.007, style === "round" ? 0.18 : 0.14, 4, 12), material);
+  const bridge = new Mesh(new CapsuleGeometry(style === "thin" ? 0.004 : 0.007, style === "round" ? 0.18 : 0.14, 4, 12), material);
   bridge.rotation.z = Math.PI / 2;
   group.add(bridge);
 
   const templeRadius = style === "thin" ? 0.004 : 0.006;
-  const leftTemple = new THREE.Mesh(new THREE.CapsuleGeometry(templeRadius, 0.22, 4, 10), material);
+  const leftTemple = new Mesh(new CapsuleGeometry(templeRadius, 0.22, 4, 10), material);
   leftTemple.position.set(style === "round" ? -0.39 : -0.36, 0.01, -0.03);
   leftTemple.rotation.y = 0.95;
   group.add(leftTemple);
@@ -1940,8 +2685,8 @@ function createGlasses(style: Exclude<GlassesStyle, "none">) {
   return group;
 }
 
-function addSquareLens(group: THREE.Group, x: number, material: THREE.Material, lensMaterial: THREE.Material) {
-  const lens = new THREE.Mesh(new THREE.ShapeGeometry(createRoundedRectShape(0.25, 0.14, 0.03)), lensMaterial);
+function addSquareLens(group: Group, x: number, material: Material, lensMaterial: Material) {
+  const lens = new Mesh(new ShapeGeometry(createRoundedRectShape(0.25, 0.14, 0.03)), lensMaterial);
   lens.position.set(x, 0, -0.004);
   group.add(lens);
 
@@ -1959,14 +2704,14 @@ function addSquareLens(group: THREE.Group, x: number, material: THREE.Material, 
   group.add(right);
 }
 
-function createFrameBar(material: THREE.Material, length: number, horizontal: boolean) {
-  const bar = new THREE.Mesh(new THREE.CapsuleGeometry(0.0065, length, 4, 10), material);
+function createFrameBar(material: Material, length: number, horizontal: boolean) {
+  const bar = new Mesh(new CapsuleGeometry(0.0065, length, 4, 10), material);
   if (horizontal) bar.rotation.z = Math.PI / 2;
   return bar;
 }
 
 function createRoundedRectShape(width: number, height: number, radius: number) {
-  const shape = new THREE.Shape();
+  const shape = new Shape();
   const x = -width / 2;
   const y = -height / 2;
   shape.moveTo(x + radius, y);
@@ -2004,55 +2749,55 @@ function rgbToHex(color: RgbColor) {
   return `#${r}${g}${b}`;
 }
 
-function createEye(eyeMaterial: THREE.Material, pupilMaterial: THREE.Material) {
-  const eye = new THREE.Group();
-  const white = new THREE.Mesh(new THREE.CircleGeometry(0.082, 48), eyeMaterial);
+function createEye(eyeMaterial: Material, pupilMaterial: Material) {
+  const eye = new Group();
+  const white = new Mesh(new CircleGeometry(0.082, 48), eyeMaterial);
   white.scale.set(1.28, 0.7, 1);
   eye.add(white);
-  const pupil = new THREE.Mesh(new THREE.CircleGeometry(0.018, 24), pupilMaterial);
+  const pupil = new Mesh(new CircleGeometry(0.018, 24), pupilMaterial);
   pupil.position.z = 0.009;
   pupil.scale.set(1, 0.92, 1);
   eye.add(pupil);
-  const catchLight = new THREE.Mesh(new THREE.CircleGeometry(0.006, 14), new THREE.MeshBasicMaterial({ color: "#FFFFFF", transparent: true, opacity: 0.92 }));
+  const catchLight = new Mesh(new CircleGeometry(0.006, 14), new MeshBasicMaterial({ color: "#FFFFFF", transparent: true, opacity: 0.92 }));
   catchLight.position.set(-0.007, 0.008, 0.012);
   eye.add(catchLight);
   return eye;
 }
 
-function createIris(material: THREE.Material) {
-  const iris = new THREE.Mesh(new THREE.CircleGeometry(0.034, 28), material);
+function createIris(material: Material) {
+  const iris = new Mesh(new CircleGeometry(0.034, 28), material);
   iris.position.z = 0.006;
   iris.scale.set(1, 0.86, 1);
   return iris;
 }
 
-function createBrow(material: THREE.Material) {
-  const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.24, 6, 18), material);
+function createBrow(material: Material) {
+  const brow = new Mesh(new CapsuleGeometry(0.022, 0.24, 6, 18), material);
   brow.rotation.z = Math.PI / 2;
   brow.scale.z = 0.5;
   return brow;
 }
 
-function createEyelid(material: THREE.Material) {
-  const lid = new THREE.Mesh(new THREE.CapsuleGeometry(0.01, 0.12, 4, 12), material);
+function createEyelid(material: Material) {
+  const lid = new Mesh(new CapsuleGeometry(0.01, 0.12, 4, 12), material);
   lid.rotation.z = Math.PI / 2;
   lid.scale.set(1.2, 0.22, 0.18);
   return lid;
 }
 
-function createMemojiMouth(material: THREE.Material) {
-  const curve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-0.13, 0.006, 0),
-    new THREE.Vector3(-0.04, -0.008, 0),
-    new THREE.Vector3(0.04, -0.008, 0),
-    new THREE.Vector3(0.13, 0.006, 0),
+function createMemojiMouth(material: Material) {
+  const curve = new CatmullRomCurve3([
+    new Vector3(-0.13, 0.006, 0),
+    new Vector3(-0.04, -0.008, 0),
+    new Vector3(0.04, -0.008, 0),
+    new Vector3(0.13, 0.006, 0),
   ]);
-  return new THREE.Mesh(new THREE.TubeGeometry(curve, 28, 0.01, 8, false), material);
+  return new Mesh(new TubeGeometry(curve, 28, 0.01, 8, false), material);
 }
 
-function createFacialHair(material: THREE.Material) {
-  const mustache = new THREE.Group();
-  const leftMustache = new THREE.Mesh(new THREE.CapsuleGeometry(0.014, 0.145, 6, 18), material);
+function createFacialHair(material: Material) {
+  const mustache = new Group();
+  const leftMustache = new Mesh(new CapsuleGeometry(0.014, 0.145, 6, 18), material);
   leftMustache.position.set(-0.07, -0.255, 0.642);
   leftMustache.rotation.z = Math.PI / 2 - 0.12;
   leftMustache.scale.z = 0.34;
@@ -2062,8 +2807,8 @@ function createFacialHair(material: THREE.Material) {
   rightMustache.rotation.z = Math.PI / 2 + 0.12;
   mustache.add(rightMustache);
 
-  const beard = new THREE.Group();
-  const beardMain = new THREE.Mesh(createBeardShapeGeometry(), material);
+  const beard = new Group();
+  const beardMain = new Mesh(createBeardShapeGeometry(), material);
   beardMain.position.set(0, -0.36, 0.62);
   beard.add(beardMain);
 
@@ -2073,38 +2818,38 @@ function createFacialHair(material: THREE.Material) {
 }
 
 function createBeardShapeGeometry() {
-  const shape = new THREE.Shape();
+  const shape = new Shape();
   shape.moveTo(-0.28, -0.02);
   shape.bezierCurveTo(-0.34, -0.14, -0.3, -0.33, -0.16, -0.43);
   shape.bezierCurveTo(-0.08, -0.49, 0.08, -0.49, 0.16, -0.43);
   shape.bezierCurveTo(0.3, -0.33, 0.34, -0.14, 0.28, -0.02);
   shape.bezierCurveTo(0.2, -0.08, 0.1, -0.1, 0, -0.1);
   shape.bezierCurveTo(-0.1, -0.1, -0.2, -0.08, -0.28, -0.02);
-  const geometry = new THREE.ShapeGeometry(shape, 32);
+  const geometry = new ShapeGeometry(shape, 32);
   geometry.computeVertexNormals();
   return geometry;
 }
 
-function createCheek(material: THREE.Material) {
-  const cheek = new THREE.Mesh(new THREE.CircleGeometry(0.072, 32), material);
+function createCheek(material: Material) {
+  const cheek = new Mesh(new CircleGeometry(0.072, 32), material);
   cheek.scale.set(1.55, 0.68, 1);
   return cheek;
 }
 
-function createBackdrop(scene: THREE.Scene, accentMaterial: THREE.MeshStandardMaterial) {
+function createBackdrop(scene: Scene, accentMaterial: MeshStandardMaterial) {
   const lineMaterial = accentMaterial.clone();
   lineMaterial.transparent = true;
   lineMaterial.opacity = 0.18;
   lineMaterial.emissiveIntensity = 0.08;
 
   for (let index = 0; index < 5; index += 1) {
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.01, 0.012), lineMaterial);
+    const rail = new Mesh(new BoxGeometry(3.4, 0.01, 0.012), lineMaterial);
     rail.position.set(index % 2 ? 1.25 : -1.25, -1.05 - index * 0.24, -2.35 - index * 0.26);
     rail.rotation.x = -Math.PI / 2.8;
     scene.add(rail);
   }
 
-  const leftPanel = new THREE.Mesh(new THREE.BoxGeometry(0.02, 1.6, 1.1), lineMaterial);
+  const leftPanel = new Mesh(new BoxGeometry(0.02, 1.6, 1.1), lineMaterial);
   leftPanel.position.set(-3.25, 0.8, -3.4);
   leftPanel.rotation.y = -0.22;
   scene.add(leftPanel);
@@ -2297,8 +3042,8 @@ function getBlendshapeScore(categories: Category[], name: string) {
 function estimatePoseFromMatrix(matrix: Matrix | undefined) {
   if (!matrix?.data || matrix.data.length < 16) return null;
 
-  const rotationMatrix = new THREE.Matrix4().fromArray(matrix.data);
-  const euler = new THREE.Euler().setFromRotationMatrix(rotationMatrix, "XYZ");
+  const rotationMatrix = new Matrix4().fromArray(matrix.data);
+  const euler = new Euler().setFromRotationMatrix(rotationMatrix, "XYZ");
   const yaw = clamp(-euler.y, -0.9, 0.9);
   const pitch = clamp(euler.x, -0.65, 0.65);
   const roll = clamp(-euler.z, -0.55, 0.55);
@@ -2488,9 +3233,9 @@ function sampleCameraFrame(
 }
 
 function makeSceneBackground(background: MeetingBackground) {
-  if (background === "office") return new THREE.Color("#0E1511");
-  if (background === "dark") return new THREE.Color("#090712");
-  return new THREE.Color("#071016");
+  if (background === "office") return new Color("#0E1511");
+  if (background === "dark") return new Color("#090712");
+  return new Color("#071016");
 }
 
 function buildAvatarVideoPrompt(script: string, motion: string) {
@@ -2514,6 +3259,32 @@ function dataUrlToReferenceImage(dataUrl: string) {
   };
 }
 
+async function imageUrlToReferenceImage(imageUrl: string, filename: string) {
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error("Не удалось загрузить выбранный референс.");
+  }
+
+  const blob = await response.blob();
+  if (!blob.type.startsWith("image/")) {
+    throw new Error("Референс должен быть изображением.");
+  }
+
+  return {
+    ...dataUrlToReferenceImage(await blobToDataUrl(blob)),
+    filename,
+  };
+}
+
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Не удалось прочитать изображение."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function imageExtension(mimeType: string) {
   if (mimeType.toLowerCase() === "image/png") return "png";
   if (mimeType.toLowerCase() === "image/webp") return "webp";
@@ -2527,6 +3298,73 @@ function avatarRenderStatusLabel(status: MediaGenerationJobApiRecord["status"]) 
   if (status === "cancelled") return "Остановлено";
   if (status === "refunded") return "Кредиты возвращены";
   return "Ошибка";
+}
+
+function upsertExpressionRender(
+  current: AvatarExpressionRender[],
+  expressionId: AvatarExpressionId,
+  patch: Partial<AvatarExpressionRender>
+) {
+  const existing = current.find((item) => item.expressionId === expressionId);
+  if (existing) {
+    return current.map((item) => item.expressionId === expressionId ? { ...item, ...patch, expressionId } : item);
+  }
+
+  return [...current, { expressionId, ...patch }];
+}
+
+function buildAvatarImagePrompt(
+  preset: AvatarReferencePreset,
+  config: AvatarConfig,
+  sourceMode: "identity" | "style",
+  brief: string
+) {
+  const source = sourceMode === "identity"
+    ? "The first uploaded image is the identity reference. Preserve the person's recognizable facial features, face shape, hairstyle direction, glasses if present, age, and natural personality. The second image is a visual-style reference only; never copy that person's identity."
+    : "The uploaded image is a visual-style reference only. Create a new original person and never copy the reference identity.";
+  const cleanBrief = brief.trim();
+
+  return [
+    "Create a beautiful premium AI avatar for nomduchat.",
+    source,
+    `Visual target: ${preset.promptNotes}.`,
+    "Composition: clean square 1:1 portrait, head and shoulders, face large in frame, direct eye contact, elegant clothing, controlled studio background.",
+    "Quality bar: polished profile avatar, coherent facial geometry, natural expression, intentional lighting, clean silhouette, no distorted hands or duplicated features.",
+    cleanBrief ? `User direction: ${cleanBrief}.` : "",
+    `Local avatar settings: skin ${config.skin}, hair ${config.hair}, outfit ${config.outfit}, accent ${config.accent}, face ${faceShapeLabels[config.faceShape]}, eyes ${eyeStyleLabels[config.eyeStyle]}, brows ${browStyleLabels[config.browStyle]}, glasses ${glassesStyleLabels[config.glassesStyle]}, hair style ${hairStyleLabels[config.hairStyle]}.`,
+    "Output must be a clean reusable avatar image suitable for profile, chat assistant, onboarding, and later expression variants.",
+    "No text, no logos, no watermark, no UI, no unchanged source photo, no busy background.",
+  ].filter(Boolean).join("\n");
+}
+
+function buildAvatarExpressionPrompt(preset: AvatarReferencePreset, expression: AvatarExpressionPreset) {
+  return [
+    "Edit the provided avatar image into a new expression variant.",
+    "Preserve the same character identity, face, hair, glasses, outfit, color palette, camera angle, selected visual style, and square portrait crop.",
+    "Do not change gender, age, clothing, background family, or character proportions.",
+    `Base reference style: ${preset.promptNotes}.`,
+    `Requested expression: ${expression.prompt}.`,
+    "No text, no logo, no watermark, no extra character.",
+  ].join("\n");
+}
+
+async function blobToProfileAvatarDataUrl(blob: Blob) {
+  const sourceUrl = URL.createObjectURL(blob);
+  try {
+    const image = await loadImageFromUrl(sourceUrl);
+    const size = 512;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas unavailable.");
+    context.fillStyle = "#050505";
+    context.fillRect(0, 0, size, size);
+    drawImageCover(context, image, 0, 0, size, size);
+    return canvas.toDataURL("image/jpeg", 0.84);
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
 }
 
 function readStoredConfig(): AvatarConfig {
@@ -2766,7 +3604,7 @@ function sampleCanvasRefGlobal() {
 
 let globalSampleCanvas: HTMLCanvasElement | null = null;
 let globalAnalyser: AnalyserNode | null = null;
-let globalAudioData: Uint8Array | null = null;
+let globalAudioData: Uint8Array<ArrayBuffer> | null = null;
 
 function analyserRefGlobal() {
   return globalAnalyser;

@@ -20,11 +20,13 @@ export function toAssistantMessage(response: ChatApiResponse, fallback: string):
 
 export function toChatMessage(message: ChatApiMessage): Message {
   const generationJob = coerceGenerationJob(message.metadata?.generationJob);
+  const imageReferenceJob = coerceGenerationJob(message.metadata?.imageReferenceJob);
   return {
     id: message.id,
     text: generationJob ? generationStatusText(generationJob) : message.content,
     sender: message.role === "user" ? "user" : "ai",
     generationJob,
+    imageReferenceJob,
   };
 }
 
@@ -38,7 +40,7 @@ export function toApiAttachment(file: AttachedFile): ChatAttachmentInput {
   };
 }
 
-function coerceGenerationJob(value: unknown): MediaGenerationJobApiRecord | undefined {
+export function coerceGenerationJob(value: unknown): MediaGenerationJobApiRecord | undefined {
   if (!value || typeof value !== "object") return undefined;
   const record = value as Partial<MediaGenerationJobApiRecord>;
   if (

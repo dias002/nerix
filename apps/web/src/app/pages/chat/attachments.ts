@@ -31,7 +31,7 @@ export async function readAttachment(file: File): Promise<AttachedFile> {
   }
 }
 
-async function readTextContent(file: File) {
+async function readTextContent(file: Blob) {
   try {
     if (typeof file.text === "function") {
       return await file.text();

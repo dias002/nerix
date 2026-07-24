@@ -1,5 +1,6 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router";
+import { countryCodes } from "@nomduchat/shared";
 import { ArrowLeft, Camera, Eye, EyeOff, Globe, LoaderCircle, Lock, Mail, User, X } from "lucide-react";
 import { startOAuth, toPublicApiError } from "../api";
 import { useAuth } from "../auth";
@@ -7,7 +8,7 @@ import TurnstileBox, { isTurnstileEnabled } from "../components/TurnstileBox";
 import { useLanguage } from "../i18n";
 
 type AuthMode = "login" | "register";
-type BillingCountry = "KZ" | "RU";
+type AuthCountry = string;
 type OAuthProvider = "google" | "vk" | "yandex";
 
 type SocialAuthProvider = {
@@ -39,13 +40,14 @@ export default function AuthPage() {
     return window.localStorage.getItem("nomduchat-registration-avatar");
   });
   const [passwordVisible, setPasswordVisible] = useState(false);
-  const [authCountry, setAuthCountry] = useState<BillingCountry>(() => readStoredBillingCountry());
+  const [authCountry, setAuthCountry] = useState<AuthCountry>(() => readStoredBillingCountry());
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const turnstileEnabled = isTurnstileEnabled();
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
-  const socialAuthProviders = useMemo(() => getSocialAuthProviders(authCountry, t.auth), [authCountry, t.auth]);
+  const normalizedAuthCountry = normalizeAuthCountry(authCountry);
+  const socialAuthProviders = useMemo(() => getSocialAuthProviders(normalizedAuthCountry, t.auth), [normalizedAuthCountry, t.auth]);
 
   if (!isLoading && isAuthenticated) {
     return <Navigate to={from} replace />;
@@ -70,17 +72,18 @@ export default function AuthPage() {
 
     try {
       if (mode === "register") {
-        window.localStorage.setItem("nomduchat-country", authCountry);
+        window.localStorage.setItem("nomduchat-country", normalizedAuthCountry);
         await register({
           name: name.trim() || undefined,
           email,
           password,
-          country: authCountry,
+          country: normalizedAuthCountry,
           language: authLanguage,
+          avatarDataUrl: registrationAvatar ?? undefined,
+          generateAiAvatar: Boolean(registrationAvatar),
           turnstileToken: turnstileToken ?? undefined,
         });
         if (registrationAvatar) {
-          window.localStorage.setItem("nomduchat-profile-avatar-draft", registrationAvatar);
           window.localStorage.removeItem("nomduchat-registration-avatar");
         }
       } else {
@@ -101,7 +104,7 @@ export default function AuthPage() {
     setPending(true);
 
     try {
-      const response = await startOAuth(provider, from, authCountry);
+      const response = await startOAuth(provider, from, normalizedAuthCountry === "RU" ? "RU" : "KZ");
       window.location.href = response.authorizationUrl;
     } catch (err) {
       setError(toPublicApiError(err, t.auth.error));
@@ -216,8 +219,10 @@ export default function AuthPage() {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium text-white">Аватар профиля</div>
-                        <div className="mt-0.5 text-xs text-gray-600">Фото появится в личном кабинете на этом устройстве.</div>
+                        <div className="text-sm font-medium text-white">AI-аватар</div>
+                        <div className="mt-0.5 text-xs text-gray-600">
+                          Необязательно. Если добавите фото, мы бесплатно сделаем аватар в фирменном 3D-стиле.
+                        </div>
                       </div>
                       {registrationAvatar ? (
                         <button
@@ -236,8 +241,8 @@ export default function AuthPage() {
                     </div>
                     <label className="mt-3 inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white">
                       <Camera className="h-4 w-4" strokeWidth={1.7} />
-                      Выбрать фото
-                      <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+                      Сделать/выбрать фото
+                      <input type="file" accept="image/*" capture="user" className="hidden" onChange={handleAvatarChange} />
                     </label>
                   </div>
 
@@ -261,23 +266,27 @@ export default function AuthPage() {
                 <span className="mb-1.5 block text-xs text-gray-500">{t.auth.country}</span>
                 <span className="flex items-center gap-2 rounded-xl border border-white/10 bg-black px-3 focus-within:border-white/25">
                   <Globe className="h-4 w-4 text-gray-500" strokeWidth={1.7} />
-                  <select
+                  <input
                     value={authCountry}
                     onChange={(event) => {
-                      const nextCountry = event.target.value === "RU" ? "RU" : "KZ";
+                      const nextCountry = event.target.value.toUpperCase().slice(0, 2);
                       setAuthCountry(nextCountry);
-                      window.localStorage.setItem("nomduchat-country", nextCountry);
+                      if (countryCodes.includes(nextCountry as (typeof countryCodes)[number])) {
+                        window.localStorage.setItem("nomduchat-country", nextCountry);
+                      }
                     }}
+                    list="auth-country-options"
                     required
-                    className="h-11 min-w-0 flex-1 appearance-none bg-transparent text-sm text-white outline-none"
-                  >
-                    <option className="bg-black text-white" value="KZ">
-                      {t.auth.countryKazakhstan}
-                    </option>
-                    <option className="bg-black text-white" value="RU">
-                      {t.auth.countryRussia}
-                    </option>
-                  </select>
+                    className="h-11 min-w-0 flex-1 bg-transparent text-sm text-white outline-none"
+                    placeholder="KZ"
+                  />
+                  <datalist id="auth-country-options">
+                    {countryCodes.map((code) => (
+                      <option key={code} value={code}>
+                        {countryLabel(code)}
+                      </option>
+                    ))}
+                  </datalist>
                 </span>
                 <span className="mt-1.5 block text-xs text-gray-600">{t.auth.countryHint}</span>
               </label>
@@ -371,13 +380,13 @@ export default function AuthPage() {
   );
 }
 
-function readStoredBillingCountry(): BillingCountry {
+function readStoredBillingCountry(): AuthCountry {
   if (typeof window === "undefined") return "KZ";
-  return window.localStorage.getItem("nomduchat-country") === "RU" ? "RU" : "KZ";
+  return normalizeAuthCountry(window.localStorage.getItem("nomduchat-country") ?? "KZ");
 }
 
 function getSocialAuthProviders(
-  country: BillingCountry,
+  country: AuthCountry,
   authLabels: { google: string; vk: string }
 ): SocialAuthProvider[] {
   if (country === "RU") {
@@ -397,4 +406,18 @@ function getSocialAuthProviders(
 
 function formatVkLabel(label: string) {
   return label.replace(/^VK\s*/i, "") || label;
+}
+
+function normalizeAuthCountry(value: string): AuthCountry {
+  const normalized = value.trim().toUpperCase();
+  return countryCodes.includes(normalized as (typeof countryCodes)[number]) ? normalized : "KZ";
+}
+
+function countryLabel(code: AuthCountry) {
+  if (code === "KZ") return "KZ · Казахстан";
+  if (code === "RU") return "RU · Россия";
+  if (code === "US") return "US · United States";
+  if (code === "AE") return "AE · UAE";
+  if (code === "TR") return "TR · Türkiye";
+  return code;
 }

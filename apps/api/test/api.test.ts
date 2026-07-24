@@ -3,6 +3,7 @@ import test from "node:test";
 import { config } from "../src/config.js";
 import type { DatabaseClient, DatabaseQueryResult } from "../src/database/index.js";
 import type { PasswordResetMailer, PasswordResetMailInput } from "../src/modules/auth/password-reset-mailer.js";
+import type { MailingTransport, SendMassEmailInput } from "../src/modules/mailings/smtp-bz.client.js";
 import { AbuseGuardService, InMemoryAbuseRateLimitRepository } from "../src/modules/security/abuse-guard.js";
 import { createApp } from "../src/server/create-app.js";
 import { createDependencies } from "../src/server/dependencies.js";
@@ -16,6 +17,7 @@ test("GET /health returns service status", async () => {
   });
 
   assert.equal(response.statusCode, 200);
+  assert.equal(typeof response.headers["x-request-id"], "string");
   assert.equal(response.headers["x-content-type-options"], "nosniff");
   assert.equal(response.headers["referrer-policy"], "no-referrer");
   assert.equal(response.headers["x-frame-options"], "DENY");
@@ -24,6 +26,27 @@ test("GET /health returns service status", async () => {
     service: "nomduchat-api",
     version: "0.1.0",
   });
+
+  await app.close();
+});
+
+test("API responses preserve safe request ids and include them in errors", async () => {
+  const app = await createApp();
+  const requestId = "nomduchat-test-request-01";
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/ai/route",
+    headers: {
+      "x-request-id": requestId,
+    },
+    payload: {},
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.headers["x-request-id"], requestId);
+  assert.equal(response.json().error.code, "validation_failed");
+  assert.equal(response.json().error.requestId, requestId);
 
   await app.close();
 });
@@ -110,6 +133,188 @@ test("GET /health/database reports injected database status", async () => {
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.json().configured, true);
+
+  await app.close();
+});
+
+test("GET /content/blocks exposes seeded workspace articles without authentication", async () => {
+  const app = await createApp();
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/content/blocks?placement=workspace.home.articles&locale=ru",
+  });
+
+  assert.equal(response.statusCode, 200);
+  const contentBlocks = response.json().contentBlocks;
+  assert.equal(contentBlocks.length, 3);
+  assert.deepEqual(
+    new Set(contentBlocks.map((block: { key: string }) => block.key)),
+    new Set([
+      "workspace.home.article.images",
+      "workspace.home.article.video",
+      "workspace.home.article.humanizer",
+    ])
+  );
+  for (const block of contentBlocks) {
+    assert.equal(block.locale, "ru");
+    assert.equal(block.placement, "workspace.home.articles");
+    assert.ok(block.body.split(/\n\s*\n/).length >= 2);
+    assert.deepEqual(Object.keys(block).sort(), ["body", "key", "locale", "placement", "title", "updatedAt"]);
+  }
+
+  const missingPlacementResponse = await app.inject({
+    method: "GET",
+    url: "/content/blocks?locale=ru",
+  });
+  assert.equal(missingPlacementResponse.statusCode, 400);
+
+  await app.close();
+});
+
+test("GET /content/blocks filters inactive records, placement, and locale", async () => {
+  const rows = [
+    {
+      key: "workspace.home.article.visible",
+      locale: "ru",
+      title: "Visible",
+      body: "Visible body",
+      placement: "workspace.home.articles",
+      active: true,
+      updated_at: "2026-07-22T00:00:00.000Z",
+    },
+    {
+      key: "workspace.home.article.hidden",
+      locale: "ru",
+      title: "Hidden",
+      body: "Hidden body",
+      placement: "workspace.home.articles",
+      active: false,
+      updated_at: "2026-07-22T00:00:00.000Z",
+    },
+    {
+      key: "workspace.home.article.english",
+      locale: "en",
+      title: "English",
+      body: "English body",
+      placement: "workspace.home.articles",
+      active: true,
+      updated_at: "2026-07-22T00:00:00.000Z",
+    },
+    {
+      key: "home.hero",
+      locale: "ru",
+      title: "Other placement",
+      body: "Other body",
+      placement: "home",
+      active: true,
+      updated_at: "2026-07-22T00:00:00.000Z",
+    },
+  ];
+  const database: DatabaseClient = {
+    async query<T extends Record<string, unknown> = Record<string, unknown>>(text: string): Promise<DatabaseQueryResult<T>> {
+      if (text.includes("from content_blocks")) {
+        return { rows: rows as unknown as T[], rowCount: rows.length };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+    async health() {
+      return { ok: true, configured: true, latencyMs: 1 };
+    },
+    async close() {
+      return undefined;
+    },
+  };
+  const app = await createApp({
+    dependencies: createDependencies({ database }),
+  });
+
+  const response = await app.inject({
+    method: "GET",
+    url: "/content/blocks?placement=workspace.home.articles&locale=ru",
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().contentBlocks.map((block: { key: string }) => block.key), [
+    "workspace.home.article.visible",
+  ]);
+
+  await app.close();
+});
+
+test("GET /workspace/features exposes shared feature visibility matrix for guests", async () => {
+  const app = await createApp();
+
+  const listResponse = await app.inject({
+    method: "GET",
+    url: "/workspace/features",
+  });
+  assert.equal(listResponse.statusCode, 200);
+
+  const listBody = listResponse.json();
+  const featureMap = new Map(listBody.features.map((feature: { path: string; status: string }) => [feature.path, feature.status]));
+
+  assert.equal(featureMap.get("/workspace/admin"), "hidden");
+  assert.equal(featureMap.get("/workspace/avatar"), "ready");
+  assert.equal(featureMap.get("/workspace/chat"), "ready");
+  assert.equal(listBody.access.isGuest, false);
+  assert.equal(listBody.access.canUseSettings, true);
+
+  const avatarStatusResponse = await app.inject({
+    method: "GET",
+    url: "/workspace/features?pathname=/workspace/avatar",
+  });
+  assert.equal(avatarStatusResponse.statusCode, 200);
+  const avatarStatusBody = avatarStatusResponse.json();
+  assert.equal(avatarStatusBody.currentPath, "/workspace/avatar");
+  assert.equal(avatarStatusBody.currentStatus, "ready");
+
+  await app.close();
+});
+
+test("GET /workspace/features gates admin and balance for regular user", async () => {
+  const app = await createApp();
+
+  const registerResponse = await app.inject({
+    method: "POST",
+    url: "/auth/register",
+    payload: {
+      email: "feature-user@example.com",
+      password: "secure-password",
+      name: "Feature User",
+      country: "KZ",
+      language: "ru",
+    },
+  });
+  assert.equal(registerResponse.statusCode, 200);
+  const accessToken = registerResponse.json().accessToken;
+
+  const profileFeatureResponse = await app.inject({
+    method: "GET",
+    url: "/workspace/features?pathname=/workspace/settings/profile",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+  });
+  assert.equal(profileFeatureResponse.statusCode, 200);
+  const profileFeatureBody = profileFeatureResponse.json();
+  assert.equal(profileFeatureBody.currentStatus, "ready");
+
+  const adminStatusResponse = await app.inject({
+    method: "GET",
+    url: "/workspace/features?pathname=/workspace/admin",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+    },
+  });
+  assert.equal(adminStatusResponse.statusCode, 200);
+  assert.equal(adminStatusResponse.json().currentStatus, "hidden");
+
+  const invalidQueryResponse = await app.inject({
+    method: "GET",
+    url: "/workspace/features?pathname=",
+  });
+  assert.equal(invalidQueryResponse.statusCode, 400);
 
   await app.close();
 });
@@ -279,6 +484,32 @@ test("authenticated user can update profile fields and avatar", async () => {
   await app.close();
 });
 
+test("support ticket route stores request and sends best-effort email", async () => {
+  const transport = new FakeMailingTransport();
+  const app = await createApp({
+    dependencies: createDependencies({ mailingTransport: transport }),
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/support/tickets",
+    payload: {
+      name: "Support User",
+      email: "support-user@example.com",
+      topic: "technical",
+      message: "Не получается отправить запрос из приложения.",
+      pageUrl: "https://nomduchat.com/support",
+    },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().ticket.email, "support-user@example.com");
+  assert.equal(response.json().ticket.status, "open");
+  assert.equal(transport.lastSend?.replyTo, "support-user@example.com");
+  assert.equal(transport.lastSend?.contacts[0]?.email, config.SUPPORT_EMAIL);
+
+  await app.close();
+});
 test("auth password reset sends one-time link and updates password", async () => {
   const passwordResetMailer = new FakePasswordResetMailer();
   const app = await createApp({
@@ -1418,6 +1649,56 @@ test("GET /ai/providers exposes configured provider registry", async () => {
   await app.close();
 });
 
+test("project routes create, update, list, and delete workspace projects", async () => {
+  const app = await createApp();
+
+  const createResponse = await app.inject({
+    method: "POST",
+    url: "/projects",
+    payload: {
+      title: "SEO-раздел",
+      description: "Собрать статьи и FAQ для индексации.",
+      projectType: "content",
+    },
+  });
+
+  assert.equal(createResponse.statusCode, 200);
+  const created = createResponse.json().project;
+  assert.equal(created.title, "SEO-раздел");
+  assert.equal(created.projectType, "content");
+  assert.equal(created.status, "planned");
+
+  const listResponse = await app.inject({
+    method: "GET",
+    url: "/projects",
+  });
+
+  assert.equal(listResponse.statusCode, 200);
+  assert.equal(listResponse.json().projects.length, 1);
+  assert.equal(listResponse.json().projects[0].id, created.id);
+
+  const updateResponse = await app.inject({
+    method: "PATCH",
+    url: `/projects/${created.id}`,
+    payload: {
+      status: "active",
+    },
+  });
+
+  assert.equal(updateResponse.statusCode, 200);
+  assert.equal(updateResponse.json().project.status, "active");
+
+  const deleteResponse = await app.inject({
+    method: "DELETE",
+    url: `/projects/${created.id}`,
+  });
+
+  assert.equal(deleteResponse.statusCode, 200);
+  assert.equal(deleteResponse.json().deleted, true);
+
+  await app.close();
+});
+
 test("POST /chat/messages returns a persisted local conversation response", async () => {
   const app = await createApp();
 
@@ -2437,6 +2718,24 @@ class FakePasswordResetMailer implements PasswordResetMailer {
 
   async sendPasswordReset(input: PasswordResetMailInput) {
     this.lastEmail = input;
+  }
+}
+
+class FakeMailingTransport implements MailingTransport {
+  lastSend: SendMassEmailInput | null = null;
+
+  async sendMass(input: SendMassEmailInput) {
+    this.lastSend = input;
+    return {
+      accepted: input.contacts.length,
+      raw: {
+        ok: true,
+      },
+    };
+  }
+
+  async fetchMessagesByTag() {
+    return [];
   }
 }
 

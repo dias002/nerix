@@ -5,18 +5,20 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "./utils";
 
 const badgeVariants = cva(
-  "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
+  "inline-flex h-6 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-[var(--radius-pill)] border px-2 text-xs font-medium transition-[background-color,border-color,color] [&>svg]:size-3 [&>svg]:pointer-events-none focus-visible:outline-2 focus-visible:outline-[var(--signal-mint)] focus-visible:outline-offset-2 aria-invalid:border-[var(--danger)]",
   {
     variants: {
       variant: {
         default:
-          "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
+          "border-transparent bg-[var(--primary-button)] text-[var(--primary-button-text)] [a&]:hover:bg-[var(--primary-button-hover)]",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+          "border-[var(--line-subtle)] bg-[var(--surface-2)] text-[var(--text-secondary)] [a&]:hover:bg-[var(--surface-hover)]",
         destructive:
-          "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "border-transparent bg-[var(--danger)] text-white [a&]:hover:bg-[color-mix(in_srgb,var(--danger)_88%,white)]",
         outline:
-          "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
+          "border-[var(--line-default)] text-[var(--text-secondary)] [a&]:hover:bg-[var(--surface-1)] [a&]:hover:text-[var(--text-primary)]",
+        signal:
+          "border-[rgba(115,230,194,0.22)] bg-[rgba(115,230,194,0.10)] text-[var(--signal-mint)]",
       },
     },
     defaultVariants: {

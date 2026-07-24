@@ -4,9 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "bundle:audit": "node scripts/check-build-size.mjs",
     "build": "vite build",
     "dev": "vite",
-    "preview": "vite preview"
+    "generate:app-covers": "node --env-file=../../.env scripts/generate-app-covers.mjs",
+    "lint": "node scripts/lint-static.mjs",
+    "preview": "vite preview",
+    "qa:routes": "node scripts/qa-routes.mjs",
+    "sitemap": "node scripts/generate-sitemap.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

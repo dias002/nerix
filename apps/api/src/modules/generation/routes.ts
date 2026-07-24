@@ -7,13 +7,54 @@ import type { AuthService } from "../auth/auth.service.js";
 import type { AbuseGuardService } from "../security/abuse-guard.js";
 import type { GenerationService } from "./generation.service.js";
 
+const mediaOptionsSchema = z.object({
+  aspectRatio: z.enum(["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]).optional(),
+  imageSize: z.enum(["1K", "2K", "4K"]).optional(),
+  videoResolution: z.enum(["720p", "1080p", "4k"]).optional(),
+  durationSeconds: z.union([z.literal(4), z.literal(6), z.literal(8)]).optional(),
+  voice: z.enum(["alloy", "onyx", "nova", "fable", "shimmer"]).optional(),
+  speechSpeed: z.number().min(0.5).max(2).optional(),
+  audioFormat: z.enum(["mp3", "wav"]).optional(),
+  camera: z
+    .object({
+      yaw: z.number().min(-180).max(180),
+      pitch: z.number().min(-60).max(60),
+      distance: z.enum(["macro", "close", "medium", "wide"]),
+      lens: z.union([z.literal(24), z.literal(35), z.literal(50), z.literal(85)]),
+      movement: z.enum(["static", "push_in", "pull_out", "orbit", "tracking", "crane"]),
+    })
+    .optional(),
+});
+
 const createJobSchema = z.object({
   userId: z.string().optional(),
   country: countrySchema.default("KZ"),
   language: languageSchema.default("ru"),
   agentId: z.string().optional(),
   modality: z.enum(["image", "video", "avatar_video", "music", "voice"]).optional(),
+  purpose: z.enum(["avatar_profile", "application_cover", "title_video"]).optional(),
   prompt: z.string().trim().min(1),
+  options: mediaOptionsSchema.optional(),
+  imageReferenceJobId: z.string().trim().min(1).max(120).optional(),
+  referenceImage: z
+    .object({
+      dataBase64: z.string().min(100).max(4_000_000),
+      mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+      filename: z.string().trim().max(120).optional(),
+      consentConfirmed: z.boolean().optional(),
+    })
+    .optional(),
+  referenceImages: z
+    .array(
+      z.object({
+        dataBase64: z.string().min(100).max(4_000_000),
+        mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+        filename: z.string().trim().max(120).optional(),
+        consentConfirmed: z.boolean().optional(),
+      })
+    )
+    .max(3)
+    .optional(),
   avatarVideo: z
     .object({
       referenceImage: z

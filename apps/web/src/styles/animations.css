@@ -11,6 +11,40 @@
   animation: float 6s ease-in-out infinite;
 }
 
+@keyframes avatar-talk-preview {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  28% {
+    transform: translateY(-4px) scale(1.012);
+  }
+  54% {
+    transform: translateY(2px) scale(1.004);
+  }
+  72% {
+    transform: translateY(-2px) scale(1.01);
+  }
+}
+
+.avatar-talk-preview {
+  animation: avatar-talk-preview 1.35s ease-in-out infinite;
+  transform-origin: 50% 58%;
+}
+
+@keyframes avatar-portrait-preview {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -5px, 0) scale(1.006);
+  }
+}
+
+.avatar-portrait-preview {
+  animation: avatar-portrait-preview 6.5s ease-in-out infinite;
+  transform-origin: 50% 58%;
+}
+
 /* Smooth scroll */
 html {
   scroll-behavior: smooth;

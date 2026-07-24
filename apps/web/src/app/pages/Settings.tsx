@@ -1,4 +1,3 @@
-import { motion } from "motion/react";
 import { Link } from "react-router";
 import {
   Bell,
@@ -20,7 +19,7 @@ import {
 import { useMemo, useState } from "react";
 import { countryCodes, normalizeCountryCode, type CountryCode } from "@nomduchat/shared";
 import { useAuth } from "../auth";
-import LanguageSwitch from "../components/LanguageSwitch";
+import PageHeader from "../components/workspace/PageHeader";
 import { useLanguage } from "../i18n";
 import { useTheme } from "../theme";
 
@@ -61,200 +60,192 @@ export default function Settings() {
     setCountryOpen(false);
   };
 
-  const settingsGroups = [
-    {
-      title: t.settings.main,
-      items: [
-        {
-          id: "profile",
-          label: t.settings.profile,
-          icon: User,
-          value: user?.email ?? user?.name ?? t.auth.guest,
-          path: "/workspace/settings/profile",
-        },
-        {
-          id: "appearance",
-          label: t.settings.appearance,
-          icon: theme === "light" ? Sun : Moon,
-          value: theme === "light" ? t.settings.light : t.settings.dark,
-          path: "/workspace/settings/appearance",
-        },
-        {
-          id: "notifications",
-          label: t.settings.notifications,
-          icon: Bell,
-          value: t.settings.off,
-          path: "/workspace/settings/notifications",
-        },
-        {
-          id: "memory",
-          label: t.memory.title,
-          icon: Brain,
-          value: t.memory.subtitle,
-          path: "/workspace/settings/memory",
-        },
-      ],
-    },
-    {
-      title: t.settings.extra,
-      items: [
-        { id: "language", label: t.settings.language, icon: Globe },
-        { id: "country", label: t.settings.country, icon: Globe },
-        {
-          id: "security",
-          label: t.settings.security,
-          icon: Shield,
-          value: isAuthenticated ? t.settings.protected : t.auth.guestHint,
-        },
-        {
-          id: "support",
-          label: "Поддержка",
-          icon: LifeBuoy,
-          value: "Оплата, доступ и возвраты",
-          path: "/support",
-        },
-        {
-          id: "token-history",
-          label: "История токенов",
-          icon: Wallet,
-          value: "Списания, резервы, возвраты",
-          path: "/workspace/balance#token-history",
-        },
-        {
-          id: "data-deletion",
-          label: "Удаление аккаунта и чатов",
-          icon: Trash2,
-          value: "Выгрузка и деактивация",
-          path: "/data-deletion",
-        },
-      ],
-    },
+  const nav = [
+    { id: "profile", label: t.settings.profile, icon: User, path: "/workspace/settings/profile" },
+    { id: "appearance", label: t.settings.appearance, icon: theme === "light" ? Sun : Moon, path: "/workspace/settings/appearance" },
+    { id: "notifications", label: t.settings.notifications, icon: Bell, path: "/workspace/settings/notifications" },
+    { id: "memory", label: t.memory.title, icon: Brain, path: "/workspace/settings/memory" },
+    { id: "language", label: "Язык и регион", icon: Globe, hash: "#region" },
+    { id: "security", label: t.settings.security, icon: Shield, hash: "#security" },
+    { id: "support", label: "Поддержка", icon: LifeBuoy, path: "/support" },
+    { id: "tokens", label: "История токенов", icon: Wallet, path: "/workspace/balance#token-history" },
+    { id: "data", label: "Данные и удаление", icon: Trash2, path: "/data-deletion" },
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#050505] p-8 md:p-12">
-      <div className="mx-auto max-w-5xl space-y-10">
-        <div>
-          <h2 className="mb-2 text-2xl font-medium text-white">{t.settings.title}</h2>
-          <p className="text-gray-400">{t.settings.subtitle}</p>
-        </div>
+    <div className="ns-page-scroll">
+      <div className="ns-page space-y-8">
+        <PageHeader
+          overline="Настройки"
+          title={t.settings.title}
+          subtitle="Профиль, внешний вид, уведомления, регион, безопасность и управление данными в одном месте."
+        />
 
-        <div className="space-y-8">
-          {settingsGroups.map((group, groupIdx) => (
-            <div key={group.title}>
-              <h3 className="mb-3 px-2 text-xs font-medium uppercase text-gray-500">{group.title}</h3>
-              <div className="rounded-2xl border border-white/10 bg-[#0D0D0D]">
-                {group.items.map((item, itemIdx) => {
-                  const rowClassName = `relative w-full p-4 text-left transition-colors ${
-                    itemIdx !== group.items.length - 1 ? "border-b border-white/5" : ""
-                  }`;
-                  const leftContent = (
-                    <div className="flex items-center gap-3">
-                      <item.icon className="h-5 w-5 text-gray-400" />
-                      <span className="text-gray-200">{item.label}</span>
-                    </div>
-                  );
-
-                  if (item.path) {
-                    return (
-                      <motion.div
-                        key={item.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.3, delay: (groupIdx * 3 + itemIdx) * 0.05 }}
-                      >
-                        <Link
-                          to={item.path}
-                          className={`${rowClassName} flex flex-wrap items-center justify-between gap-3 hover:bg-white/[0.03]`}
-                        >
-                          {leftContent}
-                          <span className="inline-flex min-w-0 max-w-[260px] items-center gap-2 text-sm text-gray-500">
-                            <span className="truncate">{item.value}</span>
-                            <ChevronRight className="h-4 w-4 shrink-0" strokeWidth={1.7} />
-                          </span>
-                        </Link>
-                      </motion.div>
-                    );
-                  }
-
-                  return (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3, delay: (groupIdx * 3 + itemIdx) * 0.05 }}
-                      className={rowClassName}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        {leftContent}
-                        {item.id === "language" ? (
-                          <LanguageSwitch />
-                        ) : item.id === "country" ? (
-                          <div className="relative flex max-w-full flex-col items-end gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setCountryOpen((open) => !open)}
-                              className="inline-flex max-w-[260px] items-center justify-between gap-3 rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none transition-colors hover:border-white/20 focus:border-white/30"
-                            >
-                              <span className="truncate">
-                                {selectedCountry?.name ?? country} ({country})
-                              </span>
-                              <ChevronDown className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${countryOpen ? "rotate-180" : ""}`} />
-                            </button>
-                            {countryOpen ? (
-                              <div className="absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-xl border border-white/10 bg-[#080808] shadow-2xl shadow-black/60">
-                                <div className="custom-scrollbar max-h-72 overflow-y-auto py-1">
-                                  {countryOptions.map((option) => (
-                                    <button
-                                      key={option.code}
-                                      type="button"
-                                      onClick={() => handleCountryChange(option.code)}
-                                      className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm text-gray-200 transition-colors hover:bg-white/10 hover:text-white"
-                                    >
-                                      <span className="truncate">
-                                        {option.name} ({option.code})
-                                      </span>
-                                      {option.code === country ? (
-                                        <Check className="h-4 w-4 shrink-0 text-white" strokeWidth={1.8} />
-                                      ) : null}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null}
-                            <span className="hidden max-w-[220px] text-right text-xs text-gray-600 sm:block">
-                              {t.settings.countryHint}
-                            </span>
-                          </div>
-                        ) : item.id === "security" && isAuthenticated ? (
-                          <button
-                            type="button"
-                            onClick={logout}
-                            className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-                          >
-                            <LogOut className="h-4 w-4" strokeWidth={1.6} />
-                            {t.auth.logout}
-                          </button>
-                        ) : item.id === "security" ? (
-                          <Link
-                            to="/auth?mode=register"
-                            className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-gray-300 transition-colors hover:border-white/20 hover:text-white"
-                          >
-                            <LogIn className="h-4 w-4" strokeWidth={1.6} />
-                            {t.auth.createAccount}
-                          </Link>
-                        ) : (
-                          <span className="max-w-[220px] truncate text-sm text-gray-500">{item.value}</span>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </div>
+        <div className="ns-settings-layout">
+          <nav className="ns-settings-nav" aria-label="Разделы настроек">
+            <div className="space-y-1">
+              {nav.map((item) => {
+                const Icon = item.icon;
+                const target = item.path ?? item.hash ?? "#";
+                return (
+                  <Link key={item.id} to={target}>
+                    <Icon className="h-4 w-4 shrink-0" strokeWidth={1.7} />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                );
+              })}
             </div>
-          ))}
+          </nav>
+
+          <main className="ns-settings-content p-5">
+            <section id="profile" className="space-y-1">
+              <h2 className="text-xl font-medium text-[var(--text-primary)]">{t.settings.main}</h2>
+              <SettingsLinkRow
+                icon={User}
+                label={t.settings.profile}
+                value={user?.email ?? user?.name ?? t.auth.guest}
+                to="/workspace/settings/profile"
+              />
+              <SettingsLinkRow
+                icon={theme === "light" ? Sun : Moon}
+                label={t.settings.appearance}
+                value={theme === "light" ? t.settings.light : t.settings.dark}
+                to="/workspace/settings/appearance"
+              />
+              <SettingsLinkRow
+                icon={Bell}
+                label={t.settings.notifications}
+                value="Ответы, платежи и новости"
+                to="/workspace/settings/notifications"
+              />
+              <SettingsLinkRow
+                icon={Brain}
+                label={t.memory.title}
+                value={t.memory.subtitle}
+                to="/workspace/settings/memory"
+              />
+            </section>
+
+            <section id="region" className="mt-8 space-y-1">
+              <h2 className="text-xl font-medium text-[var(--text-primary)]">Язык и регион</h2>
+              <div className="ns-settings-row">
+                <div className="flex min-w-0 items-start gap-3">
+                  <Globe className="mt-0.5 h-5 w-5 shrink-0 text-[var(--text-tertiary)]" strokeWidth={1.7} />
+                  <div>
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{t.settings.language}</div>
+                    <div className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+                      Язык интерфейса меняется в верхней панели workspace.
+                    </div>
+                  </div>
+                </div>
+                <span className="text-sm text-[var(--text-secondary)]">{language.toUpperCase()}</span>
+              </div>
+
+              <div className="ns-settings-row">
+                <div className="flex min-w-0 items-start gap-3">
+                  <Globe className="mt-0.5 h-5 w-5 shrink-0 text-[var(--text-tertiary)]" strokeWidth={1.7} />
+                  <div>
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{t.settings.country}</div>
+                    <div className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">{t.settings.countryHint}</div>
+                  </div>
+                </div>
+                <div className="relative flex max-w-full flex-col items-end gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCountryOpen((open) => !open)}
+                    className="nd-secondary-action inline-flex h-11 max-w-[280px] items-center justify-between gap-3 px-3 text-sm"
+                    aria-expanded={countryOpen}
+                  >
+                    <span className="truncate">
+                      {selectedCountry?.name ?? country} ({country})
+                    </span>
+                    <ChevronDown className={`h-4 w-4 shrink-0 text-[var(--text-tertiary)] transition-transform ${countryOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {countryOpen ? (
+                    <div className="absolute right-0 top-12 z-40 w-[min(22rem,calc(100vw-3rem))] overflow-hidden rounded-[var(--radius-input)] border border-[var(--line-default)] bg-[var(--surface-2)] shadow-[var(--shadow-popover)]">
+                      <div className="custom-scrollbar max-h-72 overflow-y-auto py-1">
+                        {countryOptions.map((option) => (
+                          <button
+                            key={option.code}
+                            type="button"
+                            onClick={() => handleCountryChange(option.code)}
+                            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm text-[var(--text-secondary)] transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--text-primary)]"
+                          >
+                            <span className="truncate">
+                              {option.name} ({option.code})
+                            </span>
+                            {option.code === country ? <Check className="h-4 w-4 shrink-0 text-[var(--text-primary)]" strokeWidth={1.8} /> : null}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+
+            <section id="security" className="mt-8 space-y-1">
+              <h2 className="text-xl font-medium text-[var(--text-primary)]">{t.settings.extra}</h2>
+              <div className="ns-settings-row">
+                <div className="flex min-w-0 items-start gap-3">
+                  <Shield className="mt-0.5 h-5 w-5 shrink-0 text-[var(--text-tertiary)]" strokeWidth={1.7} />
+                  <div>
+                    <div className="text-sm font-medium text-[var(--text-primary)]">{t.settings.security}</div>
+                    <div className="mt-1 text-sm leading-relaxed text-[var(--text-secondary)]">
+                      {isAuthenticated ? t.settings.protected : t.auth.guestHint}
+                    </div>
+                  </div>
+                </div>
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="nd-secondary-action inline-flex h-10 items-center justify-center gap-2 px-4 text-sm"
+                  >
+                    <LogOut className="h-4 w-4" strokeWidth={1.6} />
+                    {t.auth.logout}
+                  </button>
+                ) : (
+                  <Link to="/auth?mode=register" className="nd-primary-action inline-flex h-10 items-center justify-center gap-2 px-4 text-sm font-medium">
+                    <LogIn className="h-4 w-4" strokeWidth={1.6} />
+                    {t.auth.createAccount}
+                  </Link>
+                )}
+              </div>
+              <SettingsLinkRow icon={LifeBuoy} label="Поддержка" value="Оплата, доступ и возвраты" to="/support" />
+              <SettingsLinkRow icon={Wallet} label="История токенов" value="Списания, резервы, возвраты" to="/workspace/balance#token-history" />
+              <SettingsLinkRow icon={Trash2} label="Удаление аккаунта и чатов" value="Выгрузка и деактивация" to="/data-deletion" danger />
+            </section>
+          </main>
         </div>
       </div>
     </div>
+  );
+}
+
+function SettingsLinkRow({
+  danger,
+  icon: Icon,
+  label,
+  to,
+  value,
+}: {
+  danger?: boolean;
+  icon: typeof User;
+  label: string;
+  to: string;
+  value: string;
+}) {
+  return (
+    <Link to={to} className="ns-settings-row group">
+      <div className="flex min-w-0 items-start gap-3">
+        <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${danger ? "text-[var(--danger)]" : "text-[var(--text-tertiary)]"}`} strokeWidth={1.7} />
+        <div>
+          <div className="text-sm font-medium text-[var(--text-primary)]">{label}</div>
+          <div className="mt-1 max-w-xl text-sm leading-relaxed text-[var(--text-secondary)]">{value}</div>
+        </div>
+      </div>
+      <ChevronRight className="h-4 w-4 justify-self-end text-[var(--text-tertiary)] transition-transform group-hover:translate-x-0.5" strokeWidth={1.7} />
+    </Link>
   );
 }

@@ -894,7 +894,7 @@ function createInMemoryOAuthAccount(
 
 function mapOAuthAccountRow(row: OAuthAccountRow): OAuthAccountRecord {
   return {
-    provider: row.provider === "vk" ? "vk" : "google",
+    provider: row.provider === "vk" ? "vk" : row.provider === "yandex" ? "yandex" : "google",
     providerUserId: row.provider_user_id,
     email: row.email,
     displayName: row.display_name,

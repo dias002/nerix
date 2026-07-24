@@ -1,0 +1,147 @@
+:root {
+  --canvas: #070611;
+  --canvas-raised: #0B0918;
+
+  --surface-1: #100D20;
+  --surface-2: #171229;
+  --surface-3: #211A38;
+  --surface-hover: #291F43;
+  --surface-active: #342650;
+
+  --overlay-soft: rgba(15, 11, 30, 0.74);
+  --overlay-strong: rgba(7, 6, 17, 0.90);
+
+  --line-subtle: rgba(232, 218, 255, 0.08);
+  --line-default: rgba(232, 218, 255, 0.14);
+  --line-strong: rgba(239, 226, 255, 0.23);
+
+  --text-primary: #FBF8FF;
+  --text-secondary: #BDB5C9;
+  --text-tertiary: #847B92;
+  --text-disabled: #544C61;
+  --text-inverse: #180B10;
+
+  --primary-button: #FF8066;
+  --primary-button-hover: #FF927A;
+  --primary-button-text: #180B10;
+
+  --signal-mint: #67D9AD;
+  --signal-solar: #FFB45E;
+  --signal-coral: #FF6F76;
+  --signal-violet: #9978FF;
+  --signal-blue: #58C9F5;
+  --signal-gradient: linear-gradient(
+    135deg,
+    #FFB45E 0%,
+    #FF7470 48%,
+    #9978FF 100%
+  );
+
+  --positive: #64D49A;
+  --warning: #F5C76B;
+  --danger: #FF7B92;
+  --info: #72B8FF;
+
+  --radius-control: 10px;
+  --radius-input: 14px;
+  --radius-card: 18px;
+  --radius-panel: 22px;
+  --radius-hero: 28px;
+  --radius-pill: 999px;
+
+  --shadow-floating: 0 18px 60px rgba(0, 0, 0, 0.34);
+  --shadow-popover: 0 14px 44px rgba(0, 0, 0, 0.42);
+  --shadow-signal:
+    0 0 0 1px rgba(255, 111, 118, 0.08),
+    0 22px 70px rgba(92, 55, 170, 0.13);
+
+  --duration-instant: 90ms;
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --duration-reveal: 440ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --workspace-sidebar-width: 272px;
+  --workspace-sidebar-collapsed-width: 72px;
+  --workspace-topbar-height: 64px;
+
+  --background: var(--canvas);
+  --foreground: var(--text-primary);
+  --card: var(--surface-1);
+  --card-foreground: var(--text-primary);
+  --popover: var(--surface-2);
+  --popover-foreground: var(--text-primary);
+  --primary: var(--primary-button);
+  --primary-foreground: var(--primary-button-text);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--text-primary);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--text-secondary);
+  --accent: var(--surface-active);
+  --accent-foreground: var(--text-primary);
+  --destructive: var(--danger);
+  --destructive-foreground: var(--text-primary);
+  --border: var(--line-default);
+  --input: var(--surface-1);
+  --input-background: var(--surface-1);
+  --ring: var(--signal-mint);
+  --radius: var(--radius-card);
+
+  --background-primary: var(--canvas);
+  --background-secondary: var(--surface-1);
+  --background-tertiary: var(--surface-2);
+  --background-elevated: var(--surface-2);
+  --background-soft: var(--surface-3);
+  --surface-primary: rgba(255, 255, 255, 0.035);
+  --surface-secondary: rgba(255, 255, 255, 0.055);
+  --border-subtle: var(--line-subtle);
+  --border-active: var(--line-strong);
+  --accent-primary: var(--signal-mint);
+  --accent-secondary: var(--signal-violet);
+  --accent-soft: rgba(115, 230, 194, 0.12);
+  --accent-glow: rgba(115, 230, 194, 0.18);
+
+  --nd-bg: var(--canvas);
+  --nd-bg-soft: var(--canvas-raised);
+  --nd-panel: var(--surface-1);
+  --nd-panel-strong: var(--surface-2);
+  --nd-line: var(--line-subtle);
+  --nd-line-strong: var(--line-default);
+  --nd-muted: var(--text-secondary);
+  --nd-orange: var(--signal-coral);
+  --nd-orange-soft: rgba(255, 111, 118, 0.10);
+  --nd-blue: var(--signal-blue);
+  --nd-blue-soft: rgba(108, 184, 255, 0.10);
+  --nd-radius: var(--radius-card);
+}
+
+html.light {
+  --canvas: #F7F4FA;
+  --canvas-raised: #FFFFFF;
+  --surface-1: #FFFFFF;
+  --surface-2: #F1ECF7;
+  --surface-3: #E9E2F2;
+  --surface-hover: #EEE6F6;
+  --surface-active: #E5DAF1;
+  --overlay-soft: rgba(255, 255, 255, 0.78);
+  --overlay-strong: rgba(245, 246, 248, 0.92);
+  --line-subtle: rgba(45, 29, 66, 0.08);
+  --line-default: rgba(45, 29, 66, 0.14);
+  --line-strong: rgba(45, 29, 66, 0.23);
+  --text-primary: #1A1424;
+  --text-secondary: #655D70;
+  --text-tertiary: #8A8194;
+  --text-disabled: #A59DAD;
+  --text-inverse: #FFFFFF;
+  --primary-button: #C8434C;
+  --primary-button-hover: #B63743;
+  --primary-button-text: #FFFFFF;
+  --shadow-floating: 0 18px 52px rgba(15, 23, 42, 0.10);
+  --shadow-popover: 0 14px 40px rgba(15, 23, 42, 0.12);
+  --shadow-signal:
+    0 0 0 1px rgba(45, 112, 142, 0.12),
+    0 0 32px rgba(45, 112, 142, 0.08),
+    0 0 52px rgba(78, 71, 190, 0.05);
+}
