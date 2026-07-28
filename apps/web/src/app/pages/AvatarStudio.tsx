@@ -571,7 +571,8 @@ export default function AvatarStudio() {
     [activePreview, expressionRenders]
   );
 
-  const generatedPreviewUrl = activeExpressionRender?.imageUrl || avatarImageUrl || selectedReference.imageSrc;
+  const generatedPreviewUrl =
+    activeExpressionRender?.imageUrl || avatarImageUrl || config.photoDataUrl || selectedReference.imageSrc;
   const portraitStateLabel = avatarImageJob
     ? avatarRenderStatusLabel(avatarImageJob.status)
     : config.photoDataUrl
@@ -1226,13 +1227,21 @@ export default function AvatarStudio() {
                     <div>
                       <div className="font-medium text-white">
                         {activePreview === "base"
-                          ? selectedReference.title
+                          ? avatarImageUrl
+                            ? selectedReference.title
+                            : config.photoDataUrl
+                              ? "Ваше фото"
+                              : selectedReference.title
                           : avatarExpressionPresets.find((item) => item.id === activePreview)?.title}
                       </div>
                       <div className="mt-1 text-xs text-gray-400">{portraitStateLabel}</div>
                     </div>
                     <div className="rounded-full border border-white/10 bg-black/55 px-3 py-1 text-xs text-gray-300 backdrop-blur">
-                      {avatarImageUrl || activeExpressionRender?.imageUrl ? "По вашему фото" : "Пример стиля"}
+                      {avatarImageUrl || activeExpressionRender?.imageUrl
+                        ? "По вашему фото"
+                        : config.photoDataUrl
+                          ? "Исходное фото"
+                          : "Пример стиля"}
                     </div>
                   </div>
                 </div>

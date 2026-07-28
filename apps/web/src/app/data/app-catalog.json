@@ -6,7 +6,7 @@
     "category": "Текст",
     "accent": "solar",
     "agentId": "documents",
-    "networkId": "gemini:gemini-2.5-flash",
+    "networkId": "openai:gpt-4o-mini",
     "starterPrompt": "Переведи текст на английский. Сохрани смысл, структуру и тон. После перевода укажи спорные места.",
     "visual": "A translucent language prism orbiting a warm amber planet, thin letter-like light particles transforming across the prism without readable text"
   },
@@ -17,6 +17,7 @@
     "category": "Текст",
     "accent": "plasma",
     "agentId": "general",
+    "networkId": "openai:gpt-4o-mini",
     "starterPrompt": "Помоги составить сильный промпт. Сначала задай 3 уточняющих вопроса, затем дай готовую версию.",
     "visual": "A luminous magenta energy thread assembling several floating glass modules into one precise beam"
   },
@@ -86,7 +87,7 @@
     "category": "Бизнес",
     "accent": "solar",
     "agentId": "presentations",
-    "networkId": "openai:gpt-4.1-mini",
+    "networkId": "openai:gpt-4o-mini",
     "starterPrompt": "Собери презентацию: цель, аудитория, структура слайдов, тезисы, заметки спикера и идеи визуалов.",
     "visual": "Several elegant glass presentation planes unfolding like solar sails around a golden core, no text"
   },
@@ -128,7 +129,7 @@
     "category": "Разработка",
     "accent": "plasma",
     "agentId": "code",
-    "networkId": "anthropic:claude-sonnet-4-20250514",
+    "networkId": "openai:gpt-4o-mini",
     "starterPrompt": "Помоги с кодом: найди проблему, предложи минимальное исправление, тесты и проверку результата.",
     "visual": "A fractured dark crystal circuit repairing itself with a precise violet energy bridge, no code text"
   },
@@ -139,6 +140,7 @@
     "category": "Документы",
     "accent": "solar",
     "agentId": "documents",
+    "networkId": "openai:gpt-4o-mini",
     "starterPrompt": "Проанализируй документ: краткое резюме, риски, важные факты, правки и следующие действия.",
     "visual": "Layered translucent document sheets orbiting a warm analytical core, subtle warning markers without text"
   }

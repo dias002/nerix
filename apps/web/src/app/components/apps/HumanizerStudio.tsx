@@ -63,7 +63,7 @@ export default function HumanizerStudio() {
       const response = await sendChatMessage({
         message: prompt,
         agentId: "general",
-        selectedModelId: "auto",
+        selectedModelId: "openai:gpt-4o-mini",
         language,
       });
       setResult(response.assistantMessage?.content?.trim() || "Модель не вернула текст. Попробуйте ещё раз.");

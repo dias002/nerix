@@ -208,7 +208,7 @@ export default function GenericAppStudio({ app }: { app: CatalogApp }) {
         const prompt = buildPrompt(app, config, values);
         const options = generationOptions(app.id, values);
         const response = await createGenerationJob({
-          agentId: app.id,
+          agentId: app.id === "images" ? "image" : app.id,
           modality: app.creationMode as AiModality,
           prompt,
           options,
@@ -240,7 +240,7 @@ export default function GenericAppStudio({ app }: { app: CatalogApp }) {
         const response = await sendChatMessage({
           message: buildPrompt(app, config, values),
           agentId: app.agentId ?? "general",
-          selectedModelId: app.networkId ?? "auto",
+          selectedModelId: app.networkId ?? "openai:gpt-4o-mini",
           language,
           country: user?.country === "RU" ? "RU" : "KZ",
         });
