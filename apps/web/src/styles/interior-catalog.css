@@ -624,13 +624,6 @@
   white-space: nowrap;
 }
 
-.interior-product-copy b {
-  margin-top: 3px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
 .interior-catalog-empty {
   display: grid;
   min-height: 280px;
@@ -846,24 +839,6 @@
   height: 15px;
   width: 15px;
   color: var(--text-tertiary);
-}
-
-.interior-selection-total {
-  display: grid;
-  min-width: 114px;
-  gap: 2px;
-}
-
-.interior-selection-total small {
-  color: var(--text-tertiary);
-  font-size: 10px;
-}
-
-.interior-selection-total strong {
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 610;
-  white-space: nowrap;
 }
 
 .interior-selection-done {

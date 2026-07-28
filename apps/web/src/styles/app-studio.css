@@ -1346,6 +1346,21 @@
   min-height: 180px;
 }
 
+/*
+ * The workspace can be narrower than the viewport while the sidebar is open.
+ * Keep app-specific visual themes, but let the shared studio own the layout.
+ */
+.app-studio-page .app-studio-grid.app-studio-generic {
+  grid-template-columns: minmax(430px, 0.82fr) minmax(0, 1.18fr);
+}
+
+@container (max-width: 1240px) {
+  .app-studio-page .app-studio-grid.app-studio-generic,
+  .app-studio-page .humanizer-studio {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .app-studio-check {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);

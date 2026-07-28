@@ -40,10 +40,6 @@ export default function InteriorCatalog({
     return item ? [{ item, quantity: line.quantity }] : [];
   }), [cart, items]);
   const selectedIds = useMemo(() => cart.map((line) => line.id), [cart]);
-  const total = useMemo(
-    () => selectedItems.reduce((sum, line) => sum + line.item.price * line.quantity, 0),
-    [selectedItems]
-  );
   const visibleItems = useMemo(() => {
     const query = normalize(search);
     return items.filter((item) => {
@@ -166,7 +162,6 @@ export default function InteriorCatalog({
                     <small>#{item.category}</small>
                     <strong>{item.title}</strong>
                     <span>{item.detail}</span>
-                    <b>{formatPrice(item.price)}</b>
                   </span>
                 </button>
               );
@@ -199,7 +194,7 @@ export default function InteriorCatalog({
             <ShoppingBag />
             <span>
               <strong>{selectedItems.length ? `${selectedItems.length} из ${maxSelected} предметов` : "Выберите предметы"}</strong>
-              <small>{selectedItems.length ? formatPrice(total) : "Корзина пуста"}</small>
+              <small>{selectedItems.length ? "Готово к добавлению в сцену" : "Корзина пуста"}</small>
             </span>
             <ChevronUp />
           </button>
@@ -217,7 +212,7 @@ export default function InteriorCatalog({
                 <img src={item.image} alt="" width="72" height="72" />
                 <span>
                   <strong>{item.title}</strong>
-                  <small>{formatPrice(item.price * quantity)}</small>
+                  <small>{quantity} шт. в сцене</small>
                 </span>
                 <div className="interior-selection-quantity" aria-label={`Количество: ${item.title}`}>
                   <button type="button" onClick={() => onDecrement(item.id)} aria-label="Уменьшить количество">−</button>
@@ -235,10 +230,6 @@ export default function InteriorCatalog({
               Очистить корзину
             </button>
           ) : null}
-          <div className="interior-selection-total">
-            <small>Ориентир</small>
-            <strong>{formatPrice(total)}</strong>
-          </div>
           <button type="button" className="interior-selection-done" onClick={onDone}>
             Готово
             <Check />
@@ -251,8 +242,4 @@ export default function InteriorCatalog({
 
 function normalize(value: string) {
   return value.trim().toLocaleLowerCase("ru-RU").replaceAll("ё", "е");
-}
-
-function formatPrice(value: number) {
-  return `${new Intl.NumberFormat("ru-RU").format(value)} ₸`;
 }

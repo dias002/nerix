@@ -4,7 +4,7 @@ import StarsBackground from "../components/StarsBackground";
 
 type LegalPageKey = "privacy" | "terms" | "refund" | "pricing" | "cookies" | "autoRenewal";
 
-const companyName = "Товарищество с ограниченной ответственностью «removed-project»";
+const companyName = "Оператор сервиса nomduchat";
 const supportEmail = "admin@nomduchat.com";
 
 const pricingCatalog = [
@@ -49,7 +49,7 @@ const pages: Record<
       {
         title: "Оператор данных",
         text: [
-          `Оператор сервиса nomduchat: ${companyName}. Реквизиты компании доступны на странице /requisites.`,
+          `${companyName}. Реквизиты компании доступны на странице /requisites.`,
           `По вопросам персональных данных и доступа к аккаунту можно написать на ${supportEmail}.`,
         ],
       },

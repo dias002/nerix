@@ -11,7 +11,7 @@ const contacts = [
   },
   {
     label: "Реквизиты компании",
-    value: "ТОО «removed-project»",
+    value: "Данные оператора сервиса",
     href: "/requisites",
     icon: Building2,
   },
@@ -74,8 +74,8 @@ export default function Contacts() {
         <section className="mt-10 rounded-3xl border border-white/10 bg-[#080808]/85 p-5 backdrop-blur-md md:p-6">
           <h2 className="text-2xl font-medium text-white">Юридическая информация</h2>
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-gray-400 md:text-base">
-            Оператор сервиса: Товарищество с ограниченной ответственностью «removed-project». Реквизиты, условия оплаты,
-            возвратов и обработки персональных данных размещены в открытых документах сайта.
+            Реквизиты, условия оплаты, возвратов и обработки персональных данных размещены в открытых документах
+            сайта.
           </p>
         </section>
       </main>

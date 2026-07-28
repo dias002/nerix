@@ -4,18 +4,11 @@ import { ArrowLeft, Building2, Check, Copy, FileText, Landmark, Mail, ShieldChec
 import StarsBackground from "../components/StarsBackground";
 
 const companyDetails = [
-  { label: "Юридическое лицо", value: "Товарищество с ограниченной ответственностью «removed-project»" },
-  { label: "БИН", value: "2302 4001 8006" },
-  { label: "КБе", value: "17" },
   { label: "Сайт", value: "www.nomduchat.com" },
   { label: "Продукт", value: "nomduchat" },
 ];
 
-const bankDetails = [
-  { label: "Расчетный счет", value: "KZ51 998C TB00 0160 6793" },
-  { label: "Банк", value: "АО «Alatau City Bank»" },
-  { label: "БИК", value: "TSESKZKA" },
-];
+const bankDetails: Array<{ label: string; value: string }> = [];
 
 const serviceDetails = [
   "Доступ к AI-чату и AI-ассистентам.",
