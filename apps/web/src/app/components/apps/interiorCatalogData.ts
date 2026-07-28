@@ -20,7 +20,13 @@ export type InteriorCatalogItem = {
   detail: string;
   image: string;
   prompt: string;
+  price: number;
   referenceImage?: string;
+};
+
+export type InteriorCartLine = {
+  id: string;
+  quantity: number;
 };
 
 type ItemSeed = readonly [
@@ -114,6 +120,19 @@ const references: Record<string, string> = {
   "olive-tree": "/furniture/olive-tree.jpg",
 };
 
+const basePrices: Record<InteriorCategory, number> = {
+  "Диваны": 540000,
+  "Кресла": 185000,
+  "Столы": 220000,
+  "Стулья": 78000,
+  "Хранение": 210000,
+  "Спальня": 390000,
+  "Свет": 68000,
+  "Техника": 120000,
+  "Декор": 38000,
+  "Текстиль и растения": 46000,
+};
+
 export const interiorCatalog: InteriorCatalogItem[] = items.map(([id, title, category, detail, prompt], index) => {
   const referenceImage = references[id];
   return {
@@ -122,6 +141,7 @@ export const interiorCatalog: InteriorCatalogItem[] = items.map(([id, title, cat
     category,
     detail,
     prompt,
+    price: basePrices[category] + (index % 6) * 17000,
     image: `/furniture/catalog/item-${String(index + 1).padStart(2, "0")}.jpg`,
     ...(referenceImage ? { referenceImage } : {}),
   };
@@ -133,24 +153,31 @@ const selectionKey = "nomduchat-interior-catalog-selection";
 const defaultSelection = ["modular-sofa", "floor-lamp", "media-console", "olive-tree"];
 const itemIds = new Set(interiorCatalog.map((item) => item.id));
 
-export function readInteriorSelection() {
-  if (typeof window === "undefined") return defaultSelection;
+export function readInteriorCart(): InteriorCartLine[] {
+  if (typeof window === "undefined") return defaultSelection.map((id) => ({ id, quantity: 1 }));
 
   try {
     const stored = JSON.parse(window.localStorage.getItem(selectionKey) ?? "null");
-    if (!Array.isArray(stored)) return defaultSelection;
-    const valid = stored.filter((id): id is string => typeof id === "string" && itemIds.has(id));
-    return valid.slice(0, maxInteriorSelection);
+    if (!Array.isArray(stored)) return defaultSelection.map((id) => ({ id, quantity: 1 }));
+
+    const cart = new Map<string, number>();
+    stored.forEach((line) => {
+      const id = typeof line === "string" ? line : line?.id;
+      const quantity = typeof line === "string" ? 1 : Number(line?.quantity);
+      if (typeof id !== "string" || !itemIds.has(id)) return;
+      cart.set(id, Math.min(9, Math.max(1, Number.isFinite(quantity) ? Math.round(quantity) : 1)));
+    });
+    return Array.from(cart, ([id, quantity]) => ({ id, quantity })).slice(0, maxInteriorSelection);
   } catch {
-    return defaultSelection;
+    return defaultSelection.map((id) => ({ id, quantity: 1 }));
   }
 }
 
-export function saveInteriorSelection(ids: string[]) {
+export function saveInteriorCart(cart: InteriorCartLine[]) {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(selectionKey, JSON.stringify(ids.slice(0, maxInteriorSelection)));
+    window.localStorage.setItem(selectionKey, JSON.stringify(cart.slice(0, maxInteriorSelection)));
   } catch {
     // The selection still works for the current session when storage is unavailable.
   }

@@ -26,6 +26,17 @@ const mediaOptionsSchema = z.object({
     .optional(),
 });
 
+const editRegionSchema = z
+  .object({
+    x: z.number().min(0).max(1),
+    y: z.number().min(0).max(1),
+    width: z.number().positive().max(1),
+    height: z.number().positive().max(1),
+  })
+  .refine((region) => region.x + region.width <= 1.000001 && region.y + region.height <= 1.000001, {
+    message: "Edit region must fit inside the source image.",
+  });
+
 const createJobSchema = z.object({
   userId: z.string().optional(),
   country: countrySchema.default("KZ"),
@@ -36,6 +47,14 @@ const createJobSchema = z.object({
   prompt: z.string().trim().min(1),
   options: mediaOptionsSchema.optional(),
   imageReferenceJobId: z.string().trim().min(1).max(120).optional(),
+  editRegion: editRegionSchema.optional(),
+  maskImage: z
+    .object({
+      dataBase64: z.string().min(100).max(8_000_000),
+      mimeType: z.literal("image/png"),
+      filename: z.string().trim().max(120).optional(),
+    })
+    .optional(),
   referenceImage: z
     .object({
       dataBase64: z.string().min(100).max(4_000_000),
@@ -53,7 +72,7 @@ const createJobSchema = z.object({
         consentConfirmed: z.boolean().optional(),
       })
     )
-    .max(3)
+    .max(4)
     .optional(),
   avatarVideo: z
     .object({

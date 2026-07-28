@@ -1209,7 +1209,7 @@ export default function AvatarStudio() {
         className="hidden"
         onChange={(event) => void uploadReferencePhoto(event.target.files?.[0])}
       />
-      <div className="relative flex min-w-0 flex-1 flex-col p-4 md:p-5">
+      <div className="ns-avatar-workspace relative flex min-w-0 flex-1 flex-col p-4 md:p-5">
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-5 md:p-6">
           <div className="flex items-start justify-between gap-4">
             <div className="max-w-lg">
@@ -1401,7 +1401,7 @@ export default function AvatarStudio() {
         </div>
       </div>
 
-      <aside className="custom-scrollbar hidden w-[360px] shrink-0 overflow-y-auto border-l border-[var(--line-subtle)] bg-[var(--surface-1)] p-5 xl:block">
+      <aside className="ns-avatar-inspector custom-scrollbar w-[360px] shrink-0 overflow-y-auto border-l border-[var(--line-subtle)] bg-[var(--surface-1)] p-5">
         <section className="space-y-5">
           <nav className="ns-avatar-panel-tabs" aria-label="Режим Avatar Studio">
             <button type="button" data-active={activePanel === "avatar"} onClick={() => { setActivePanel("avatar"); setStageMode("portrait"); }}>Аватар</button>

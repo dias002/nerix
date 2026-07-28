@@ -380,6 +380,14 @@ export default function PresentationStudio() {
                 <span />
                 <span />
                 <span />
+                <img
+                  src="/app-placeholders/presentation.jpg"
+                  alt=""
+                  loading="lazy"
+                  onError={(event) => {
+                    event.currentTarget.hidden = true;
+                  }}
+                />
               </div>
               <strong>Здесь будет настоящая презентация</strong>
               <span>Можно пролистать слайды, отредактировать текст и скачать готовый PPTX.</span>

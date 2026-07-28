@@ -1,17 +1,21 @@
-import { ArrowLeft, Check, Search, ShoppingBag, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronUp, Search, ShoppingBag, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   interiorCategories,
+  type InteriorCartLine,
   type InteriorCatalogItem,
   type InteriorCategory,
 } from "./interiorCatalogData";
 
 type InteriorCatalogProps = {
   items: InteriorCatalogItem[];
-  selectedIds: string[];
+  cart: InteriorCartLine[];
   maxSelected: number;
   error: string;
-  onToggle: (id: string) => void;
+  onAdd: (id: string) => void;
+  onDecrement: (id: string) => void;
+  onRemove: (id: string) => void;
+  onClear: () => void;
   onDone: () => void;
 };
 
@@ -19,17 +23,26 @@ type CategoryFilter = "Все" | InteriorCategory;
 
 export default function InteriorCatalog({
   items,
-  selectedIds,
+  cart,
   maxSelected,
   error,
-  onToggle,
+  onAdd,
+  onDecrement,
+  onRemove,
+  onClear,
   onDone,
 }: InteriorCatalogProps) {
   const [category, setCategory] = useState<CategoryFilter>("Все");
   const [search, setSearch] = useState("");
-  const selectedItems = useMemo(
-    () => selectedIds.map((id) => items.find((item) => item.id === id)).filter(Boolean) as InteriorCatalogItem[],
-    [items, selectedIds]
+  const [cartOpen, setCartOpen] = useState(false);
+  const selectedItems = useMemo(() => cart.flatMap((line) => {
+    const item = items.find((candidate) => candidate.id === line.id);
+    return item ? [{ item, quantity: line.quantity }] : [];
+  }), [cart, items]);
+  const selectedIds = useMemo(() => cart.map((line) => line.id), [cart]);
+  const total = useMemo(
+    () => selectedItems.reduce((sum, line) => sum + line.item.price * line.quantity, 0),
+    [selectedItems]
   );
   const visibleItems = useMemo(() => {
     const query = normalize(search);
@@ -55,7 +68,7 @@ export default function InteriorCatalog({
           </div>
           <button type="button" className="interior-catalog-done" onClick={onDone}>
             Готово
-            <span>{selectedIds.length}</span>
+            <span>{cart.length}</span>
           </button>
         </div>
       </header>
@@ -132,26 +145,28 @@ export default function InteriorCatalog({
         {visibleItems.length ? (
           <div className="interior-catalog-grid">
             {visibleItems.map((item) => {
-              const isSelected = selectedIds.includes(item.id);
+              const line = cart.find((candidate) => candidate.id === item.id);
+              const isSelected = Boolean(line);
               return (
                 <button
                   key={item.id}
                   type="button"
                   className={isSelected ? "interior-product-card is-selected" : "interior-product-card"}
-                  onClick={() => onToggle(item.id)}
+                  onClick={() => onAdd(item.id)}
                   aria-pressed={isSelected}
                   disabled={!isSelected && limitReached}
                 >
                   <span className="interior-product-image">
                     <img src={item.image} alt="" loading="lazy" decoding="async" width="640" height="480" />
                     <span className="interior-product-check">
-                      {isSelected ? <Check /> : <span>+</span>}
+                      {isSelected ? <span>{line?.quantity}</span> : <span>+</span>}
                     </span>
                   </span>
                   <span className="interior-product-copy">
                     <small>#{item.category}</small>
                     <strong>{item.title}</strong>
                     <span>{item.detail}</span>
+                    <b>{formatPrice(item.price)}</b>
                   </span>
                 </button>
               );
@@ -169,23 +184,60 @@ export default function InteriorCatalog({
         )}
       </div>
 
-      <aside className="interior-selection-tray" aria-label="Выбранные предметы">
+      <aside
+        className={`interior-selection-tray ${cartOpen ? "is-expanded" : ""}`}
+        aria-label="Выбранные предметы"
+      >
         <div className="interior-selection-tray-inner">
+          <button
+            type="button"
+            className="interior-selection-mobile-toggle"
+            onClick={() => setCartOpen((current) => !current)}
+            aria-expanded={cartOpen}
+            aria-controls="interior-mobile-cart-lines"
+          >
+            <ShoppingBag />
+            <span>
+              <strong>{selectedItems.length ? `${selectedItems.length} из ${maxSelected} предметов` : "Выберите предметы"}</strong>
+              <small>{selectedItems.length ? formatPrice(total) : "Корзина пуста"}</small>
+            </span>
+            <ChevronUp />
+          </button>
           <div className="interior-selection-summary">
             <ShoppingBag />
             <span>
               <strong>В вашей сцене</strong>
-              <small>{selectedItems.length ? `${selectedItems.length} из ${maxSelected} предметов` : "Выберите предметы"}</small>
+              <small>{selectedItems.length ? `${selectedItems.length} из ${maxSelected} уникальных` : "Выберите предметы"}</small>
             </span>
+            {selectedItems.length ? <button type="button" onClick={onClear}>Очистить</button> : null}
           </div>
-          <div className="interior-selection-items">
-            {selectedItems.map((item) => (
-              <button key={item.id} type="button" onClick={() => onToggle(item.id)} aria-label={`Убрать ${item.title}`}>
+          <div className="interior-selection-items" id="interior-mobile-cart-lines">
+            {selectedItems.map(({ item, quantity }) => (
+              <div key={item.id} className="interior-selection-line">
                 <img src={item.image} alt="" width="72" height="72" />
-                <span>{item.title}</span>
-                <X />
-              </button>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{formatPrice(item.price * quantity)}</small>
+                </span>
+                <div className="interior-selection-quantity" aria-label={`Количество: ${item.title}`}>
+                  <button type="button" onClick={() => onDecrement(item.id)} aria-label="Уменьшить количество">−</button>
+                  <output>{quantity}</output>
+                  <button type="button" onClick={() => onAdd(item.id)} disabled={quantity >= 9} aria-label="Увеличить количество">+</button>
+                </div>
+                <button type="button" className="interior-selection-remove" onClick={() => onRemove(item.id)} aria-label={`Убрать ${item.title}`}>
+                  <X />
+                </button>
+              </div>
             ))}
+          </div>
+          {selectedItems.length ? (
+            <button type="button" className="interior-selection-mobile-clear" onClick={onClear}>
+              Очистить корзину
+            </button>
+          ) : null}
+          <div className="interior-selection-total">
+            <small>Ориентир</small>
+            <strong>{formatPrice(total)}</strong>
           </div>
           <button type="button" className="interior-selection-done" onClick={onDone}>
             Готово
@@ -199,4 +251,8 @@ export default function InteriorCatalog({
 
 function normalize(value: string) {
   return value.trim().toLocaleLowerCase("ru-RU").replaceAll("ё", "е");
+}
+
+function formatPrice(value: number) {
+  return `${new Intl.NumberFormat("ru-RU").format(value)} ₸`;
 }

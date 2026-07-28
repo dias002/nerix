@@ -1,6 +1,6 @@
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { lazy, Suspense } from "react";
-import { Link, Navigate, useParams } from "react-router";
+import { Link, Navigate, useLocation, useParams } from "react-router";
 import AppHelpDialog from "../components/apps/AppHelpDialog";
 import GenericAppStudio from "../components/apps/GenericAppStudio";
 import HumanizerStudio from "../components/apps/HumanizerStudio";
@@ -12,7 +12,9 @@ const InteriorStudio = lazy(() => import("../components/apps/InteriorStudio"));
 
 export default function AppWorkspace() {
   const { appId } = useParams();
+  const location = useLocation();
   const app = appCatalog.find((item) => item.id === appId);
+  const isInteriorCatalog = appId === "interior" && location.pathname.endsWith("/catalog");
 
   if (appId === "avatar") {
     return <Navigate to="/workspace/avatar" replace />;
@@ -31,6 +33,18 @@ export default function AppWorkspace() {
             <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
             В каталог
           </Link>
+        </main>
+      </div>
+    );
+  }
+
+  if (isInteriorCatalog) {
+    return (
+      <div className="ns-page-scroll">
+        <main className="interior-catalog-route">
+          <Suspense fallback={<div className="app-studio-panel">Загружаем каталог...</div>}>
+            <InteriorStudio catalogOnly />
+          </Suspense>
         </main>
       </div>
     );

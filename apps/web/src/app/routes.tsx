@@ -228,6 +228,7 @@ const routes: RouteObject[] = [
       { path: "avatar", Component: AvatarStudio },
       { path: "apps", Component: Apps },
       { path: "apps/:appId", Component: AppWorkspace },
+      { path: "apps/:appId/catalog", Component: AppWorkspace },
       { path: "media", Component: Media },
       { path: "media/:kind", Component: MediaChat },
       { path: "projects", Component: Projects },

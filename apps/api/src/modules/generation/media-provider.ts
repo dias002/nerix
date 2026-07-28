@@ -1,6 +1,11 @@
 import type { AiModality } from "@nomduchat/shared";
 import { config } from "../../config.js";
-import type { AvatarVideoGenerationInput, ImageReferenceInput, MediaGenerationOptions } from "./generation.types.js";
+import type {
+  AvatarVideoGenerationInput,
+  ImageMaskInput,
+  ImageReferenceInput,
+  MediaGenerationOptions,
+} from "./generation.types.js";
 
 export type MediaGenerationProviderInput = {
   jobId: string;
@@ -12,6 +17,7 @@ export type MediaGenerationProviderInput = {
   avatarVideo?: AvatarVideoGenerationInput;
   imageReference?: ImageReferenceInput;
   imageReferences?: ImageReferenceInput[];
+  maskImage?: ImageMaskInput;
   options?: MediaGenerationOptions;
 };
 
@@ -753,6 +759,13 @@ export class OpenAiMediaGenerationProvider implements MediaGenerationProvider {
         `nomduchat-source-${reference.jobId}.${extensionForMimeType(reference.mimeType)}`
       );
     }
+    if (input.maskImage) {
+      form.append(
+        "mask",
+        new Blob([new Uint8Array(input.maskImage.data)], { type: input.maskImage.mimeType }),
+        input.maskImage.filename ?? "nomduchat-edit-mask.png"
+      );
+    }
     form.append("size", openAiImageSize(input.options?.aspectRatio));
 
     const body = await this.fetchJson(
@@ -1086,28 +1099,6 @@ function normalizeOpenAiVoiceModel(value: string | undefined) {
   const model = value?.trim();
   if (!model || model === "openai-voice-configured" || model === "voice-primary") return defaultOpenAiVoiceModel;
   return model;
-}
-
-function inferOpenAiVoice(prompt: string) {
-  const normalized = prompt.toLowerCase();
-  if (containsAny(normalized, ["муж", "низк", "бас", "male", "deep"])) return "onyx";
-  if (containsAny(normalized, ["жен", "female", "мягк", "тепл"])) return "nova";
-  if (containsAny(normalized, ["детск", "ребен", "child", "young", "игрив"])) return "fable";
-  if (containsAny(normalized, ["энерг", "ярк", "реклам", "promo"])) return "shimmer";
-  return "alloy";
-}
-
-function cleanSpeechInput(prompt: string) {
-  return (
-    prompt
-      .replace(/^(озвучь|сделай озвучку|создай озвучку|прочитай вслух|voice over|text to speech)[:\s-]*/i, "")
-      .trim()
-      .slice(0, 4_000) || prompt.slice(0, 4_000)
-  );
-}
-
-function containsAny(value: string, needles: string[]) {
-  return needles.some((needle) => value.includes(needle));
 }
 
 function extractErrorMessage(error: object) {

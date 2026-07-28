@@ -375,7 +375,14 @@ function ConfigurableAppStudio({ app }: { app: CatalogApp }) {
               <span />
               <span />
               <span />
-              {busy ? <LoaderCircle className="h-5 w-5 animate-spin" /> : null}
+              <img
+                src={`/app-placeholders/${app.id}.jpg`}
+                alt=""
+                loading="lazy"
+                onError={(event) => {
+                  event.currentTarget.hidden = true;
+                }}
+              />
             </div>
             <h3>{busy ? status : "Здесь появится результат"}</h3>
             <p>Все параметры, исходники и готовый материал находятся в одном пространстве приложения.</p>

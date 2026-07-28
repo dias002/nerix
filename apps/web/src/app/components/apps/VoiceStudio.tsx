@@ -1,4 +1,4 @@
-import { Download, History, LoaderCircle, Mic2, Play, RotateCcw, Sparkles, Volume2 } from "lucide-react";
+import { Download, History, LoaderCircle, Mic2, Play, RotateCcw, SlidersHorizontal, Sparkles, Volume2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   createGenerationJob,
@@ -110,29 +110,38 @@ export default function VoiceStudio() {
             <textarea rows={8} value={text} onChange={(event) => setText(event.target.value)} />
             <small>{text.trim().split(/\s+/).filter(Boolean).length} слов · {text.length} символов</small>
           </label>
-          <div className="pro-field">
-            <span>Голос</span>
-            <div className="voice-picker">
-              {voices.map(([id, title, description]) => (
-                <button key={id} type="button" className={voice === id ? "is-active" : ""} onClick={() => setVoice(id)}>
-                  <Volume2 />
-                  <span><strong>{title}</strong><small>{description}</small></span>
-                </button>
-              ))}
+          <details className="pro-settings voice-options">
+            <summary>
+              <SlidersHorizontal />
+              <span>Голос и формат</span>
+              <small>{voices.find(([id]) => id === voice)?.[1] ?? voice} · {speed.toFixed(2)}×</small>
+            </summary>
+            <div className="pro-settings-body">
+              <div className="pro-field">
+                <span>Голос</span>
+                <div className="voice-picker">
+                  {voices.map(([id, title, description]) => (
+                    <button key={id} type="button" className={voice === id ? "is-active" : ""} onClick={() => setVoice(id)}>
+                      <Volume2 />
+                      <span><strong>{title}</strong><small>{description}</small></span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="pro-range">
+                <span>Скорость</span>
+                <output>{speed.toFixed(2)}×</output>
+                <input type="range" min={0.7} max={1.3} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+              </label>
+              <label className="pro-field">
+                <span>Формат</span>
+                <select value={format} onChange={(event) => setFormat(event.target.value)}>
+                  <option value="mp3">MP3</option>
+                  <option value="wav">WAV</option>
+                </select>
+              </label>
             </div>
-          </div>
-          <label className="pro-range">
-            <span>Скорость</span>
-            <output>{speed.toFixed(2)}×</output>
-            <input type="range" min={0.7} max={1.3} step={0.05} value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
-          </label>
-          <label className="pro-field">
-            <span>Формат</span>
-            <select value={format} onChange={(event) => setFormat(event.target.value)}>
-              <option value="mp3">MP3</option>
-              <option value="wav">WAV</option>
-            </select>
-          </label>
+          </details>
           <button type="button" className="pro-primary-button" disabled={busy || !text.trim()} onClick={() => void generate()}>
             {busy ? <LoaderCircle className="spin" /> : <Play />}
             Озвучить только этот текст
@@ -173,7 +182,19 @@ export default function VoiceStudio() {
             </div>
           ) : (
             <div className="voice-empty">
-              <div className="voice-wave">{Array.from({ length: 28 }, (_, index) => <i key={index} />)}</div>
+              <div className="voice-placeholder-object" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <img
+                  src="/app-placeholders/voice.jpg"
+                  alt=""
+                  loading="lazy"
+                  onError={(event) => {
+                    event.currentTarget.hidden = true;
+                  }}
+                />
+              </div>
               <strong>Каждая генерация будет отдельной</strong>
               <span>Старые записи не исчезнут и не попадут внутрь нового текста.</span>
             </div>

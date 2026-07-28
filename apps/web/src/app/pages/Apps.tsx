@@ -8,7 +8,6 @@ import {
   List,
   RotateCcw,
   SlidersHorizontal,
-  Sparkles,
 } from "lucide-react";
 import OptimizedImage from "../components/OptimizedImage";
 import FilterBar from "../components/workspace/FilterBar";
@@ -168,7 +167,6 @@ export default function Apps() {
 
           {filteredApps.length === 0 ? (
             <div className="ns-app-empty">
-              <Sparkles className="h-5 w-5" strokeWidth={1.7} />
               Попробуйте другую категорию или запрос.
             </div>
           ) : null}
@@ -194,7 +192,6 @@ function CoverImage({ app, failed, onError }: { app: AppCatalogItem; failed: boo
           onError={onError}
         />
       ) : null}
-      <span className="ns-app-cover-orbit" aria-hidden="true" />
     </div>
   );
 }

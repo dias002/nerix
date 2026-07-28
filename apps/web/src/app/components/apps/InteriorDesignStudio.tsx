@@ -12,11 +12,13 @@ import {
   Trees,
   WandSparkles,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useNavigate } from "react-router";
 import {
   createGenerationJob,
   fetchGenerationArtifact,
   refreshGenerationJob,
+  type ImageMaskJobInput,
   type MediaGenerationOptions,
   type ReferenceImageJobInput,
 } from "../../api-client/generation";
@@ -26,8 +28,9 @@ import InteriorCatalog from "./InteriorCatalog";
 import {
   interiorCatalog,
   maxInteriorSelection,
-  readInteriorSelection,
-  saveInteriorSelection,
+  readInteriorCart,
+  saveInteriorCart,
+  type InteriorCartLine,
   type InteriorCatalogItem,
 } from "./interiorCatalogData";
 import "../../../styles/immersive-apps.css";
@@ -43,6 +46,19 @@ type InteriorRender = {
 type RoomReference = ReferenceImageJobInput & {
   preview: string;
 };
+
+type EditTarget = "furniture" | "walls" | "light" | "window" | "decor";
+type EditScope = "scene" | "region";
+type EditRegion = { x: number; y: number; width: number; height: number };
+type SelectedInteriorItem = { item: InteriorCatalogItem; quantity: number };
+
+const editTargets: Array<{ id: EditTarget; label: string }> = [
+  { id: "furniture", label: "Мебель" },
+  { id: "walls", label: "Стены" },
+  { id: "light", label: "Свет" },
+  { id: "window", label: "Окно" },
+  { id: "decor", label: "Декор" },
+];
 
 const styles = [
   ["warm-minimal", "Теплый минимализм"],
@@ -65,10 +81,12 @@ const windowViews = [
   ["courtyard", "Тихий двор"],
 ] as const;
 
-export default function InteriorDesignStudio() {
+export default function InteriorDesignStudio({ catalogOnly = false }: { catalogOnly?: boolean }) {
   const { isAuthenticated, user } = useAuth();
   const { language } = useLanguage();
+  const navigate = useNavigate();
   const urls = useRef<string[]>([]);
+  const editStart = useRef<{ x: number; y: number } | null>(null);
   const [brief, setBrief] = useState(
     "Светлая гостиная для отдыха и встреч. Натуральные материалы, свободный проход и спокойная атмосфера."
   );
@@ -83,35 +101,91 @@ export default function InteriorDesignStudio() {
   const [light, setLight] = useState(64);
   const [lightDirection, setLightDirection] = useState(28);
   const [windowView, setWindowView] = useState<(typeof windowViews)[number][0]>("rain-forest");
-  const [selected, setSelected] = useState(readInteriorSelection);
-  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [cart, setCart] = useState(readInteriorCart);
   const [roomReference, setRoomReference] = useState<RoomReference | null>(null);
   const [renders, setRenders] = useState<InteriorRender[]>([]);
   const [activeId, setActiveId] = useState("");
   const [change, setChange] = useState("");
+  const [editTarget, setEditTarget] = useState<EditTarget>("furniture");
+  const [editScope, setEditScope] = useState<EditScope>("scene");
+  const [editRegion, setEditRegion] = useState<EditRegion | null>(null);
+  const [editCapability, setEditCapability] = useState<"mask" | "reference" | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
   const activeRender = renders.find((item) => item.id === activeId) ?? renders[0] ?? null;
-  const selectedItems = useMemo(
-    () => selected.map((id) => interiorCatalog.find((item) => item.id === id)).filter(Boolean) as InteriorCatalogItem[],
-    [selected]
-  );
+  const cartItems = useMemo(() => cart.flatMap((line) => {
+    const item = interiorCatalog.find((candidate) => candidate.id === line.id);
+    return item ? [{ item, quantity: line.quantity }] : [];
+  }), [cart]);
+  const selectedItems = useMemo(() => cartItems.map((line) => line.item), [cartItems]);
 
   useEffect(() => () => urls.current.forEach((url) => URL.revokeObjectURL(url)), []);
-  useEffect(() => saveInteriorSelection(selected), [selected]);
+  useEffect(() => saveInteriorCart(cart), [cart]);
 
-  const toggleFurniture = (id: string) => {
+  const addFurniture = (id: string) => {
     setError("");
-    setSelected((current) => {
-      if (current.includes(id)) return current.filter((item) => item !== id);
+    setCart((current) => {
+      const existing = current.find((line) => line.id === id);
+      if (existing) {
+        return current.map((line) => line.id === id ? { ...line, quantity: Math.min(9, line.quantity + 1) } : line);
+      }
       if (current.length >= maxInteriorSelection) {
         setError(`Можно передать модели до ${maxInteriorSelection} предметов за одну генерацию.`);
         return current;
       }
-      return [...current, id];
+      return [...current, { id, quantity: 1 }];
     });
+  };
+
+  const decrementFurniture = (id: string) => {
+    setCart((current) => current.flatMap((line) => {
+      if (line.id !== id) return [line];
+      return line.quantity > 1 ? [{ ...line, quantity: line.quantity - 1 }] : [];
+    }));
+    setError("");
+  };
+
+  const removeFurniture = (id: string) => {
+    setCart((current) => current.filter((line) => line.id !== id));
+    setError("");
+  };
+
+  const clearFurniture = () => {
+    setCart([]);
+    setError("");
+  };
+
+  const editPoint = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+      y: clamp((event.clientY - rect.top) / rect.height, 0, 1),
+    };
+  };
+
+  const startEditRegion = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (editScope !== "region" || !activeRender || busy) return;
+    const point = editPoint(event);
+    editStart.current = point;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setEditRegion({ ...point, width: 0, height: 0 });
+  };
+
+  const moveEditRegion = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!editStart.current || editScope !== "region") return;
+    setEditRegion(regionBetween(editStart.current, editPoint(event)));
+  };
+
+  const finishEditRegion = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!editStart.current) return;
+    const region = regionBetween(editStart.current, editPoint(event));
+    editStart.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setEditRegion(region.width >= 0.02 && region.height >= 0.02 ? region : null);
   };
 
   const uploadRoom = async (file: File | null) => {
@@ -139,19 +213,31 @@ export default function InteriorDesignStudio() {
       setError("Напишите, что нужно изменить в текущем варианте.");
       return;
     }
+    if (mode === "edit" && editScope === "region" && !editRegion) {
+      setError("Нарисуйте прямоугольную область на изображении или выберите всю сцену.");
+      return;
+    }
 
     setBusy(true);
     setError("");
+    setEditCapability(null);
     setStatus(mode === "edit" ? "Готовлю новую версию…" : "Собираю комнату и референсы…");
 
     try {
+      const referenceLimit = roomReference ? 3 : 4;
       const references = await Promise.all(
-        selectedItems.filter((item) => item.referenceImage).map((item) => imageToReference(item))
+        selectedItems
+          .filter((item) => item.referenceImage)
+          .slice(0, referenceLimit)
+          .map((item) => imageToReference(item))
       );
       if (roomReference) {
         const { preview: _preview, ...reference } = roomReference;
         references.unshift(reference);
       }
+      const maskImage = mode === "edit" && editScope === "region" && editRegion && activeRender
+        ? await createRegionMask(activeRender.imageUrl, editRegion)
+        : undefined;
 
       const response = await createGenerationJob({
         agentId: "image",
@@ -169,11 +255,16 @@ export default function InteriorDesignStudio() {
           light,
           lightDirection,
           windowView,
-          furniture: selectedItems,
+          furniture: cartItems,
           change: mode === "edit" ? change.trim() : "",
+          editTarget,
+          editScope,
+          editRegion,
         }),
         imageReferenceJobId: mode === "edit" ? activeRender?.jobId : undefined,
         referenceImages: references.length ? references : undefined,
+        editRegion: mode === "edit" && editScope === "region" ? editRegion ?? undefined : undefined,
+        maskImage,
         options: { aspectRatio: "16:9", imageSize: "2K" } as MediaGenerationOptions,
         language,
         country: user?.country === "RU" ? "RU" : "KZ",
@@ -186,6 +277,10 @@ export default function InteriorDesignStudio() {
         job = (await refreshGenerationJob(job.id)).job;
       }
       if (job.status !== "succeeded") throw new Error("Не удалось завершить визуализацию.");
+      if (mode === "edit" && maskImage) {
+        const imageEdit = readImageEditMetadata(job.metadata);
+        setEditCapability(imageEdit?.maskApplied === true ? "mask" : "reference");
+      }
 
       const blob = await fetchGenerationArtifact(job.id);
       const imageUrl = URL.createObjectURL(blob);
@@ -208,18 +303,18 @@ export default function InteriorDesignStudio() {
     }
   };
 
-  if (catalogOpen) {
+  if (catalogOnly) {
     return (
       <InteriorCatalog
         items={interiorCatalog}
-        selectedIds={selected}
+        cart={cart}
         maxSelected={maxInteriorSelection}
         error={error}
-        onToggle={toggleFurniture}
-        onDone={() => {
-          setCatalogOpen(false);
-          setError("");
-        }}
+        onAdd={addFurniture}
+        onDecrement={decrementFurniture}
+        onRemove={removeFurniture}
+        onClear={clearFurniture}
+        onDone={() => navigate("/workspace/apps/interior")}
       />
     );
   }
@@ -276,7 +371,7 @@ export default function InteriorDesignStudio() {
                 className="pro-text-button"
                 onClick={() => {
                   setError("");
-                  setCatalogOpen(true);
+                  navigate("/workspace/apps/interior/catalog");
                 }}
               >
                 <Armchair />
@@ -284,10 +379,10 @@ export default function InteriorDesignStudio() {
               </button>
             </div>
             <div className="selected-furniture">
-              {selectedItems.map((item) => (
-                <button key={item.id} type="button" onClick={() => toggleFurniture(item.id)}>
+              {cartItems.map(({ item, quantity }) => (
+                <button key={item.id} type="button" onClick={() => removeFurniture(item.id)}>
                   <img src={item.image} alt="" />
-                  <span>{item.title}</span>
+                  <span>{item.title}{quantity > 1 ? ` · ${quantity} шт.` : ""}</span>
                   <Check />
                 </button>
               ))}
@@ -345,9 +440,33 @@ export default function InteriorDesignStudio() {
             {status ? <span className="pro-status">{status}</span> : null}
           </header>
 
-          <div className="interior-render-stage">
+          <div
+            className={`interior-render-stage ${editScope === "region" && activeRender ? "is-selecting-region" : ""}`}
+            onPointerDown={startEditRegion}
+            onPointerMove={moveEditRegion}
+            onPointerUp={finishEditRegion}
+            onPointerCancel={finishEditRegion}
+          >
             {activeRender ? (
-              <img src={activeRender.imageUrl} alt="Сгенерированный интерьер" />
+              <>
+                <img src={activeRender.imageUrl} alt="Сгенерированный интерьер" draggable={false} />
+                {editScope === "region" && editRegion ? (
+                  <span
+                    className="interior-edit-region"
+                    style={{
+                      left: `${editRegion.x * 100}%`,
+                      top: `${editRegion.y * 100}%`,
+                      width: `${editRegion.width * 100}%`,
+                      height: `${editRegion.height * 100}%`,
+                    }}
+                  />
+                ) : null}
+                {editScope === "region" ? (
+                  <span className="interior-edit-hint">
+                    {editRegion ? "Область изменения" : "Проведите по изображению, чтобы выделить область"}
+                  </span>
+                ) : null}
+              </>
             ) : (
               <div className="interior-empty">
                 <div className="interior-empty-room">
@@ -383,7 +502,70 @@ export default function InteriorDesignStudio() {
                     rows={3}
                   />
                 </label>
-                <button type="button" disabled={busy || !change.trim()} onClick={() => void generate("edit")}>
+                <details className="interior-edit-settings">
+                  <summary>
+                    <Move3D />
+                    Область и тип изменения
+                  </summary>
+                  <div className="interior-edit-settings-body">
+                    <div className="pro-field">
+                      <span>Что меняем</span>
+                      <div className="interior-edit-targets">
+                        {editTargets.map((target) => (
+                          <button
+                            key={target.id}
+                            type="button"
+                            className={editTarget === target.id ? "is-active" : ""}
+                            onClick={() => setEditTarget(target.id)}
+                          >
+                            {target.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="pro-field">
+                      <span>Где меняем</span>
+                      <div className="interior-edit-scope">
+                        <button
+                          type="button"
+                          className={editScope === "scene" ? "is-active" : ""}
+                          onClick={() => {
+                            setEditScope("scene");
+                            setEditRegion(null);
+                          }}
+                        >
+                          Вся сцена
+                        </button>
+                        <button
+                          type="button"
+                          className={editScope === "region" ? "is-active" : ""}
+                          onClick={() => setEditScope("region")}
+                        >
+                          Выделенная область
+                        </button>
+                      </div>
+                      {editScope === "region" ? (
+                        <>
+                          <small>Закройте настройки и нарисуйте прямоугольник прямо на предыдущем рендере.</small>
+                          {editCapability === "reference" ? (
+                            <p className="interior-edit-capability is-fallback">
+                              Точная область недоступна, используется reference edit.
+                            </p>
+                          ) : editCapability === "mask" ? (
+                            <p className="interior-edit-capability">
+                              Точная область применена через PNG mask.
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                </details>
+                <button
+                  type="button"
+                  disabled={busy || !change.trim() || (editScope === "region" && !editRegion)}
+                  onClick={() => void generate("edit")}
+                >
                   {busy ? <LoaderCircle className="spin" /> : <RotateCcw />}
                   Создать новую версию
                 </button>
@@ -453,23 +635,38 @@ function buildInteriorPrompt(input: {
   light: number;
   lightDirection: number;
   windowView: string;
-  furniture: InteriorCatalogItem[];
+  furniture: SelectedInteriorItem[];
   change: string;
+  editTarget: EditTarget;
+  editScope: EditScope;
+  editRegion: EditRegion | null;
 }) {
   const styleLabel = styles.find(([id]) => id === input.style)?.[1] ?? input.style;
   const cameraLabel = cameraPresets.find(([id]) => id === input.camera)?.[1] ?? input.camera;
   const viewLabel = windowViews.find(([id]) => id === input.windowView)?.[1] ?? input.windowView;
+  const targetLabel = editTargets.find((target) => target.id === input.editTarget)?.label ?? input.editTarget;
+  const regionRule = input.editScope === "region" && input.editRegion
+    ? `Edit only normalized region x=${input.editRegion.x.toFixed(3)}, y=${input.editRegion.y.toFixed(3)}, width=${input.editRegion.width.toFixed(3)}, height=${input.editRegion.height.toFixed(3)}. Coordinates use the supplied image with top-left origin and values from 0 to 1. Outside this rectangle preserve the source image pixel composition and every object exactly.`
+    : "Apply the requested change to the whole scene, but preserve all architecture and composition not explicitly mentioned.";
+  const editRules = input.change ? [
+    `Edit target: ${targetLabel}.`,
+    regionRule,
+    "Invariant: preserve the exact room geometry, wall openings, floor plan, camera position, lens, perspective, crop and image dimensions.",
+    "Invariant: do not move, resize, recolor, remove or add objects outside the requested target and scope.",
+    "Keep lighting continuity and realistic contact shadows at the boundary of the edited region.",
+  ] : [];
   return [
     input.change
-      ? `Edit the supplied interior render. Change only this: ${input.change}. Keep the architecture, room proportions and all elements not mentioned in the edit unchanged.`
+      ? `Edit the supplied previous interior render. Requested change: ${input.change}.`
       : "Create a photorealistic, buildable architectural interior visualization.",
     `Room: ${input.roomType}, exact internal dimensions ${input.width} m × ${input.depth} m × ${input.height} m.`,
     `User direction: ${input.brief.trim()}`,
     `Interior style: ${styleLabel}.`,
-    `Place and closely match the supplied catalog references: ${input.furniture.map((item) => item.prompt).join("; ") || "no fixed furniture references"}.`,
+    `Place and closely match the supplied catalog selection: ${input.furniture.map(({ item, quantity }) => `${quantity} × ${item.prompt}`).join("; ") || "no fixed furniture references"}.`,
     `Camera: ${cameraLabel}, ${input.lens} mm architectural lens, horizontal turn ${input.cameraTurn} degrees, eye level 1.55 m. Keep vertical lines straight and show the complete usable room.`,
     `Lighting: daylight intensity ${input.light} percent, main light direction ${input.lightDirection} degrees, physically accurate indirect light and soft contact shadows.`,
     `Windows: clearly show ${viewLabel} outside, with believable glass reflections and weather light entering the room.`,
+    ...editRules,
     "Respect real furniture scale, walking clearances, doors, windows and construction logic. No fisheye, no floating furniture, no text, no people, no watermark.",
   ].join("\n");
 }
@@ -498,6 +695,54 @@ async function blobToReference(blob: Blob, filename: string): Promise<ReferenceI
     filename,
     consentConfirmed: true,
   };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function regionBetween(start: { x: number; y: number }, end: { x: number; y: number }): EditRegion {
+  return {
+    x: Math.min(start.x, end.x),
+    y: Math.min(start.y, end.y),
+    width: Math.abs(end.x - start.x),
+    height: Math.abs(end.y - start.y),
+  };
+}
+
+async function createRegionMask(imageUrl: string, region: EditRegion): Promise<ImageMaskJobInput> {
+  const image = new Image();
+  image.src = imageUrl;
+  await image.decode();
+
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Не удалось подготовить маску области.");
+
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.clearRect(
+    Math.round(region.x * canvas.width),
+    Math.round(region.y * canvas.height),
+    Math.max(1, Math.round(region.width * canvas.width)),
+    Math.max(1, Math.round(region.height * canvas.height))
+  );
+
+  const dataUrl = canvas.toDataURL("image/png");
+  return {
+    dataBase64: dataUrl.slice(dataUrl.indexOf(",") + 1),
+    mimeType: "image/png",
+    filename: "nomduchat-interior-mask.png",
+  };
+}
+
+function readImageEditMetadata(metadata: Record<string, unknown>) {
+  const value = metadata.imageEdit;
+  return value && typeof value === "object"
+    ? value as { maskApplied?: boolean; maskSupported?: boolean; mode?: string }
+    : null;
 }
 
 function wait(ms: number) {

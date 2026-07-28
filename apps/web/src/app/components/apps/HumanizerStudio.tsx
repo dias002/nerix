@@ -188,7 +188,9 @@ export default function HumanizerStudio() {
           </>
         ) : (
           <div className="app-studio-empty-result">
-            <span><WandSparkles className="h-5 w-5" strokeWidth={1.7} /></span>
+            <div className="humanizer-placeholder" aria-hidden="true">
+              <img src="/app-placeholders/humanizer.jpg" alt="" loading="lazy" />
+            </div>
             <h3>Результат появится здесь</h3>
             <p>Настройте голос, аудиторию и степень формальности. Исходный текст останется слева для сравнения.</p>
           </div>

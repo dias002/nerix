@@ -9,9 +9,12 @@ import type { MediaArtifact, MediaGenerationProvider } from "./media-provider.js
 import type {
   AvatarVideoGenerationInput,
   GenerationPurpose,
+  ImageEditRegionInput,
+  ImageMaskInput,
   ImageReferenceInput,
   MediaGenerationOptions,
   MediaGenerationJob,
+  UploadedMaskImageInput,
   UploadedReferenceImageInput,
 } from "./generation.types.js";
 
@@ -93,6 +96,8 @@ export class GenerationService {
     referenceImage?: UploadedReferenceImageInput;
     referenceImages?: UploadedReferenceImageInput[];
     imageReferenceJobId?: string;
+    editRegion?: ImageEditRegionInput;
+    maskImage?: UploadedMaskImageInput;
     isAdmin?: boolean;
   }) {
     const prompt = input.prompt.trim();
@@ -125,6 +130,23 @@ export class GenerationService {
       route: routeResult.value,
       hasImageReferences: imageReferences.length > 0,
     });
+    const maskRequested = Boolean(input.maskImage);
+    const maskSupported = maskRequested && supportsImageMask(route.provider, route.model);
+    const maskImage: ImageMaskInput | undefined = maskSupported && input.maskImage
+      ? {
+          mimeType: input.maskImage.mimeType,
+          data: Buffer.from(input.maskImage.dataBase64, "base64"),
+          filename: input.maskImage.filename,
+        }
+      : undefined;
+
+    if (input.maskImage && !input.imageReferenceJobId) {
+      return fail(new DomainError("validation_failed", "A mask edit requires an existing source image job.", 400));
+    }
+
+    if (input.editRegion && !input.imageReferenceJobId) {
+      return fail(new DomainError("validation_failed", "An edit region requires an existing source image job.", 400));
+    }
 
     if (route.modality === "image" && imageReferences.length > 0 && !supportsImageReferences(route.provider)) {
       return fail(new DomainError("provider_unavailable", "Image references require Gemini or OpenAI image generation to be configured.", 503));
@@ -213,6 +235,15 @@ export class GenerationService {
         avatarVideo: sanitizeAvatarVideoMetadata(input.avatarVideo),
         imageReference: sanitizeImageReferenceMetadata(primaryImageReference),
         imageReferences: sanitizeImageReferencesMetadata(imageReferences),
+        imageEdit: input.imageReferenceJobId
+          ? {
+              mode: maskImage ? "mask" : "reference",
+              maskRequested,
+              maskSupported,
+              maskApplied: Boolean(maskImage),
+              region: sanitizeEditRegion(input.editRegion),
+            }
+          : undefined,
         options: sanitizeMediaOptions(input.options),
       },
     });
@@ -232,6 +263,7 @@ export class GenerationService {
         avatarVideo: input.avatarVideo,
         imageReference: primaryImageReference,
         imageReferences,
+        maskImage,
         options: input.options,
       });
 
@@ -247,7 +279,7 @@ export class GenerationService {
 
         return ok({
           job: jobForResponse(runningJob),
-          route: routeResult.value,
+          route,
           usage: buildUsage(reservedCredits, null),
         });
       }
@@ -267,7 +299,7 @@ export class GenerationService {
 
       return ok({
         job: jobForResponse(finalized),
-        route: routeResult.value,
+        route,
         usage: buildUsage(reservedCredits, finalized.finalCredits ?? null),
       });
     } catch (error) {
@@ -279,7 +311,7 @@ export class GenerationService {
 
       return ok({
         job: jobForResponse(failed),
-        route: routeResult.value,
+        route,
         usage: buildUsage(reservedCredits, 0),
       });
     }
@@ -467,16 +499,12 @@ export class GenerationService {
       ...(input.referenceImages ?? []),
     ];
 
-    if (uploadedReferences.length > 0 && input.imageReferenceJobId) {
-      return fail(new DomainError("validation_failed", "Use either an uploaded reference image or an existing image job.", 400));
-    }
-
     if (uploadedReferences.length > 0) {
       if (input.modality !== "image" && input.modality !== "video") {
         return fail(new DomainError("validation_failed", "Image references can only be used for image or video generation jobs.", 400));
       }
 
-      const maxReferences = input.modality === "video" ? 1 : 3;
+      const maxReferences = input.modality === "video" ? 1 : 4;
       if (uploadedReferences.length > maxReferences) {
         return fail(new DomainError("validation_failed", input.modality === "video" ? "Use one starting frame for video generation." : "Use up to 3 reference images.", 400));
       }
@@ -485,19 +513,18 @@ export class GenerationService {
         return fail(new DomainError("validation_failed", "Confirm that you own every reference image or have permission to use it.", 400));
       }
 
-      return ok({
-        imageReferences: uploadedReferences.map((reference, index) => ({
-          jobId: uploadedReferences.length === 1 ? "uploaded" : `uploaded-${index + 1}`,
-          prompt: reference.filename ? `${input.prompt}\nReference filename: ${reference.filename}` : input.prompt,
-          mimeType: reference.mimeType,
-          data: Buffer.from(reference.dataBase64, "base64"),
-        } satisfies ImageReferenceInput)),
-      });
     }
+
+    const resolvedUploads = uploadedReferences.map((reference, index) => ({
+      jobId: uploadedReferences.length === 1 ? "uploaded" : `uploaded-${index + 1}`,
+      prompt: reference.filename ? `${input.prompt}\nReference filename: ${reference.filename}` : input.prompt,
+      mimeType: reference.mimeType,
+      data: Buffer.from(reference.dataBase64, "base64"),
+    } satisfies ImageReferenceInput));
 
     if (!input.imageReferenceJobId) {
       return ok({
-        imageReferences: [],
+        imageReferences: resolvedUploads,
       });
     }
 
@@ -529,6 +556,7 @@ export class GenerationService {
           mimeType: artifact.value.mimeType,
           data: artifact.value.data,
         } satisfies ImageReferenceInput,
+        ...resolvedUploads,
       ],
     });
   }
@@ -777,6 +805,15 @@ function supportsImageReferences(provider: string) {
   return provider === "gemini" || provider === "openai";
 }
 
+function supportsImageMask(provider: string, model: string) {
+  if (provider !== "openai") return false;
+  const normalized = model.trim().toLowerCase();
+  return normalized === "image-primary"
+    || normalized === "openai-image-configured"
+    || normalized === "dall-e-2"
+    || normalized.startsWith("gpt-image-");
+}
+
 function isFreeAvatarProfileJob(input: { purpose?: string; agentId?: string; modality: AiModality }) {
   return input.purpose === "avatar_profile" && input.agentId === "avatar" && input.modality === "image";
 }
@@ -810,6 +847,16 @@ function sanitizeMediaOptions(input?: MediaGenerationOptions) {
     audioFormat: input.audioFormat,
     camera: input.camera ? compactObject(input.camera) : undefined,
   });
+}
+
+function sanitizeEditRegion(input?: ImageEditRegionInput) {
+  if (!input) return undefined;
+  return {
+    x: input.x,
+    y: input.y,
+    width: input.width,
+    height: input.height,
+  };
 }
 
 function sanitizeImageReferenceMetadata(input?: ImageReferenceInput) {

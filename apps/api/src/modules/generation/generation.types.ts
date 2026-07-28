@@ -90,12 +90,31 @@ export type UploadedReferenceImageInput = {
   consentConfirmed?: boolean;
 };
 
+export type ImageEditRegionInput = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type UploadedMaskImageInput = {
+  dataBase64: string;
+  mimeType: "image/png";
+  filename?: string;
+};
+
 export type ImageReferenceInput = {
   jobId: string;
   prompt: string;
   resultUrl?: string;
   mimeType: string;
   data: Buffer;
+};
+
+export type ImageMaskInput = {
+  mimeType: "image/png";
+  data: Buffer;
+  filename?: string;
 };
 
 export type UpdateGenerationJobInput = {

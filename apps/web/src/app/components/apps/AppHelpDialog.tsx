@@ -73,7 +73,7 @@ export default function AppHelpDialog({ appName, content }: AppHelpDialogProps) 
       ? createPortal(
           <div
             className="app-help-overlay"
-            onMouseDown={(event) => {
+            onPointerDown={(event) => {
               if (event.target === event.currentTarget) setOpen(false);
             }}
           >

@@ -84,6 +84,7 @@
 
 .app-help-dialog {
   width: min(100%, 640px);
+  max-width: calc(100vw - 24px);
   max-height: min(820px, calc(100dvh - 28px));
   overflow-y: auto;
   border: 1px solid var(--line-default);
@@ -259,6 +260,13 @@
     width: 100%;
     justify-content: space-between;
   }
+}
+
+.app-studio-page,
+.app-studio-header,
+.app-studio-header-copy {
+  min-width: 0;
+  max-width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

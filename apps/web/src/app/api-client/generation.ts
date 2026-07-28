@@ -24,6 +24,19 @@ export type ReferenceImageJobInput = {
   consentConfirmed?: boolean;
 };
 
+export type ImageEditRegionInput = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type ImageMaskJobInput = {
+  dataBase64: string;
+  mimeType: "image/png";
+  filename?: string;
+};
+
 export type GenerationPurpose = "avatar_profile" | "application_cover" | "title_video";
 
 export type MediaGenerationOptions = {
@@ -54,6 +67,8 @@ export async function createGenerationJob(input: {
   imageReferenceJobId?: string;
   referenceImage?: ReferenceImageJobInput;
   referenceImages?: ReferenceImageJobInput[];
+  editRegion?: ImageEditRegionInput;
+  maskImage?: ImageMaskJobInput;
   avatarVideo?: AvatarVideoJobInput;
 }) {
   return request<{ job: MediaGenerationJobApiRecord }>("/generation/jobs", {
@@ -69,6 +84,8 @@ export async function createGenerationJob(input: {
       imageReferenceJobId: input.imageReferenceJobId,
       referenceImage: input.referenceImage,
       referenceImages: input.referenceImages,
+      editRegion: input.editRegion,
+      maskImage: input.maskImage,
       avatarVideo: input.avatarVideo,
     }),
   });
