@@ -36,16 +36,16 @@ export default function AppWorkspace() {
 
   return (
     <div className="ns-page-scroll">
-      <main className="ns-page app-studio-page" data-accent={app.accent}>
+      <main className={`ns-page app-studio-page app-studio-page--${app.id}`} data-accent={app.accent}>
         <header className="app-studio-header">
-          <div className="min-w-0">
+          <div className="min-w-0 app-studio-header-copy">
             <Link to="/workspace/apps" className="app-studio-back">
               <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
               Все приложения
             </Link>
-            <div className="mt-4 flex items-center gap-3">
+            <div className="mt-4 flex items-center gap-3 app-studio-identity">
               <img src={`/app-covers/${app.id}.webp`} alt="" className="app-studio-icon" />
-              <div className="min-w-0">
+              <div className="min-w-0 app-studio-heading">
                 <p className="ns-overline">{app.category}</p>
                 <h1 className="app-studio-title">{app.title}</h1>
               </div>
