@@ -1,19 +1,16 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Language } from "@nomduchat/shared";
+import type { AuthApiResponse, UserApiRecord } from "./api-client";
 import {
-  type AuthApiResponse,
   confirmPasswordReset as confirmPasswordResetApi,
-  createGenerationJob,
-  fetchGenerationArtifact,
   getCurrentUser,
   loginUser,
   requestPasswordReset as requestPasswordResetApi,
   registerUser,
-  setApiAccessToken,
-  setApiLocalRoleOverride,
   updateCurrentUserProfile,
-  type UserApiRecord,
-} from "./api";
+} from "./api-client/auth";
+import { createGenerationJob, fetchGenerationArtifact } from "./api-client/generation";
+import { setApiAccessToken, setApiLocalRoleOverride } from "./api-client/transport";
 import { reachAnalyticsGoal } from "./analytics";
 
 export type LocalRoleOverride = "real" | "user" | "business_owner" | "business_employee" | "admin";

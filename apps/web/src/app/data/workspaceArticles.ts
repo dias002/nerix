@@ -28,19 +28,19 @@ type ArticleView = Pick<WorkspaceArticle, "category" | "cover" | "ctaLabel" | "c
 const articleViews: Record<WorkspaceArticleType, ArticleView> = {
   images: {
     category: "Изображения",
-    cover: "images",
+    cover: "article-ai-images-reference",
     ctaLabel: "Попробовать изображения",
     ctaHref: "/workspace/media/image",
   },
   video: {
     category: "Видео",
-    cover: "video",
+    cover: "article-video-first-frame",
     ctaLabel: "Попробовать видео",
     ctaHref: "/workspace/media/video",
   },
   voice: {
     category: "Аудио",
-    cover: "voice",
+    cover: "article-voice-product",
     ctaLabel: "Попробовать озвучку",
     ctaHref: "/workspace/media/voice",
   },

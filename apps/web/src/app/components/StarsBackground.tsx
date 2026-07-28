@@ -32,12 +32,16 @@ export default function StarsBackground() {
 
     let width = window.innerWidth;
     let height = window.innerHeight;
-    let pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const coarsePointer = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let pixelRatio = Math.min(window.devicePixelRatio || 1, coarsePointer ? 1.25 : 1.6);
     let stars: Star[] = [];
     const meteors: Meteor[] = [];
 
     const createStars = () => {
-      const count = Math.round(Math.min(520, Math.max(260, width * height / 4200)));
+      const count = coarsePointer
+        ? Math.round(Math.min(180, Math.max(90, width * height / 9000)))
+        : Math.round(Math.min(360, Math.max(180, width * height / 5600)));
       stars = Array.from({ length: count }, () => ({
         x: Math.random() * width,
         y: Math.random() * (height + 260) - 130,
@@ -51,7 +55,7 @@ export default function StarsBackground() {
     const setCanvasSize = () => {
       width = window.innerWidth;
       height = window.innerHeight;
-      pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      pixelRatio = Math.min(window.devicePixelRatio || 1, coarsePointer ? 1.25 : 1.6);
       canvas.width = width * pixelRatio;
       canvas.height = height * pixelRatio;
       canvas.style.width = `${width}px`;
@@ -243,12 +247,20 @@ export default function StarsBackground() {
     updateScroll();
     window.addEventListener("resize", setCanvasSize);
     window.addEventListener("scroll", updateScroll, { passive: true });
-    window.addEventListener("pointermove", updatePointer, { passive: true });
+    if (!coarsePointer) window.addEventListener("pointermove", updatePointer, { passive: true });
 
-    let animationFrame: number;
+    let animationFrame = 0;
+    let lastFrame = 0;
+    let paused = document.hidden;
     let time = 0;
 
-    const animate = () => {
+    const animate = (timestamp = 0) => {
+      if (paused) return;
+      if (coarsePointer && timestamp - lastFrame < 33) {
+        animationFrame = requestAnimationFrame(animate);
+        return;
+      }
+      lastFrame = timestamp;
       const isLightTheme = document.documentElement.classList.contains("light");
 
       ctx.fillStyle = isLightTheme ? "#F4F6FA" : "#000000";
@@ -315,15 +327,22 @@ export default function StarsBackground() {
       ctx.fillRect(0, 0, width, height);
 
       time += 1;
-      animationFrame = requestAnimationFrame(animate);
+      if (!reducedMotion) animationFrame = requestAnimationFrame(animate);
     };
 
-    animate();
+    const updateVisibility = () => {
+      paused = document.hidden;
+      if (!paused && !reducedMotion) animationFrame = requestAnimationFrame(animate);
+    };
+
+    document.addEventListener("visibilitychange", updateVisibility);
+    animationFrame = requestAnimationFrame(animate);
 
     return () => {
       window.removeEventListener("resize", setCanvasSize);
       window.removeEventListener("scroll", updateScroll);
-      window.removeEventListener("pointermove", updatePointer);
+      if (!coarsePointer) window.removeEventListener("pointermove", updatePointer);
+      document.removeEventListener("visibilitychange", updateVisibility);
       cancelAnimationFrame(animationFrame);
     };
   }, []);

@@ -20,14 +20,26 @@ export default function WorkspaceAppShell({
 }) {
   useEffect(() => {
     document.documentElement.dataset.workspaceShell = "true";
+    const viewport = window.visualViewport;
+    const updateHeight = () => {
+      const height = Math.round(viewport?.height ?? window.innerHeight);
+      document.documentElement.style.setProperty("--app-height", `${height}px`);
+    };
+
+    updateHeight();
+    viewport?.addEventListener("resize", updateHeight);
+    window.addEventListener("resize", updateHeight);
 
     return () => {
       delete document.documentElement.dataset.workspaceShell;
+      document.documentElement.style.removeProperty("--app-height");
+      viewport?.removeEventListener("resize", updateHeight);
+      window.removeEventListener("resize", updateHeight);
     };
   }, []);
 
   return (
-    <div className="ns-workspace-shell flex min-h-screen relative overflow-hidden">
+    <div className="ns-workspace-shell relative flex overflow-hidden">
       {sidebar}
       <main className="ns-shell-main" data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}>
         {topbar}

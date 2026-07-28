@@ -17,7 +17,7 @@ export default function LanguageSwitch({ className = "" }: LanguageSwitchProps) 
           key={option.code}
           type="button"
           onClick={() => setLanguage(option.code)}
-          className={`h-8 min-w-10 rounded-full px-3 text-xs font-medium transition-colors ${
+          className={`h-11 min-w-11 rounded-full px-3 text-xs font-medium transition-colors sm:h-8 sm:min-w-10 ${
             language === option.code
               ? "bg-white text-black"
               : "text-gray-400 hover:text-white"

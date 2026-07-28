@@ -46,6 +46,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const SettingsProfile = lazy(() => import("./pages/SettingsProfile"));
 const SettingsAppearance = lazy(() => import("./pages/SettingsAppearance"));
 const SettingsNotifications = lazy(() => import("./pages/SettingsNotifications"));
+const WorkspaceSearch = lazy(() => import("./pages/WorkspaceSearch"));
 
 const basename = resolveRouterBasename(import.meta.env.BASE_URL);
 
@@ -222,6 +223,7 @@ const routes: RouteObject[] = [
       { path: "home", Component: WorkspaceHome },
       { path: "articles/:slug", Component: WorkspaceArticle },
       { path: "chat", Component: Chat },
+      { path: "search", Component: WorkspaceSearch },
       { path: "avatar", Component: AvatarStudio },
       { path: "apps", Component: Apps },
       { path: "media", Component: Media },

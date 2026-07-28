@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { getPublicContentBlocks } from "../api";
+import OptimizedImage from "../components/OptimizedImage";
+import SearchTag from "../components/workspace/SearchTag";
 import PageHeader from "../components/workspace/PageHeader";
 import { useLanguage } from "../i18n";
 import {
@@ -10,14 +11,19 @@ import {
   type WorkspaceArticleBlock,
 } from "../data/workspaceArticles";
 
+const publicContentEnabled = import.meta.env.VITE_ENABLE_PUBLIC_CONTENT_BLOCKS === "true";
+
 export default function WorkspaceHome() {
   const { language } = useLanguage();
   const [articleBlocks, setArticleBlocks] = useState<WorkspaceArticleBlock[]>(workspaceArticleFallbacks);
   const articles = useMemo(() => toWorkspaceArticles(articleBlocks), [articleBlocks]);
 
   useEffect(() => {
+    if (!publicContentEnabled) return;
+
     let active = true;
-    void getPublicContentBlocks({ placement: "workspace.home.articles", locale: language })
+    void import("../api-client/content")
+      .then(({ getPublicContentBlocks }) => getPublicContentBlocks({ placement: "workspace.home.articles", locale: language }))
       .then((response) => {
         if (!active || response.contentBlocks.length === 0) return;
         setArticleBlocks(response.contentBlocks);
@@ -57,19 +63,42 @@ export default function WorkspaceHome() {
             <h2 id="workspace-articles-title">Идеи для работы с AI</h2>
           </div>
           <div className="ns-home-articles">
-            {articles.map((article) => (
-              <Link key={article.key} to={`/workspace/articles/${article.slug}`} className="ns-home-article">
-                <img src={`/app-covers/${article.cover}.jpg`} alt="" loading="lazy" />
+            {articles.map((article, index) => (
+              <article key={article.key} className="ns-home-article">
+                <Link
+                  to={`/workspace/articles/${article.slug}`}
+                  className="ns-card-hit"
+                  aria-label={`Открыть статью: ${article.title}`}
+                />
+                <OptimizedImage
+                  src={articleCoverSrc(article.cover)}
+                  mobileSrc={articleMobileCoverSrc(article.cover)}
+                  alt=""
+                  pictureClassName="ns-home-article-picture"
+                  loading={index === 0 ? "eager" : "lazy"}
+                  fetchPriority={index === 0 ? "high" : "auto"}
+                  width={1152}
+                  height={720}
+                  sizes="(max-width: 767px) 100vw, 50vw"
+                />
                 <div className="ns-home-article-copy">
-                  <span>{article.category}</span>
+                  <SearchTag tag={article.category} />
                   <h3>{article.title}</h3>
                   <p>{article.excerpt}</p>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         </section>
       </main>
     </div>
   );
+}
+
+function articleCoverSrc(cover: string) {
+  return cover.startsWith("article-") ? `/article-covers/${cover}.webp` : `/app-covers/${cover}.jpg`;
+}
+
+function articleMobileCoverSrc(cover: string) {
+  return cover.startsWith("article-") ? `/article-covers/${cover}-mobile.webp` : undefined;
 }

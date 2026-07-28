@@ -26,6 +26,7 @@ import {
 import { reachAnalyticsGoal } from "../analytics";
 import { useAuth } from "../auth";
 import { languageOptions, useLanguage } from "../i18n";
+import { preloadWorkspaceChat, runWhenIdle } from "../routePreloads";
 
 type Tone = "mint" | "blue" | "violet";
 
@@ -67,6 +68,7 @@ export default function Home() {
   const projectsHref = isAuthenticated
     ? "/workspace/projects"
     : "/auth?mode=register&returnTo=%2Fworkspace%2Fprojects";
+  const preloadChat = () => preloadWorkspaceChat();
 
   useEffect(() => {
     document.documentElement.dataset.landingShell = "true";
@@ -74,6 +76,8 @@ export default function Home() {
       delete document.documentElement.dataset.landingShell;
     };
   }, []);
+
+  useEffect(() => runWhenIdle(preloadWorkspaceChat, 2400), []);
 
   return (
     <div className="landing-shell min-h-dvh overflow-x-hidden text-[var(--text-primary)]">
@@ -102,7 +106,7 @@ export default function Home() {
                 </button>
               ))}
             </div>
-            <Link to="/workspace" className="landing-primary landing-header-cta">
+            <Link to="/workspace/chat" className="landing-primary landing-header-cta" onMouseEnter={preloadChat} onFocus={preloadChat}>
               {landing.cta.try}
               <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
             </Link>
@@ -121,7 +125,7 @@ export default function Home() {
             <h1>{landing.hero.title}</h1>
             <p>{landing.hero.subtitle}</p>
             <div className="landing-actions">
-              <Link to="/workspace" className="landing-primary">
+              <Link to="/workspace/chat" className="landing-primary" onMouseEnter={preloadChat} onFocus={preloadChat}>
                 {landing.cta.free}
                 <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
               </Link>
@@ -263,7 +267,7 @@ export default function Home() {
             </div>
             <h2>{landing.devices.title}</h2>
             <p>{landing.devices.text}</p>
-            <Link to="/workspace" className="landing-secondary landing-inline-link">
+            <Link to="/workspace/chat" className="landing-secondary landing-inline-link" onMouseEnter={preloadChat} onFocus={preloadChat}>
               {landing.cta.workspace}
               <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
             </Link>
@@ -339,7 +343,7 @@ export default function Home() {
             <h2>{landing.final.title}</h2>
             <p>{landing.final.text}</p>
           </div>
-          <Link to="/workspace" className="landing-primary">
+          <Link to="/workspace/chat" className="landing-primary" onMouseEnter={preloadChat} onFocus={preloadChat}>
             {landing.cta.final}
             <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
           </Link>

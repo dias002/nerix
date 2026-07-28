@@ -21,7 +21,6 @@ import {
   Wrench,
 } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
-import LanguageSwitch from "../components/LanguageSwitch";
 import { useLanguage } from "../i18n";
 
 export default function Business() {
@@ -80,13 +79,9 @@ export default function Business() {
       <StarsBackground />
 
       <div className="fixed left-8 top-8 z-20">
-        <Link to="/" className="text-xl font-medium text-white transition-colors hover:text-gray-300">
+        <Link to="/" className="inline-flex min-h-11 items-center text-xl font-medium text-white transition-colors hover:text-gray-300">
           {t.product}
         </Link>
-      </div>
-
-      <div className="fixed right-6 top-8 z-30">
-        <LanguageSwitch />
       </div>
 
       <main className="relative z-10 mx-auto min-h-screen max-w-6xl px-6 py-28 md:py-32">
@@ -98,7 +93,7 @@ export default function Business() {
         >
           <Link
             to="/"
-            className="inline-flex items-center gap-2 text-sm text-gray-400 transition-colors hover:text-white"
+            className="inline-flex min-h-11 items-center gap-2 text-sm text-gray-400 transition-colors hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" strokeWidth={1.7} />
             {t.business.backHome}
@@ -172,7 +167,7 @@ export default function Business() {
                   {item.href ? (
                     <Link
                       to={item.href}
-                      className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-gray-300 transition-colors hover:text-white"
+                  className="mt-5 inline-flex min-h-11 items-center gap-2 text-sm font-medium text-gray-300 transition-colors hover:text-white"
                     >
                       {item.cta ?? "Открыть"}
                       <ArrowRight className="h-4 w-4" strokeWidth={1.8} />

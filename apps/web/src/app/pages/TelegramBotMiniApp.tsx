@@ -80,18 +80,36 @@ export default function TelegramBotMiniApp() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const webApp = window.Telegram?.WebApp ?? null;
-    setTelegram(webApp);
-    webApp?.ready?.();
-    webApp?.expand?.();
+    let active = true;
+    const connect = () => {
+      if (!active) return;
+      const webApp = window.Telegram?.WebApp ?? null;
+      setTelegram(webApp);
+      webApp?.ready?.();
+      webApp?.expand?.();
 
-    const username = webApp?.initDataUnsafe?.user?.username;
-    const firstName = webApp?.initDataUnsafe?.user?.first_name;
-    setForm((current) => ({
-      ...current,
-      contact: current.contact || (username ? `@${username}` : firstName || ""),
-      telegramInitData: webApp?.initData ?? "",
-    }));
+      const username = webApp?.initDataUnsafe?.user?.username;
+      const firstName = webApp?.initDataUnsafe?.user?.first_name;
+      setForm((current) => ({
+        ...current,
+        contact: current.contact || (username ? `@${username}` : firstName || ""),
+        telegramInitData: webApp?.initData ?? "",
+      }));
+    };
+
+    if (window.Telegram?.WebApp) {
+      connect();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://telegram.org/js/telegram-web-app.js";
+      script.async = true;
+      script.addEventListener("load", connect, { once: true });
+      document.head.appendChild(script);
+    }
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const isReady = useMemo(

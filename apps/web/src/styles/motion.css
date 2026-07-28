@@ -34,6 +34,26 @@
   transition-duration: var(--duration-instant);
 }
 
+:where(button, a, [role="button"]) {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .ns-interactive:hover,
+  .nd-card-hover:hover,
+  .nd-primary-action:hover,
+  .ns-shell-button:hover {
+    transform: none;
+  }
+
+  :where(.ns-interactive, .nd-primary-action, .nd-secondary-action, .ns-shell-button, .ns-mobile-nav-item):active {
+    opacity: 0.88;
+    transform: scale(0.975);
+    transition-duration: var(--duration-instant);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ns-interactive,
   .ns-motion-panel {

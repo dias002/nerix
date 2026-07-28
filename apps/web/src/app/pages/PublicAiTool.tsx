@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ArrowLeft, Bot, Brush, Home, Image, Send, Sparkles, type LucideIcon } from "lucide-react";
 import StarsBackground from "../components/StarsBackground";
-import LanguageSwitch from "../components/LanguageSwitch";
 import { setPageSeo } from "../seo";
 
 type ToolPage = {
@@ -74,7 +73,6 @@ export default function PublicAiTool() {
         <Link to="/" className="text-xl font-medium text-white transition-colors hover:text-gray-300">
           nomduchat
         </Link>
-        <LanguageSwitch />
       </header>
 
       <main className="relative z-10 mx-auto max-w-6xl px-6 py-28 md:py-32">

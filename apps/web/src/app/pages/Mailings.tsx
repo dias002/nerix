@@ -251,7 +251,7 @@ export default function Mailings() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#050505] p-5 md:p-10">
+    <div className="custom-scrollbar h-full min-h-0 flex-1 overflow-y-auto bg-[#050505] p-5 pb-28 md:p-10">
       <div className="mx-auto max-w-7xl space-y-8">
         <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>

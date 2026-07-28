@@ -39,6 +39,8 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes("node_modules")) return;
+          if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/")) return "vendor-react";
+          if (id.includes("/react-router/")) return "vendor-router";
           if (id.includes("@mediapipe/tasks-vision")) return "vendor-vision";
           if (id.includes("/three/")) return "vendor-three";
           if (id.includes("@mui/")) return "vendor-mui";

@@ -37,10 +37,8 @@ export default function EmptyState({
       {examples.length > 0 ? (
         <div className="mt-5 grid gap-2 text-left sm:grid-cols-3">
           {examples.map((example) => (
-            <div
-              key={example}
-              className="rounded-[var(--radius-small)] border border-[var(--border-subtle)] bg-black/20 px-3 py-2 text-sm leading-snug text-[var(--text-secondary)]"
-            >
+            <div key={example} className="flex items-start gap-2 px-1 py-1 text-sm leading-snug text-[var(--text-secondary)]">
+              <span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--text-tertiary)]" />
               {example}
             </div>
           ))}

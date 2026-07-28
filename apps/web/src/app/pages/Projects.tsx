@@ -84,6 +84,7 @@ export default function Projects() {
   const [usesRemote, setUsesRemote] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ProjectRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
@@ -92,15 +93,22 @@ export default function Projects() {
   }, [projects]);
 
   useEffect(() => {
-    if (!createOpen) return;
+    if (!createOpen && !pendingDelete) return;
 
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setCreateOpen(false);
+      if (event.key !== "Escape") return;
+      setCreateOpen(false);
+      setPendingDelete(null);
     };
 
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [createOpen]);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [createOpen, pendingDelete]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -112,7 +120,10 @@ export default function Projects() {
     getProjects()
       .then((response) => {
         if (!active) return;
-        setProjects(response.projects);
+        setProjects((current) => [
+          ...current.filter((project) => project.userId === "local-user"),
+          ...response.projects,
+        ]);
         setUsesRemote(true);
         setNotice(null);
       })
@@ -189,7 +200,7 @@ export default function Projects() {
       ),
     );
 
-    if (!usesRemote) return;
+    if (!usesRemote || currentProject.userId === "local-user") return;
 
     try {
       const response = await updateProjectApi({ projectId, status });
@@ -202,10 +213,12 @@ export default function Projects() {
   };
 
   const deleteProject = async (projectId: string) => {
+    const project = projects.find((item) => item.id === projectId);
     const currentProjects = projects;
     setProjects((current) => current.filter((project) => project.id !== projectId));
+    setPendingDelete(null);
 
-    if (!usesRemote) return;
+    if (!usesRemote || project?.userId === "local-user") return;
 
     try {
       await deleteProjectApi(projectId);
@@ -289,7 +302,7 @@ export default function Projects() {
                 status={project.status}
                 updatedAt={formatDate(project.updatedAt)}
                 onOpen={() => openProjectChat(project)}
-                onDelete={() => void deleteProject(project.id)}
+                onDelete={() => setPendingDelete(project)}
                 onStatusChange={(status) => void updateStatus(project.id, status)}
               />
             ))}
@@ -387,6 +400,37 @@ export default function Projects() {
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {pendingDelete ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center px-4 py-8 sm:items-center"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="delete-project-title"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70"
+            onClick={() => setPendingDelete(null)}
+            aria-label="Отменить удаление проекта"
+          />
+          <section className="ns-surface-panel relative z-10 w-full max-w-md p-5 shadow-[var(--shadow-floating)]">
+            <p className="ns-overline">Удаление проекта</p>
+            <h2 id="delete-project-title" className="ns-section-title mt-2">
+              Удалить «{pendingDelete.title}»?
+            </h2>
+            <p className="ns-body mt-2">Проект исчезнет из рабочей среды. Это действие нельзя отменить.</p>
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <button type="button" className="nd-secondary-action h-12" onClick={() => setPendingDelete(null)}>
+                Отмена
+              </button>
+              <button type="button" className="nd-primary-action h-12" onClick={() => void deleteProject(pendingDelete.id)}>
+                Удалить
+              </button>
+            </div>
+          </section>
         </div>
       ) : null}
     </div>

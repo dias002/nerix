@@ -25,20 +25,20 @@ import AuthPromptDialog from "../components/AuthPromptDialog";
 import ShareSheet, { type SharePayload } from "../components/ShareSheet";
 import TaskProgress, { type TaskProgressStep } from "../components/TaskProgress";
 import TaskDock, { type TaskDockItem } from "../components/workspace/TaskDock";
+import type { AiModelOptionApiRecord, MediaGenerationJobApiRecord, PlanId } from "../api-client";
+import { getAiProviders } from "../api-client/agents";
 import {
-  cancelGenerationJob,
   getChatConversation,
-  getAiProviders,
-  fetchGenerationArtifact,
   regenerateChatMessage,
-  refreshGenerationJob,
   selectBestChatAnswer,
   sendChatMessageStream,
-  toPublicApiError,
-  type AiModelOptionApiRecord,
-  type MediaGenerationJobApiRecord,
-  type PlanId,
-} from "../api";
+} from "../api-client/chat";
+import {
+  cancelGenerationJob,
+  fetchGenerationArtifact,
+  refreshGenerationJob,
+} from "../api-client/generation";
+import { toPublicApiError } from "../api-client/transport";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme";
 import { formatFileSize, maxAttachedFileSize, maxAttachedFiles, readAttachment, speechLocale } from "./chat/attachments";
@@ -589,16 +589,17 @@ export default function Chat() {
     setIsAuthPromptOpen(false);
   }, [isAuthenticated]);
 
-  const handleSend = async () => {
-    if (!canSend) return;
+  const handleSend = async (prompt?: string) => {
+    const repeatedPrompt = prompt?.trim();
+    if ((!repeatedPrompt && !canSend) || isThinking) return;
 
     if (!isAuthenticated) {
       setIsAuthPromptOpen(true);
       return;
     }
 
-    const messageText = inputValue.trim() || t.chat.filePrompt;
-    const filesForMessage = attachedFiles;
+    const messageText = repeatedPrompt || inputValue.trim() || t.chat.filePrompt;
+    const filesForMessage = repeatedPrompt ? [] : attachedFiles;
     const referencedImageJob = imageReferenceJob ?? inferImageReferenceJob(messages, messageText);
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -609,9 +610,11 @@ export default function Chat() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
-    setAttachedFiles([]);
-    setImageReferenceJob(null);
+    if (!repeatedPrompt) {
+      setInputValue("");
+      setAttachedFiles([]);
+      setImageReferenceJob(null);
+    }
     setUnavailableNotice(null);
     setIsThinking(true);
     setTaskStartedAt(Date.now());
@@ -940,12 +943,12 @@ export default function Chat() {
   ];
 
   return (
-    <div className="nd-shell-surface flex-1 flex flex-col h-full relative bg-[var(--canvas)]">
+    <div className="nd-chat-shell nd-shell-surface relative flex h-full flex-1 flex-col bg-[var(--canvas)]">
       <AuthPromptDialog open={isAuthPromptOpen} onClose={() => setIsAuthPromptOpen(false)} />
       <ShareSheet open={Boolean(sharePayload)} payload={sharePayload} onClose={() => setSharePayload(null)} />
       <TaskDock items={taskDockItems} />
 
-      <header className="nd-topbar h-14 flex items-center justify-between gap-3 px-4 pr-28 sm:pr-36 md:px-6 shrink-0 bg-[#0A0A0A]/80 backdrop-blur-md absolute top-0 w-full z-10">
+      <header className="nd-chat-topbar nd-topbar absolute top-0 z-10 flex h-14 w-full shrink-0 items-center justify-between gap-3 bg-[#0A0A0A]/80 px-4 pr-28 backdrop-blur-md sm:pr-36 md:px-6">
         <div className="flex min-w-0 items-center gap-2">
           <span className="nd-icon-tile h-8 w-8" data-accent="orange">
             <Wand2 className="h-4 w-4" strokeWidth={1.8} />
@@ -996,7 +999,7 @@ export default function Chat() {
       {mobileControlsOpen ? (
         <div
           id="mobile-chat-controls"
-          className="absolute bottom-28 left-3 right-3 z-20 rounded-2xl border border-white/10 bg-[#080808]/95 p-3 text-white shadow-2xl shadow-black/60 backdrop-blur sm:hidden"
+          className="nd-chat-mobile-controls absolute left-3 right-3 z-20 rounded-2xl border border-white/10 bg-[#080808]/95 p-3 text-white shadow-2xl shadow-black/60 backdrop-blur sm:hidden"
         >
           <label className="block">
             <span className="mb-1.5 block text-xs text-[var(--nd-orange)]">Сеть</span>
@@ -1025,16 +1028,16 @@ export default function Chat() {
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto px-4 pb-40 pt-20 custom-scrollbar md:px-8">
+      <div className="nd-chat-messages custom-scrollbar flex-1 overflow-y-auto px-4 pb-40 pt-20 md:px-8">
         <div className="max-w-3xl mx-auto space-y-6">
           {showEmptyState ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mx-auto flex min-h-[38vh] flex-col items-center justify-center py-6 text-center"
+              className="nd-chat-empty mx-auto flex min-h-[38vh] flex-col items-center justify-center py-6 text-center"
             >
               <h1 className="text-2xl font-medium leading-tight text-white md:text-3xl">Что сделаем?</h1>
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <div className="nd-chat-task-chips mt-5 flex flex-wrap justify-center gap-2">
                 {taskChips.map((chip) => {
                   const Icon = chip.icon;
                   return (
@@ -1111,7 +1114,7 @@ export default function Chat() {
 
                 {msg.sender === "ai" && msg.id !== "intro" && !msg.generationJob && (
                   <>
-                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                  <div className="nd-message-actions mt-2 flex flex-wrap items-center gap-1">
                     <button
                       type="button"
                       onClick={() => handleCopy(msg)}
@@ -1161,19 +1164,19 @@ export default function Chat() {
                   </>
                 )}
                 {msg.sender === "user" ? (
-                  <div className="mt-2 flex justify-end gap-1">
+                  <div className="nd-message-actions mt-2 flex justify-end gap-1">
                     <button
                       type="button"
                       onClick={() => applyFollowUp(msg.text)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                      className="inline-flex h-11 items-center gap-1.5 rounded-xl px-3 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
                       aria-label="Редактировать запрос"
                     >
                       Редактировать
                     </button>
                     <button
                       type="button"
-                      onClick={() => applyFollowUp(msg.text)}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
+                      onClick={() => void handleSend(msg.text)}
+                      className="inline-flex h-11 items-center gap-1.5 rounded-xl px-3 text-xs text-gray-500 transition-colors hover:bg-white/5 hover:text-white"
                       aria-label="Повторить запрос"
                     >
                       Повторить
@@ -1207,7 +1210,7 @@ export default function Chat() {
       </div>
 
       <div
-        className={`absolute bottom-0 w-full bg-gradient-to-t pt-10 pb-6 px-4 md:px-8 ${
+        className={`nd-chat-composer absolute bottom-0 w-full bg-gradient-to-t px-4 pb-6 pt-10 md:px-8 ${
           theme === "light" ? "from-[#F4F6FA] via-[#F4F6FA] to-transparent" : "from-[#050505] via-[#050505] to-transparent"
         }`}
       >
@@ -1262,7 +1265,7 @@ export default function Chat() {
             </div>
           ) : null}
 
-          <div className="nd-card relative flex items-end overflow-hidden transition-colors focus-within:border-white/20">
+          <div className="nd-chat-composer-inner nd-card relative flex items-end overflow-hidden transition-colors focus-within:border-white/20">
             <input
               ref={fileInputRef}
               type="file"
@@ -1274,7 +1277,7 @@ export default function Chat() {
               type="button"
               onClick={handleFileButtonClick}
               aria-label={t.chat.attachFile}
-              className="p-2.5 text-gray-400 transition-colors hover:text-[var(--nd-blue)] sm:p-3.5"
+              className="nd-chat-tool-button text-gray-400 transition-colors hover:text-[var(--nd-blue)]"
             >
               <Paperclip className="w-5 h-5" />
             </button>
@@ -1285,7 +1288,7 @@ export default function Chat() {
               aria-controls="mobile-chat-controls"
               aria-label="Настройки ответа"
               title="Настройки ответа"
-              className="p-2.5 text-gray-400 transition-colors hover:text-[var(--nd-orange)] sm:hidden"
+              className="nd-chat-tool-button text-gray-400 transition-colors hover:text-[var(--nd-orange)] sm:hidden"
             >
               <SlidersHorizontal className="h-5 w-5" strokeWidth={1.8} />
               <span className="sr-only">{selectedModelShortLabel}</span>
@@ -1297,7 +1300,7 @@ export default function Chat() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSend();
+                  void handleSend();
                 }
               }}
               placeholder={t.chat.placeholder}
@@ -1308,7 +1311,7 @@ export default function Chat() {
               type="button"
               onClick={handleVoiceInput}
               aria-label={isListening ? t.chat.stopVoice : t.chat.voiceInput}
-              className={`p-2.5 transition-colors sm:p-3.5 ${
+              className={`nd-chat-tool-button transition-colors ${
                 isListening ? "text-[var(--nd-orange)]" : "text-gray-400 hover:text-[var(--nd-orange)]"
               }`}
             >
@@ -1316,10 +1319,10 @@ export default function Chat() {
             </button>
             <button
               type="button"
-              onClick={handleSend}
+              onClick={() => void handleSend()}
               disabled={!canSend}
               aria-label={isThinking ? "Отправка запроса" : "Отправить запрос"}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center text-gray-400 transition-colors hover:text-white disabled:opacity-50 disabled:hover:text-gray-400 enabled:hover:text-[var(--nd-orange)] sm:h-12 sm:w-12"
+              className="nd-chat-send inline-flex shrink-0 items-center justify-center text-gray-400 transition-colors hover:text-white disabled:opacity-50 disabled:hover:text-gray-400 enabled:hover:text-[var(--nd-orange)]"
             >
               {isThinking ? <LoaderCircle className="h-5 w-5 animate-spin" strokeWidth={1.8} /> : <Send className="w-5 h-5" />}
             </button>
@@ -1342,7 +1345,7 @@ function MessageNextActions({ text, onSelect }: { text: string; onSelect: (promp
   const actions = buildMessageActions(text);
 
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="nd-message-actions mt-3 flex flex-wrap gap-2">
       {actions.map((action) => (
         <button
           key={action.label}

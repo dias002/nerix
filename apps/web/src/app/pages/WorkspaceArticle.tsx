@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
-import { getPublicContentBlocks } from "../api";
+import OptimizedImage from "../components/OptimizedImage";
+import SearchTag from "../components/workspace/SearchTag";
 import { useLanguage } from "../i18n";
 import {
   findWorkspaceArticle,
   workspaceArticleFallbacks,
   type WorkspaceArticleBlock,
 } from "../data/workspaceArticles";
+
+const publicContentEnabled = import.meta.env.VITE_ENABLE_PUBLIC_CONTENT_BLOCKS === "true";
 
 export default function WorkspaceArticle() {
   const { slug } = useParams();
@@ -15,8 +18,11 @@ export default function WorkspaceArticle() {
   const article = useMemo(() => findWorkspaceArticle(blocks, slug), [blocks, slug]);
 
   useEffect(() => {
+    if (!publicContentEnabled) return;
+
     let active = true;
-    void getPublicContentBlocks({ placement: "workspace.home.articles", locale: language })
+    void import("../api-client/content")
+      .then(({ getPublicContentBlocks }) => getPublicContentBlocks({ placement: "workspace.home.articles", locale: language }))
       .then((response) => {
         if (!active || response.contentBlocks.length === 0) return;
         setBlocks(response.contentBlocks);
@@ -44,9 +50,19 @@ export default function WorkspaceArticle() {
         <Link to="/workspace" className="ns-workspace-article-back">Все материалы</Link>
 
         <header className="ns-workspace-article-hero">
-          <img src={`/app-covers/${article.cover}.jpg`} alt="" />
+          <OptimizedImage
+            src={articleCoverSrc(article.cover)}
+            mobileSrc={articleMobileCoverSrc(article.cover)}
+            alt=""
+            pictureClassName="ns-workspace-article-hero-picture"
+            loading="eager"
+            fetchPriority="high"
+            width={1280}
+            height={800}
+            sizes="(max-width: 767px) 100vw, 1280px"
+          />
           <div>
-            <span>{article.category}</span>
+            <SearchTag tag={article.category} />
             <h1>{article.title}</h1>
           </div>
         </header>
@@ -65,4 +81,12 @@ export default function WorkspaceArticle() {
       </main>
     </div>
   );
+}
+
+function articleCoverSrc(cover: string) {
+  return cover.startsWith("article-") ? `/article-covers/${cover}.webp` : `/app-covers/${cover}.jpg`;
+}
+
+function articleMobileCoverSrc(cover: string) {
+  return cover.startsWith("article-") ? `/article-covers/${cover}-mobile.webp` : undefined;
 }

@@ -14,7 +14,13 @@ export default function App() {
     <LanguageProvider>
       <ThemeProvider>
         <AuthProvider>
-          <Suspense fallback={<div className="min-h-screen bg-black" />}>
+          <Suspense
+            fallback={
+              <div className="ns-route-loading" role="status" aria-label="Загрузка страницы">
+                <span />
+              </div>
+            }
+          >
             <RouterProvider router={router} />
           </Suspense>
           <div className="global-language-switch fixed right-5 top-5 z-40">

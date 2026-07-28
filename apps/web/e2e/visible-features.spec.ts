@@ -137,7 +137,7 @@ test("registration avatar picker previews and clears a selected image", async ({
 
   await page.goto("/auth?mode=register");
   await expect(page.getByRole("heading", { name: "Создать аккаунт" })).toBeVisible();
-  await expect(page.getByText("Аватар профиля")).toBeVisible();
+  await expect(page.getByText("AI-аватар")).toBeVisible();
 
   await page.locator('input[type="file"]').setInputFiles("apps/web/public/favicon.png");
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("nomduchat-registration-avatar"))).toContain("data:image");

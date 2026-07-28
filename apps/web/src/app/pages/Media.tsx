@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { ArrowRight, ImageIcon, Mic2, Music2, Video } from "lucide-react";
+import OptimizedImage from "../components/OptimizedImage";
 import PageHeader from "../components/workspace/PageHeader";
 
 const studios = [
@@ -55,7 +56,15 @@ export default function Media() {
                 data-tone={studio.tone}
               >
                 <div className="ns-media-hub-cover">
-                  <img src={`/app-covers/${studio.cover}.jpg`} alt="" />
+                  <OptimizedImage
+                    src={`/app-covers/${studio.cover}.jpg`}
+                    alt=""
+                    pictureClassName="ns-media-hub-picture"
+                    loading={index === 0 ? "eager" : "lazy"}
+                    fetchPriority={index === 0 ? "high" : "auto"}
+                    width={1152}
+                    height={928}
+                  />
                   <span className="ns-media-hub-icon"><Icon className="h-5 w-5" strokeWidth={1.7} /></span>
                 </div>
                 <div className="ns-media-hub-copy">

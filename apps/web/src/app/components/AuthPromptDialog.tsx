@@ -1,7 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
 import { Eye, EyeOff, Globe, LoaderCircle, Lock, Mail, User, X } from "lucide-react";
-import { startOAuth, toPublicApiError } from "../api";
+import { startOAuth } from "../api-client/auth";
+import { toPublicApiError } from "../api-client/transport";
 import { useAuth } from "../auth";
 import TurnstileBox, { isTurnstileEnabled } from "./TurnstileBox";
 import { useLanguage } from "../i18n";
@@ -39,6 +40,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
   const turnstileEnabled = isTurnstileEnabled();
   const authLanguage = useMemo(() => (language === "kk" ? "kz" : language), [language]);
   const returnTo = `${location.pathname}${location.search}`;
+  const fullAuthHref = `/auth?mode=${mode}&returnTo=${encodeURIComponent(returnTo)}`;
   const socialAuthProviders = useMemo(() => getSocialAuthProviders(authCountry, t.auth), [authCountry, t.auth]);
 
   if (!open || isAuthenticated) return null;
@@ -96,7 +98,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 px-4 pb-4 pt-16 backdrop-blur-md sm:items-center sm:p-6">
       <form
         onSubmit={handleSubmit}
-        className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#0A0A0A] p-5 text-white shadow-2xl shadow-black/50"
+        className="custom-scrollbar relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-white/10 bg-[#0A0A0A] p-5 text-white shadow-2xl shadow-black/50"
       >
         <button
           type="button"
@@ -276,7 +278,7 @@ export default function AuthPromptDialog({ open, onClose }: AuthPromptDialogProp
         </p>
 
         <p className="mt-3 text-center text-xs leading-relaxed text-gray-600">
-          <Link to="/auth?mode=register" className="text-gray-400 transition-colors hover:text-white">
+          <Link to={fullAuthHref} className="text-gray-400 transition-colors hover:text-white">
             {t.auth.fullAuthPage}
           </Link>
         </p>

@@ -2,31 +2,33 @@ import { Link } from "react-router";
 import { MessageSquare, MessageSquarePlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "../i18n";
-import { getChatConversations, type ChatConversationSummaryApiRecord } from "../api";
+import type { ChatConversationSummaryApiRecord } from "../api-client";
+import { getChatConversations } from "../api-client/chat";
+import { useAuth } from "../auth";
 import EmptyState from "../components/EmptyState";
-import FilterBar from "../components/workspace/FilterBar";
 import PageHeader from "../components/workspace/PageHeader";
 import SearchField from "../components/workspace/SearchField";
 import TimelineItem from "../components/workspace/TimelineItem";
 
-type HistoryFilter = "all" | "chat" | "favorites";
-
-const historyFilters: Array<{ id: HistoryFilter; label: string }> = [
-  { id: "all", label: "Все" },
-  { id: "chat", label: "Чаты" },
-  { id: "favorites", label: "Избранное" },
-];
-
 export default function History() {
   const { t } = useLanguage();
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<HistoryFilter>("all");
   const [items, setItems] = useState<ChatConversationSummaryApiRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
+    if (!isAuthenticated) {
+      setItems([]);
+      setError(null);
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
     setLoading(true);
     setError(null);
 
@@ -47,24 +49,21 @@ export default function History() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [isAuthenticated]);
 
   const filteredItems = useMemo(() => {
     const normalizedQuery = normalizeSearchText(searchQuery);
-    if (filter === "favorites") return [];
 
     return items.filter((item) => {
-      if (filter !== "all" && filter !== "chat") return false;
       if (!normalizedQuery) return true;
 
       const haystack = normalizeSearchText([item.title, item.preview, item.agentId, formatHistoryDate(item.updatedAt)].join(" "));
       return normalizedQuery.split(" ").every((word) => haystack.includes(word));
     });
-  }, [filter, items, searchQuery]);
+  }, [items, searchQuery]);
 
   const groups = useMemo(() => groupHistory(filteredItems), [filteredItems]);
   const isSearching = Boolean(normalizeSearchText(searchQuery));
-  const favoritesSelected = filter === "favorites";
 
   return (
     <div className="ns-page-scroll">
@@ -81,9 +80,8 @@ export default function History() {
           }
         />
 
-        <section className="space-y-3">
+        <section>
           <SearchField value={searchQuery} onChange={setSearchQuery} placeholder={t.history.search} />
-          <FilterBar<HistoryFilter> options={historyFilters} value={filter} onChange={setFilter} />
         </section>
 
         {error ? <div className="rounded-[var(--radius-card)] border border-[rgba(255,123,146,0.22)] bg-[rgba(255,123,146,0.08)] px-4 py-3 text-sm text-[var(--danger)]">{error}</div> : null}
@@ -105,7 +103,7 @@ export default function History() {
           </section>
         ) : null}
 
-        {!loading && !favoritesSelected && groups.length > 0 ? (
+        {!loading && groups.length > 0 ? (
           <section className="space-y-7">
             {groups.map((group) => (
               <div key={group.label} className="space-y-3">
@@ -131,25 +129,17 @@ export default function History() {
           </section>
         ) : null}
 
-        {!loading && favoritesSelected ? (
-          <EmptyState
-            icon={MessageSquare}
-            title="Избранное — скоро"
-            text="Сохранение важных диалогов появится здесь после подключения избранного. Остальная история уже доступна во вкладках «Все» и «Чаты»."
-          />
-        ) : null}
-
-        {!loading && !favoritesSelected && filteredItems.length === 0 ? (
+        {!loading && filteredItems.length === 0 ? (
           <EmptyState
             icon={MessageSquarePlus}
-            title={isSearching || filter !== "all" ? "Ничего не найдено" : "Здесь появятся ваши задачи"}
+            title={isSearching ? "Ничего не найдено" : "Здесь появятся ваши задачи"}
             text={
-              isSearching || filter !== "all"
-                ? "Измените поиск или фильтр. Сейчас в истории доступны только сохраненные чаты."
+              isSearching
+                ? "Измените запрос. Поиск работает по названию, тексту и дате сохраненных чатов."
                 : "Начните с одного рабочего сценария. После ответа чат сохранится здесь, и к нему можно будет вернуться."
             }
-            examples={isSearching || filter !== "all" ? ["документ", "презентация", "проект"] : ["Проверить документ", "Создать изображение", "Изучить тему"]}
-            actions={isSearching || filter !== "all" ? [] : [{ label: t.history.newChat, href: "/workspace/chat?new=1" }]}
+            examples={isSearching ? ["документ", "презентация", "проект"] : ["Проверить документ", "Создать изображение", "Изучить тему"]}
+            actions={isSearching ? [] : [{ label: t.history.newChat, href: "/workspace/chat?new=1" }]}
           />
         ) : null}
       </main>

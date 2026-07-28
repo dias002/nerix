@@ -43,9 +43,9 @@ export default function ProjectCard({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="rounded-[var(--radius-pill)] border border-[var(--line-subtle)] bg-[var(--surface-2)] px-2.5 py-1 text-xs text-[var(--text-secondary)]">
-          {typeLabel}
-        </span>
+        <a href={`/workspace/search?tag=${encodeURIComponent(typeLabel)}`} className="ns-search-tag min-h-11 min-w-11 justify-center">
+          #{typeLabel}
+        </a>
         <span className="ns-caption ml-auto">Обновлено: {updatedAt}</span>
       </div>
 
@@ -63,14 +63,14 @@ export default function ProjectCard({
           <option value="active">В работе</option>
           <option value="done">Готово</option>
         </select>
-        <button type="button" onClick={onOpen} className="ns-shell-button h-10 px-3">
+        <button type="button" onClick={onOpen} className="ns-shell-button h-11 px-3">
           <MessageSquare className="h-4 w-4" strokeWidth={1.8} />
           В чат
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="ns-shell-button ml-auto h-10 w-10 hover:text-[var(--danger)]"
+          className="ns-shell-button ml-auto h-11 w-11 hover:text-[var(--danger)]"
           aria-label="Удалить проект"
           title="Удалить проект"
         >

@@ -1,10 +1,12 @@
 import { Navigate, Outlet, Link, useLocation, useNavigate } from "react-router";
 import type { WalletBalance } from "@nomduchat/shared";
-import { AlertCircle, BarChart3, Bot, BriefcaseBusiness, Building2, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, Home, ImageIcon, Lightbulb, LogIn, LogOut, Mail, MessageSquare, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
+import { AlertCircle, BarChart3, Bot, BriefcaseBusiness, Building2, CircleUser, Clock3, CreditCard, FolderKanban, Globe, Grid2X2, Home, ImageIcon, Lightbulb, LogIn, LogOut, Mail, MessageSquare, Search, Settings, ShieldCheck, SlidersHorizontal, UserRound, Users, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getCurrentSubscription, getPlans, getSubscriptionCheckouts, getUsageLimits, getWallet, type CurrentSubscriptionApiResponse, type PlanApiRecord, type SubscriptionCheckoutApiRecord, type UsageLimitsApiResponse } from "../api";
+import type { CurrentSubscriptionApiResponse, PlanApiRecord, SubscriptionCheckoutApiRecord, UsageLimitsApiResponse } from "../api-client";
+import { getCurrentSubscription, getPlans, getSubscriptionCheckouts, getUsageLimits, getWallet } from "../api-client/billing";
 import { useAuth } from "../auth";
 import { useLanguage, type Language } from "../i18n";
+import { preloadWorkspaceCommon, runWhenIdle } from "../routePreloads";
 import { getUnauthorizedWorkspaceRedirect, getWorkspaceAccess, getWorkspaceFeatureStatus } from "../roleAccess";
 import CommandPalette from "./CommandPalette";
 import MobileNavigation from "./MobileNavigation";
@@ -129,6 +131,7 @@ export default function WorkspaceLayout() {
 
   const workspaceNavItems: WorkspaceNavItem[] = withFeatureVisibility([
         { path: "/workspace", icon: Home, label: t.nav.home, visible: access.canUseChat },
+        { path: "/workspace/search", icon: Search, label: "Поиск", visible: access.canUseChat },
         { path: "/workspace/chat", icon: MessageSquare, label: t.nav.chat, visible: access.canUseChat },
         { path: "/workspace/projects", icon: FolderKanban, label: t.nav.projects, visible: access.canUseChat },
         { path: "/workspace/balance", icon: CreditCard, label: t.nav.balance, visible: access.canUseBalance },
@@ -146,7 +149,10 @@ export default function WorkspaceLayout() {
       id: "work",
       label: shellLabels.work,
       items: workspaceNavItems.filter((item) =>
-        item.path === "/workspace" || item.path === "/workspace/chat" || item.path === "/workspace/projects",
+        item.path === "/workspace" ||
+        item.path === "/workspace/search" ||
+        item.path === "/workspace/chat" ||
+        item.path === "/workspace/projects",
       ),
     },
     {
@@ -249,14 +255,18 @@ export default function WorkspaceLayout() {
     refreshUsageLimits();
   }, [refreshUsageLimits]);
 
+  useEffect(() => runWhenIdle(preloadWorkspaceCommon, 2200), []);
+
   useEffect(() => {
-    if (!isAuthenticated || !user?.id) {
+    const isWorkspaceHome = location.pathname === "/workspace" || location.pathname === "/workspace/" || location.pathname === "/workspace/home";
+
+    if (!isAuthenticated || !user?.id || access.isAdmin || !isWorkspaceHome) {
       setOnboardingOpen(false);
       return;
     }
 
     setOnboardingOpen(window.localStorage.getItem(onboardingStorageKey(user.id)) !== "dismissed");
-  }, [isAuthenticated, user?.id]);
+  }, [access.isAdmin, isAuthenticated, location.pathname, user?.id]);
 
   useEffect(() => {
     if (!isAuthenticated || !user?.id || !failedRenewalCheckout) {
@@ -326,26 +336,26 @@ export default function WorkspaceLayout() {
     </div>
   ) : null;
   const profileSlot = (
-    <div className="border-t border-[var(--line-subtle)] p-4">
-      <div className="flex items-center gap-2 py-2">
+    <div className="ns-sidebar-profile">
+      <div className="ns-sidebar-profile-row">
         {isAuthenticated ? (
           <Link
             to={profileHref}
-            className="flex min-w-0 flex-1 items-center justify-center gap-3 rounded-[var(--radius-control)] py-1 transition-colors hover:bg-[var(--surface-1)] md:justify-start md:px-2"
+            className="ns-sidebar-profile-link"
             aria-label={t.settings.profile}
           >
-            <div className="relative shrink-0">
+            <div className="ns-sidebar-profile-avatar">
               {profileAvatar ? (
-                <img src={profileAvatar} alt="" className="h-8 w-8 rounded-full border border-[var(--line-subtle)] object-cover" />
+                <img src={profileAvatar} alt="" className="h-full w-full rounded-full object-cover" />
               ) : (
-                <CircleUser className="h-8 w-8 text-[var(--text-secondary)]" strokeWidth={1.5} />
+                <CircleUser className="h-full w-full text-[var(--text-secondary)]" strokeWidth={1.45} />
               )}
-              <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-[var(--canvas)] bg-[var(--signal-mint)]" />
+              <span />
             </div>
-            <div className="hidden min-w-0 flex-1 md:block">
-              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{user?.name || user?.email || t.auth.guest}</p>
-              <div className="flex items-center gap-1 text-xs text-[var(--text-tertiary)]">
-                <Zap className="h-3 w-3" />
+            <div className="ns-sidebar-profile-meta">
+              <p>{user?.name || user?.email || t.auth.guest}</p>
+              <div>
+                <Zap className="h-3 w-3 shrink-0" />
                 <span className="truncate">{user?.email ?? t.auth.guestHint}</span>
               </div>
             </div>
@@ -353,14 +363,18 @@ export default function WorkspaceLayout() {
         ) : (
           <Link
             to="/auth?mode=login&returnTo=%2Fworkspace%2Fsettings%2Fprofile"
-            className="flex min-w-0 flex-1 items-center justify-center gap-3 rounded-[var(--radius-control)] py-1 transition-colors hover:bg-[var(--surface-1)] md:justify-start md:px-2"
+            className="ns-sidebar-profile-link"
             aria-label={t.auth.loginAction}
             title={t.auth.loginAction}
           >
-            <LogIn className="h-5 w-5 text-[var(--text-tertiary)]" strokeWidth={1.6} />
-            <div className="hidden min-w-0 flex-1 md:block">
-              <p className="truncate text-sm font-medium text-[var(--text-primary)]">{t.auth.loginAction}</p>
-              <p className="text-xs text-[var(--text-tertiary)]">{t.auth.loginSubtitle}</p>
+            <div className="ns-sidebar-profile-avatar">
+              <LogIn className="h-5 w-5 text-[var(--text-tertiary)]" strokeWidth={1.6} />
+            </div>
+            <div className="ns-sidebar-profile-meta">
+              <p>{t.auth.loginAction}</p>
+              <div>
+                <span>{t.auth.loginSubtitle}</span>
+              </div>
             </div>
           </Link>
         )}
@@ -368,7 +382,7 @@ export default function WorkspaceLayout() {
           <button
             type="button"
             onClick={logout}
-            className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)] md:inline-flex"
+            className="ns-sidebar-profile-logout"
             aria-label={t.auth.logout}
             title={t.auth.logout}
           >
@@ -563,8 +577,8 @@ function WorkspaceOnboardingDialog({
   ].filter((item) => item.visible);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/75 px-4 pb-4 pt-16 backdrop-blur-md sm:items-center sm:p-6">
-      <section className="relative max-h-[calc(100vh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-[#080808] p-5 text-white shadow-2xl shadow-black/60 sm:p-6">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto overscroll-contain bg-black/75 px-4 pb-4 pt-16 backdrop-blur-md sm:items-center sm:p-6">
+      <section className="custom-scrollbar relative max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#080808] p-5 text-white shadow-2xl shadow-black/60 sm:p-6">
         <button
           type="button"
           onClick={onClose}

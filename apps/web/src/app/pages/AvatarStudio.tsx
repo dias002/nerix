@@ -69,6 +69,7 @@ import {
 } from "../api-client/generation";
 import { useAuth } from "../auth";
 import { toPublicApiError } from "../api-client/transport";
+import OptimizedImage from "../components/OptimizedImage";
 
 type HairStyle = "short" | "soft" | "bun" | "none";
 type MeetingBackground = "studio" | "office" | "dark";
@@ -1257,7 +1258,7 @@ export default function AvatarStudio() {
                   aria-expanded={isStylePaletteOpen}
                   aria-label="Выбор стиля аватара"
                 >
-                  <img src={selectedReference.imageSrc} alt="" />
+                  <OptimizedImage src={selectedReference.imageSrc} alt="" loading="eager" />
                   <span>{selectedReference.title}</span>
                   <Palette className="h-4 w-4" strokeWidth={1.8} />
                 </button>
@@ -1282,6 +1283,7 @@ export default function AvatarStudio() {
                       />
                       <button
                         type="button"
+                        aria-label={`Выбрать стиль: ${preset.title}`}
                         className={`ns-avatar-style-palette-item ${preset.id === selectedReference.id ? "is-active" : ""}`}
                         onClick={() => {
                           selectReferencePreset(preset);
@@ -1295,7 +1297,7 @@ export default function AvatarStudio() {
                           transitionDelay: `${Math.min(index * 25, 180)}ms`,
                         }}
                       >
-                        <img src={preset.imageSrc} alt={preset.title} loading="lazy" />
+                        <OptimizedImage src={preset.imageSrc} alt={preset.title} loading="lazy" />
                       </button>
                     </span>
                   );
@@ -1404,7 +1406,7 @@ export default function AvatarStudio() {
                 aria-expanded={isStylePaletteOpen}
                 aria-label="Выбор стиля аватара"
               >
-                <img src={selectedReference.imageSrc} alt="" />
+                <OptimizedImage src={selectedReference.imageSrc} alt="" loading="eager" />
                 <span>Стиль: {selectedReference.title}</span>
                 <Palette className="h-4 w-4" strokeWidth={1.8} />
               </button>
@@ -1429,6 +1431,7 @@ export default function AvatarStudio() {
                     />
                     <button
                       type="button"
+                      aria-label={`Выбрать стиль: ${preset.title}`}
                       className={`ns-avatar-style-palette-item ${preset.id === selectedReference.id ? "is-active" : ""}`}
                       onClick={() => {
                         selectReferencePreset(preset);
@@ -1442,7 +1445,7 @@ export default function AvatarStudio() {
                         transitionDelay: `${Math.min(index * 25, 180)}ms`,
                       }}
                     >
-                      <img src={preset.imageSrc} alt={preset.title} loading="lazy" />
+                      <OptimizedImage src={preset.imageSrc} alt={preset.title} loading="lazy" />
                       <span>{preset.title}</span>
                     </button>
                   </span>
@@ -2286,10 +2289,14 @@ function createPremiumAvatarBillboard(scene: Scene, fallbackRoot: Group, config:
     fallbackRoot.visible = true;
   };
   image.onerror = () => {
+    if (image.src.endsWith(".webp")) {
+      image.src = "/avatar/premium-business-avatar.png";
+      return;
+    }
     plane.visible = false;
     fallbackRoot.visible = true;
   };
-  image.src = "/avatar/premium-business-avatar.png";
+  image.src = "/avatar/premium-business-avatar.webp";
 
   const glowMaterial = new MeshBasicMaterial({ color: "#20E3B2", transparent: true, opacity: 0.08, depthWrite: false });
   const glow = new Mesh(new CircleGeometry(1.55, 80), glowMaterial);

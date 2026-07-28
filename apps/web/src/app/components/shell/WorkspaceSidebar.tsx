@@ -1,4 +1,4 @@
-import { Fragment, type PointerEvent as ReactPointerEvent, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Link } from "react-router";
 import { BriefcaseBusiness, ChevronLeft, MessageSquarePlus, Orbit, PanelLeftClose } from "lucide-react";
 import type { WorkspaceFeatureStatus } from "../../roleAccess";
@@ -66,20 +66,6 @@ export default function WorkspaceSidebar({
   const quickPaletteIgnoreClickRef = useRef(false);
   const QUICK_PALETTE_DRAG_THRESHOLD_PX = 6;
   const QUICK_PALETTE_OFFSET_KEY = "workspace.quick-palette.offset.v1";
-  const quickPaletteItemCount = visibleQuickItems.length;
-  const quickPaletteArcSpan = 150;
-  const quickPaletteStartAngle = -75;
-  const quickPaletteItemGapPx = 3;
-  const quickPaletteItemSizePx = 56;
-  const quickPaletteItemTextHeightPx = 13;
-  const quickPaletteBaseRadius = collapsed ? 80 : 92;
-  const quickPaletteTriggerRadius = 22;
-  const quickPaletteAngleStep = quickPaletteItemCount > 1 ? quickPaletteArcSpan / (quickPaletteItemCount - 1) : 0;
-  const quickPaletteComputedRadius =
-    quickPaletteItemCount > 1
-      ? Math.ceil((quickPaletteItemSizePx + quickPaletteItemGapPx) / (2 * Math.sin((quickPaletteAngleStep * Math.PI) / 360)))
-      : quickPaletteBaseRadius;
-  const quickPaletteRadius = Math.min(130, Math.max(quickPaletteBaseRadius, quickPaletteComputedRadius));
 
   useEffect(() => {
     try {
@@ -311,65 +297,34 @@ export default function WorkspaceSidebar({
         <Orbit className="h-5 w-5" strokeWidth={1.9} />
       </button>
       {isQuickPaletteOpen ? (
-        <span className="ns-sidebar-quick-palette-hitbox" aria-hidden="true" />
-      ) : null}
-      {visibleQuickItems.map((item, index) => {
-        const Icon = item.icon;
-        const isItemActive = isActive(item);
-        const angle = quickPaletteItemCount > 1
-          ? (((quickPaletteArcSpan / Math.max(1, quickPaletteItemCount - 1)) * index + quickPaletteStartAngle) * (Math.PI / 180))
-          : ((quickPaletteStartAngle + quickPaletteArcSpan / 2) * (Math.PI / 180));
-        const offsetX = Math.round(Math.cos(angle) * quickPaletteRadius);
-        const offsetY = Math.round(Math.sin(angle) * quickPaletteRadius);
-        const labelHeight = quickPaletteItemTextHeightPx;
-        const distanceFromCenter = Math.hypot(offsetX, offsetY);
-        const bridgeStart = quickPaletteTriggerRadius + 2;
-        const bridgeLength = Math.max(
-          quickPaletteItemSizePx / 2,
-          distanceFromCenter - bridgeStart - quickPaletteItemSizePx / 2 - labelHeight / 2,
-        );
-        const angleDeg = (angle * 180) / Math.PI;
+        <div className="ns-sidebar-quick-palette-menu custom-scrollbar" role="menu">
+          {visibleQuickItems.map((item) => {
+            const Icon = item.icon;
+            const isItemActive = isActive(item);
 
-        return (
-          <Fragment key={item.path}>
+            return (
             <Link
+              key={item.path}
               to={item.path}
               className={`ns-sidebar-quick-palette-item ${isItemActive ? "is-active" : ""}`}
               aria-label={item.label}
               aria-current={isItemActive ? "page" : undefined}
               title={item.label}
               onClick={closeQuickPalette}
-              style={{
-                transform: isQuickPaletteOpen
-                  ? `translate(calc(${offsetX}px - 50%), calc(${offsetY}px - 50%)) scale(1)`
-                  : "translate(-50%, -50%) scale(0.6)",
-                transitionDelay: "0s",
-              }}
+              role="menuitem"
             >
               <Icon className="h-5 w-5" strokeWidth={1.7} />
+              <span>{item.label}</span>
               {item.featureStatus === "beta" ? (
                 <span className="ns-sidebar-quick-palette-item-badge" aria-label="В разработке">
                   Beta
                 </span>
               ) : null}
-              <span>{item.label}</span>
             </Link>
-            {isQuickPaletteOpen ? (
-              <span
-                className="ns-sidebar-quick-palette-bridge is-open"
-                  aria-hidden="true"
-                  style={{
-                  transform: `rotate(${angleDeg}deg)`,
-                  height: `${bridgeLength}px`,
-                  left: "50%",
-                  top: "50%",
-                  transitionDelay: "0s",
-                }}
-              />
-            ) : null}
-          </Fragment>
-        );
-      })}
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 
@@ -496,26 +451,27 @@ export default function WorkspaceSidebar({
         {!collapsed ? roleSlot : null}
       </div>
 
-      {!collapsed && (visibleBusinessItems.length > 0 || visibleQuickItems.length > 0) ? (
-        <div className="ns-sidebar-bottom-palettes px-3 pb-2">
-          {visibleBusinessItems.length > 0 ? (
-            <SidebarBusinessPalette items={visibleBusinessItems} isActive={isActive} />
-          ) : null}
-          {visibleQuickItems.length > 0 ? quickPalette : null}
-        </div>
-      ) : null}
-      {!collapsed ? profileSlot : null}
-
       {!collapsed ? (
-        <button
-          type="button"
-          onClick={() => onCollapsedChange(true)}
-          className="mx-3 mb-3 flex h-9 items-center justify-center rounded-[var(--radius-control)] text-[var(--text-tertiary)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--text-primary)] md:hidden"
-          aria-label="Скрыть меню"
-          title="Скрыть меню"
-        >
-          <ChevronLeft className="h-5 w-5" strokeWidth={1.5} />
-        </button>
+        <div className="ns-sidebar-footer">
+          {visibleBusinessItems.length > 0 || visibleQuickItems.length > 0 ? (
+            <div className="ns-sidebar-bottom-palettes">
+              {visibleBusinessItems.length > 0 ? (
+                <SidebarBusinessPalette items={visibleBusinessItems} isActive={isActive} />
+              ) : null}
+              {visibleQuickItems.length > 0 ? quickPalette : null}
+            </div>
+          ) : null}
+          {profileSlot}
+          <button
+            type="button"
+            onClick={() => onCollapsedChange(true)}
+            className="ns-sidebar-mobile-collapse"
+            aria-label="Скрыть меню"
+            title="Скрыть меню"
+          >
+            <ChevronLeft className="h-5 w-5" strokeWidth={1.5} />
+          </button>
+        </div>
       ) : null}
     </aside>
   );
@@ -530,14 +486,6 @@ function SidebarBusinessPalette({
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [open, setOpen] = useState(false);
-  const arcSpan = 150;
-  const startAngle = -75;
-  const baseRadius = 108;
-  const angleStep = items.length > 1 ? arcSpan / (items.length - 1) : 0;
-  const computedRadius = items.length > 1
-    ? Math.ceil(59 / (2 * Math.sin((angleStep * Math.PI) / 360)))
-    : baseRadius;
-  const radius = Math.min(136, Math.max(baseRadius, computedRadius));
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -571,53 +519,30 @@ function SidebarBusinessPalette({
       >
         <BriefcaseBusiness className="h-5 w-5" strokeWidth={1.9} />
       </button>
-      {open ? <span className="ns-sidebar-quick-palette-hitbox" aria-hidden="true" /> : null}
-      {items.map((item, index) => {
-        const Icon = item.icon;
-        const active = isActive(item);
-        const angle = items.length > 1
-          ? ((angleStep * index + startAngle) * Math.PI) / 180
-          : ((startAngle + arcSpan / 2) * Math.PI) / 180;
-        const offsetX = Math.round(Math.cos(angle) * radius);
-        const offsetY = Math.round(Math.sin(angle) * radius);
-        const angleDeg = (angle * 180) / Math.PI;
-        const bridgeLength = Math.max(28, radius - 22 - 28 - 7);
+      {open ? (
+        <div className="ns-sidebar-quick-palette-menu custom-scrollbar" role="menu">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item);
 
-        return (
-          <Fragment key={item.path}>
+            return (
             <Link
+              key={item.path}
               to={item.path}
               className={`ns-sidebar-quick-palette-item ${active ? "is-active" : ""}`}
               aria-current={active ? "page" : undefined}
               aria-label={item.label}
               title={item.label}
               onClick={() => setOpen(false)}
-              style={{
-                transform: open
-                  ? `translate(calc(${offsetX}px - 50%), calc(${offsetY}px - 50%)) scale(1)`
-                  : "translate(-50%, -50%) scale(0.6)",
-                transitionDelay: "0s",
-              }}
+              role="menuitem"
             >
               <Icon className="h-5 w-5" strokeWidth={1.7} />
               <span>{item.label}</span>
             </Link>
-            {open ? (
-              <span
-                className="ns-sidebar-quick-palette-bridge is-open"
-                aria-hidden="true"
-                style={{
-                  transform: `rotate(${angleDeg}deg)`,
-                  height: `${bridgeLength}px`,
-                  left: "50%",
-                  top: "50%",
-                  transitionDelay: "0s",
-                }}
-              />
-            ) : null}
-          </Fragment>
-        );
-      })}
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

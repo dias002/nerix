@@ -2,6 +2,10 @@ import { useEffect } from "react";
 
 const metrikaId = import.meta.env.VITE_YANDEX_METRIKA_ID?.trim();
 const verificationCode = import.meta.env.VITE_YANDEX_VERIFICATION?.trim();
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+  cancelIdleCallback?: (id: number) => void;
+};
 
 export default function YandexAnalytics() {
   useEffect(() => {
@@ -16,6 +20,11 @@ export default function YandexAnalytics() {
       return;
     }
 
+    const idleWindow = window as IdleWindow;
+    let cancelled = false;
+    const load = () => {
+      if (cancelled || document.getElementById(`yandex-metrika-${metrikaId}`)) return;
+
     const script = document.createElement("script");
     script.id = `yandex-metrika-${metrikaId}`;
     script.async = true;
@@ -29,6 +38,21 @@ export default function YandexAnalytics() {
       ym(${metrikaId}, "init", { clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: true });
     `;
     document.head.appendChild(script);
+    };
+
+    if (typeof idleWindow.requestIdleCallback === "function") {
+      const id = idleWindow.requestIdleCallback(load, { timeout: 4200 });
+      return () => {
+        cancelled = true;
+        idleWindow.cancelIdleCallback?.(id);
+      };
+    }
+
+    const id = window.setTimeout(load, 3200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
   }, []);
 
   return null;
