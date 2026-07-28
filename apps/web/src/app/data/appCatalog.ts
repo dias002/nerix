@@ -20,17 +20,6 @@ export type AppCatalogItem = {
 export const appCatalog = data as AppCatalogItem[];
 
 export function appHref(app: AppCatalogItem) {
-  if (app.href) return app.href;
-
-  const params = new URLSearchParams();
-  if (app.starterPrompt) params.set("prompt", app.starterPrompt);
-
-  if (app.creationMode) {
-    params.set("preset", app.id);
-    return `/workspace/media/${app.creationMode}?${params.toString()}`;
-  }
-
-  if (app.agentId) params.set("agent", app.agentId);
-  if (app.networkId) params.set("network", app.networkId);
-  return `/workspace/chat?${params.toString()}`;
+  if (app.id === "avatar" && app.href) return app.href;
+  return `/workspace/apps/${app.id}`;
 }

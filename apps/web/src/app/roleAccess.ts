@@ -48,20 +48,6 @@ export function getUnauthorizedWorkspaceRedirect(pathname: string, access: Works
     return "/workspace";
   }
 
-  if (access.isAdmin && !access.isOwner) {
-    if (isWorkspacePath(pathname, "/workspace/mailings") && !access.canUseMailings) {
-      return "/workspace/admin";
-    }
-
-    const adminPathAllowed =
-      isWorkspacePath(pathname, "/workspace/admin") ||
-      isWorkspacePath(pathname, "/workspace/chat") ||
-      isWorkspacePath(pathname, "/workspace/mailings") ||
-      isWorkspacePath(pathname, "/workspace/settings");
-
-    return adminPathAllowed ? null : "/workspace/admin";
-  }
-
   if (isWorkspacePath(pathname, "/workspace/admin")) {
     return access.isAdmin ? null : "/workspace/chat";
   }

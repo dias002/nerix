@@ -25,6 +25,7 @@ const WorkspaceArticle = lazy(() => import("./pages/WorkspaceArticle"));
 const Chat = lazy(() => import("./pages/Chat"));
 const AvatarStudio = lazy(() => import("./pages/AvatarStudio"));
 const Apps = lazy(() => import("./pages/Apps"));
+const AppWorkspace = lazy(() => import("./pages/AppWorkspace"));
 const Media = lazy(() => import("./pages/Media"));
 const MediaChat = lazy(() => import("./pages/media/MediaChat"));
 const Projects = lazy(() => import("./pages/Projects"));
@@ -226,6 +227,7 @@ const routes: RouteObject[] = [
       { path: "search", Component: WorkspaceSearch },
       { path: "avatar", Component: AvatarStudio },
       { path: "apps", Component: Apps },
+      { path: "apps/:appId", Component: AppWorkspace },
       { path: "media", Component: Media },
       { path: "media/:kind", Component: MediaChat },
       { path: "projects", Component: Projects },
