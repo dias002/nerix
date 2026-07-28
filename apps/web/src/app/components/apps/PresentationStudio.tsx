@@ -6,6 +6,7 @@ import {
   LoaderCircle,
   MonitorPlay,
   Plus,
+  SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
 import { useState } from "react";
@@ -269,30 +270,39 @@ export default function PresentationStudio() {
               placeholder="Например: презентация BI GROUP для инвесторов с акцентом на проекты, рост и новые рынки"
             />
           </label>
-          <label className="pro-field">
-            <span>Аудитория</span>
-            <input value={audience} onChange={(event) => setAudience(event.target.value)} />
-          </label>
-          <label className="pro-range">
-            <span>Слайдов</span>
-            <output>{slideCount}</output>
-            <input type="range" min={5} max={16} value={slideCount} onChange={(event) => setSlideCount(Number(event.target.value))} />
-          </label>
-          <div className="pro-field">
-            <span>Дизайн</span>
-            <div className="pro-choice-grid">
-              {deckStyles.map(([id, label]) => (
-                <button key={id} type="button" className={style === id ? "is-active" : ""} onClick={() => setStyle(id)}>
-                  <span className={`deck-swatch deck-swatch--${id}`} />
-                  {label}
-                </button>
-              ))}
+          <details className="pro-settings presentation-options">
+            <summary>
+              <SlidersHorizontal />
+              <span>Настройки презентации</span>
+              <small>{slideCount} слайдов</small>
+            </summary>
+            <div className="pro-settings-body">
+              <label className="pro-field">
+                <span>Аудитория</span>
+                <input value={audience} onChange={(event) => setAudience(event.target.value)} />
+              </label>
+              <label className="pro-range">
+                <span>Слайдов</span>
+                <output>{slideCount}</output>
+                <input type="range" min={5} max={16} value={slideCount} onChange={(event) => setSlideCount(Number(event.target.value))} />
+              </label>
+              <div className="pro-field">
+                <span>Дизайн</span>
+                <div className="pro-choice-grid">
+                  {deckStyles.map(([id, label]) => (
+                    <button key={id} type="button" className={style === id ? "is-active" : ""} onClick={() => setStyle(id)}>
+                      <span className={`deck-swatch deck-swatch--${id}`} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <label className="pro-check">
+                <input type="checkbox" checked={speakerNotes} onChange={(event) => setSpeakerNotes(event.target.checked)} />
+                <span>Добавить заметки спикера</span>
+              </label>
             </div>
-          </div>
-          <label className="pro-check">
-            <input type="checkbox" checked={speakerNotes} onChange={(event) => setSpeakerNotes(event.target.checked)} />
-            <span>Добавить заметки спикера</span>
-          </label>
+          </details>
           <button type="button" className="pro-primary-button" disabled={busy || !topic.trim()} onClick={() => void generate()}>
             {busy ? <LoaderCircle className="spin" /> : <Sparkles />}
             Создать презентацию
@@ -366,7 +376,11 @@ export default function PresentationStudio() {
             </div>
           ) : (
             <div className="presentation-empty">
-              <MonitorPlay />
+              <div className="presentation-placeholder-object" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
               <strong>Здесь будет настоящая презентация</strong>
               <span>Можно пролистать слайды, отредактировать текст и скачать готовый PPTX.</span>
             </div>

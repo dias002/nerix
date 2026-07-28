@@ -640,6 +640,47 @@
   overflow: visible;
 }
 
+.presentation-pro .pro-studio-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+}
+
+.presentation-pro .pro-control-panel,
+.presentation-pro .pro-result-panel {
+  align-self: start;
+  min-height: 0;
+}
+
+.presentation-pro .pro-result-heading > div,
+.presentation-pro .pro-panel-heading > div {
+  min-width: 0;
+}
+
+.presentation-pro .pro-result-heading h2,
+.presentation-pro .pro-panel-heading h2 {
+  overflow-wrap: anywhere;
+}
+
+.presentation-options summary > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.presentation-options summary small {
+  margin-left: auto;
+  color: rgba(235, 225, 211, 0.52);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.presentation-options .pro-field:last-child,
+.presentation-options .pro-range:last-child,
+.presentation-options .pro-check:last-child {
+  margin-bottom: 0;
+}
+
 .deck-workspace {
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr);
@@ -677,7 +718,16 @@
 }
 
 .deck-thumbnails button span { color: var(--pro-accent); font-size: 10px; }
-.deck-thumbnails button strong { font-size: 11px; line-height: 1.35; }
+.deck-thumbnails button strong {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
 .deck-thumbnails .deck-add-slide { align-items: center; color: var(--pro-accent); }
 .deck-add-slide svg { width: 16px; }
 
@@ -709,22 +759,42 @@
 }
 
 .deck-copy h3 {
+  display: -webkit-box;
+  overflow: hidden;
   margin: 0;
   font-size: clamp(22px, 3vw, 48px);
   line-height: 1;
   letter-spacing: -0.045em;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .deck-copy > p {
+  display: -webkit-box;
+  overflow: hidden;
   margin: 16px 0 0;
   color: rgba(229, 234, 230, 0.62);
   font-size: clamp(11px, 1.15vw, 17px);
   line-height: 1.4;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .deck-stage--editorial .deck-copy > p { color: rgba(22, 25, 21, 0.62); }
 .deck-copy ul { display: grid; gap: 10px; margin: 22px 0 0; padding: 0; list-style: none; }
-.deck-copy li { position: relative; padding-left: 16px; font-size: clamp(10px, 1.05vw, 15px); line-height: 1.35; }
+.deck-copy li {
+  position: relative;
+  display: -webkit-box;
+  overflow: hidden;
+  padding-left: 16px;
+  font-size: clamp(10px, 1.05vw, 15px);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 .deck-copy li::before { position: absolute; top: 0.55em; left: 0; width: 6px; height: 1px; background: var(--pro-accent); content: ""; }
 
 .deck-visual {
@@ -787,8 +857,204 @@
 }
 
 .deck-editor .pro-field { margin-bottom: 14px; }
-.presentation-empty > svg { width: 74px; height: 74px; color: rgba(var(--pro-accent-rgb), 0.48); stroke-width: 1; }
+.presentation-empty {
+  min-height: clamp(260px, 32vw, 360px);
+  padding: 28px 18px;
+}
+
+.presentation-placeholder-object,
+.app-studio-placeholder-object {
+  position: relative;
+  width: 112px;
+  height: 96px;
+  margin-bottom: 16px;
+  transform-style: preserve-3d;
+}
+
+.presentation-placeholder-object > span,
+.app-studio-placeholder-object > span {
+  position: absolute;
+  display: block;
+}
+
+.presentation-placeholder-object > span:nth-child(1),
+.app-studio-placeholder-object > span:nth-child(1) {
+  inset: 17px 24px;
+  border: 1px solid rgba(var(--pro-accent-rgb, var(--app-rgb)), 0.34);
+  border-radius: 22px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.12), transparent 45%),
+    rgba(var(--pro-accent-rgb, var(--app-rgb)), 0.1);
+  box-shadow: 0 22px 45px rgba(0, 0, 0, 0.24);
+  transform: rotate(-8deg) skewY(4deg);
+}
+
+.presentation-placeholder-object > span:nth-child(2),
+.app-studio-placeholder-object > span:nth-child(2) {
+  inset: 9px 32px 25px 17px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.035);
+  transform: rotate(7deg) translate3d(10px, -3px, 16px);
+}
+
+.presentation-placeholder-object > span:nth-child(3),
+.app-studio-placeholder-object > span:nth-child(3) {
+  right: 18px;
+  bottom: 2px;
+  left: 18px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(var(--pro-accent-rgb, var(--app-rgb)), 0.2);
+  filter: blur(8px);
+}
+
 .pro-download-button { color: var(--pro-accent); }
+
+.app-studio-grid.app-studio-generic {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+  align-items: start;
+}
+
+.app-studio-generic > .app-studio-panel {
+  min-width: 0;
+  min-height: 0;
+  align-self: start;
+}
+
+.app-studio-generic > .app-studio-result-panel {
+  min-height: 0;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(var(--app-rgb), 0.07), transparent 18rem),
+    linear-gradient(155deg, rgba(var(--app-rgb), 0.025), transparent 44%),
+    #151b19 !important;
+}
+
+.app-studio-generic > .app-studio-result-panel::before,
+.app-studio-generic > .app-studio-result-panel::after {
+  content: none !important;
+}
+
+.app-studio-generic .app-studio-panel-head {
+  min-height: 0;
+}
+
+.app-studio-generic .app-studio-panel-head > div,
+.app-studio-generic .app-studio-field,
+.app-studio-generic .app-studio-upload span,
+.app-studio-generic .app-studio-output {
+  min-width: 0;
+}
+
+.app-studio-generic .app-studio-panel-head h2,
+.app-studio-generic .app-studio-local-badge,
+.app-studio-generic .app-studio-field,
+.app-studio-generic .app-studio-upload strong,
+.app-studio-generic .app-studio-upload small,
+.app-studio-generic .app-studio-result-text {
+  overflow-wrap: anywhere;
+}
+
+.app-studio-advanced {
+  overflow: hidden;
+  border: 1px solid rgba(232, 240, 235, 0.08);
+  border-radius: 15px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.app-studio-advanced summary {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  color: #c3cac6;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  list-style: none;
+}
+
+.app-studio-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-studio-advanced summary > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.app-studio-advanced summary svg {
+  flex: 0 0 auto;
+  color: var(--app-accent);
+}
+
+.app-studio-advanced summary small {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(var(--app-rgb), 0.09);
+  color: var(--app-accent);
+  font-size: 10px;
+}
+
+.app-studio-advanced-body {
+  display: grid;
+  gap: 17px;
+  padding: 2px 13px 14px;
+}
+
+.app-studio-generic .app-studio-empty-result {
+  min-height: clamp(240px, 30vw, 360px);
+  max-width: none;
+  align-items: center;
+  padding: clamp(24px, 4vw, 42px);
+  text-align: center;
+}
+
+.app-studio-generic .app-studio-empty-result p {
+  max-width: 440px;
+}
+
+.app-studio-placeholder-object {
+  --pro-accent-rgb: var(--app-rgb);
+  display: grid;
+  place-items: center;
+}
+
+.app-studio-placeholder-object > svg {
+  position: relative;
+  z-index: 2;
+  color: var(--app-accent);
+}
+
+.app-studio-result-text {
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-studio-result-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.app-studio-copy.app-studio-copy--compact {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  min-height: 40px;
+  place-items: center;
+  padding: 0;
+  border-radius: 12px;
+}
 
 .voice-pro {
   --pro-accent: #7ce576;
@@ -946,6 +1212,18 @@
   .deck-visual { display: none; }
   .deck-copy h3 { font-size: 24px; }
   .deck-copy ul { gap: 6px; margin-top: 12px; }
+  .presentation-pro .pro-result-heading {
+    flex-wrap: wrap;
+  }
+  .presentation-empty,
+  .app-studio-generic .app-studio-empty-result {
+    min-height: 220px;
+  }
+  .presentation-placeholder-object,
+  .app-studio-placeholder-object {
+    width: 92px;
+    height: 80px;
+  }
   .voice-track-actions,
   .interior-actions { flex-wrap: wrap; }
 }

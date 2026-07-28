@@ -1,8 +1,10 @@
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { Link, Navigate, useParams } from "react-router";
+import AppHelpDialog from "../components/apps/AppHelpDialog";
 import GenericAppStudio from "../components/apps/GenericAppStudio";
 import HumanizerStudio from "../components/apps/HumanizerStudio";
+import { getAppHelpContent } from "../components/apps/appHelpContent";
 import { appCatalog } from "../data/appCatalog";
 import "../../styles/app-studio.css";
 
@@ -43,8 +45,7 @@ export default function AppWorkspace() {
               <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
               Все приложения
             </Link>
-            <div className="mt-4 flex items-center gap-3 app-studio-identity">
-              <img src={`/app-covers/${app.id}.webp`} alt="" className="app-studio-icon" />
+            <div className="mt-4 app-studio-identity">
               <div className="min-w-0 app-studio-heading">
                 <p className="ns-overline">{app.category}</p>
                 <h1 className="app-studio-title">{app.title}</h1>
@@ -52,9 +53,12 @@ export default function AppWorkspace() {
             </div>
             <p className="app-studio-lead">{app.text}</p>
           </div>
-          <div className="app-studio-status">
-            <span />
-            Рабочая среда
+          <div className="app-help-header-actions">
+            <div className="app-studio-status">
+              <span />
+              Рабочая среда
+            </div>
+            <AppHelpDialog appName={app.title} content={getAppHelpContent(app)} />
           </div>
         </header>
 

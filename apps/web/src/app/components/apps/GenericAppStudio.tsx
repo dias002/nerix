@@ -1,4 +1,4 @@
-import { Check, Copy, Download, FileUp, LoaderCircle, Play, Sparkles } from "lucide-react";
+import { Check, Copy, Download, FileUp, LoaderCircle, Play, SlidersHorizontal, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { AiModality } from "@nomduchat/shared";
 import { sendChatMessage } from "../../api-client/chat";
@@ -14,6 +14,7 @@ import { appCatalog } from "../../data/appCatalog";
 import { useLanguage } from "../../i18n";
 import PresentationStudio from "./PresentationStudio";
 import VoiceStudio from "./VoiceStudio";
+import "../../../styles/immersive-apps.css";
 
 type CatalogApp = (typeof appCatalog)[number];
 type FieldValue = string | boolean;
@@ -60,7 +61,6 @@ const studioConfigs: Record<string, StudioConfig> = {
       { id: "goal", label: "Что нужно получить", type: "textarea", defaultValue: "", placeholder: "Опишите результат обычными словами…" },
       { id: "target", label: "Для чего промпт", type: "select", defaultValue: "Текст", options: options("Текст", "Изображение", "Видео", "Код", "Исследование", "Бизнес") },
       { id: "detail", label: "Детализация", type: "range", defaultValue: "70", min: 0, max: 100 },
-      { id: "questions", label: "Сначала задать уточняющие вопросы", type: "checkbox", defaultValue: true },
     ],
   },
   "seo-article": {
@@ -290,7 +290,7 @@ function ConfigurableAppStudio({ app }: { app: CatalogApp }) {
   };
 
   return (
-    <section className="app-studio-grid">
+    <section className="app-studio-grid app-studio-generic">
       <div className="app-studio-panel">
         <div className="app-studio-panel-head">
           <div>
@@ -301,9 +301,22 @@ function ConfigurableAppStudio({ app }: { app: CatalogApp }) {
         </div>
 
         <div className="app-studio-fields">
-          {config.fields.map((field) => (
+          {config.fields.slice(0, 1).map((field) => (
             <StudioControl key={field.id} field={field} value={values[field.id]} onChange={(value) => update(field.id, value)} />
           ))}
+          {config.fields.length > 1 ? (
+            <details className="app-studio-advanced">
+              <summary>
+                <span><SlidersHorizontal className="h-4 w-4" /> Дополнительные настройки</span>
+                <small>{config.fields.length - 1}</small>
+              </summary>
+              <div className="app-studio-advanced-body">
+                {config.fields.slice(1).map((field) => (
+                  <StudioControl key={field.id} field={field} value={values[field.id]} onChange={(value) => update(field.id, value)} />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </div>
 
         {config.accept ? (
@@ -331,12 +344,7 @@ function ConfigurableAppStudio({ app }: { app: CatalogApp }) {
             <p className="ns-overline">Результат</p>
             <h2>{status || "Рабочая область"}</h2>
           </div>
-          {result?.kind === "text" ? (
-            <button type="button" className="app-studio-copy" onClick={() => void copy()}>
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? "Скопировано" : "Копировать"}
-            </button>
-          ) : result ? (
+          {result && result.kind !== "text" ? (
             <a className="app-studio-copy" href={result.value} download={result.filename}>
               <Download className="h-4 w-4" />
               Скачать
@@ -345,10 +353,30 @@ function ConfigurableAppStudio({ app }: { app: CatalogApp }) {
         </div>
 
         {result ? (
-          <StudioOutput result={result} />
+          <div className="app-studio-output">
+            <StudioOutput result={result} />
+            {result.kind === "text" ? (
+              <div className="app-studio-result-actions">
+                <button
+                  type="button"
+                  className="app-studio-copy app-studio-copy--compact"
+                  onClick={() => void copy()}
+                  aria-label={copied ? "Скопировано" : "Копировать результат"}
+                  title={copied ? "Скопировано" : "Копировать результат"}
+                >
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className="app-studio-empty-result">
-            <span>{busy ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" strokeWidth={1.7} />}</span>
+            <div className="app-studio-placeholder-object" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              {busy ? <LoaderCircle className="h-5 w-5 animate-spin" /> : null}
+            </div>
             <h3>{busy ? status : "Здесь появится результат"}</h3>
             <p>Все параметры, исходники и готовый материал находятся в одном пространстве приложения.</p>
           </div>
@@ -424,8 +452,11 @@ function StudioOutput({ result }: { result: StudioResult }) {
 
 function buildPrompt(app: CatalogApp, config: StudioConfig, values: Record<string, FieldValue>) {
   const parameters = config.fields.map((field) => `${field.label}: ${formatValue(values[field.id])}`).join("\n");
+  const task = app.id === "prompt-builder"
+    ? "Составь один готовый промпт, который можно сразу использовать. Не задавай уточняющих вопросов, не добавляй вступление и не объясняй свою работу."
+    : app.starterPrompt ?? `Выполни задачу в приложении «${app.title}».`;
   return [
-    app.starterPrompt ?? `Выполни задачу в приложении «${app.title}».`,
+    task,
     "",
     "Параметры пользователя:",
     parameters,

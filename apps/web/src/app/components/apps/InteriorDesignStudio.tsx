@@ -22,15 +22,16 @@ import {
 } from "../../api-client/generation";
 import { useAuth } from "../../auth";
 import { useLanguage } from "../../i18n";
+import InteriorCatalog from "./InteriorCatalog";
+import {
+  interiorCatalog,
+  maxInteriorSelection,
+  readInteriorSelection,
+  saveInteriorSelection,
+  type InteriorCatalogItem,
+} from "./interiorCatalogData";
 import "../../../styles/immersive-apps.css";
-
-type FurnitureItem = {
-  id: string;
-  title: string;
-  category: string;
-  image: string;
-  prompt: string;
-};
+import "../../../styles/interior-catalog.css";
 
 type InteriorRender = {
   id: string;
@@ -42,65 +43,6 @@ type InteriorRender = {
 type RoomReference = ReferenceImageJobInput & {
   preview: string;
 };
-
-const furniture: FurnitureItem[] = [
-  {
-    id: "modular-sofa",
-    title: "Модульный диван",
-    category: "Диваны",
-    image: "/furniture/modular-sofa.jpg",
-    prompt: "low cream bouclé modular sofa with broad seats and soft square arms",
-  },
-  {
-    id: "rust-chair",
-    title: "Кресло Terra",
-    category: "Кресла",
-    image: "/furniture/rust-chair.jpg",
-    prompt: "sculptural rust bouclé lounge chair with rounded monolithic arms",
-  },
-  {
-    id: "oak-table",
-    title: "Овальный стол",
-    category: "Столы",
-    image: "/furniture/oak-table.jpg",
-    prompt: "oval natural oak dining table with two fluted cylindrical legs",
-  },
-  {
-    id: "floor-lamp",
-    title: "Торшер Line",
-    category: "Свет",
-    image: "/furniture/floor-lamp.jpg",
-    prompt: "slim matte black floor lamp with an angled conical shade",
-  },
-  {
-    id: "media-console",
-    title: "ТВ-консоль",
-    category: "Хранение",
-    image: "/furniture/media-console.jpg",
-    prompt: "low walnut media console with three seamless doors and a recessed plinth",
-  },
-  {
-    id: "ivory-bed",
-    title: "Кровать Cloud",
-    category: "Спальня",
-    image: "/furniture/ivory-bed.jpg",
-    prompt: "minimal ivory upholstered bed with a soft rectangular headboard",
-  },
-  {
-    id: "travertine-table",
-    title: "Стол Travertine",
-    category: "Столы",
-    image: "/furniture/travertine-table.jpg",
-    prompt: "round travertine coffee table with a thick top and twin stone legs",
-  },
-  {
-    id: "olive-tree",
-    title: "Оливковое дерево",
-    category: "Декор",
-    image: "/furniture/olive-tree.jpg",
-    prompt: "tall indoor olive tree in a textured light-stone planter",
-  },
-];
 
 const styles = [
   ["warm-minimal", "Теплый минимализм"],
@@ -141,7 +83,7 @@ export default function InteriorDesignStudio() {
   const [light, setLight] = useState(64);
   const [lightDirection, setLightDirection] = useState(28);
   const [windowView, setWindowView] = useState<(typeof windowViews)[number][0]>("rain-forest");
-  const [selected, setSelected] = useState(["modular-sofa", "floor-lamp", "media-console", "olive-tree"]);
+  const [selected, setSelected] = useState(readInteriorSelection);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [roomReference, setRoomReference] = useState<RoomReference | null>(null);
   const [renders, setRenders] = useState<InteriorRender[]>([]);
@@ -153,18 +95,19 @@ export default function InteriorDesignStudio() {
 
   const activeRender = renders.find((item) => item.id === activeId) ?? renders[0] ?? null;
   const selectedItems = useMemo(
-    () => selected.map((id) => furniture.find((item) => item.id === id)).filter(Boolean) as FurnitureItem[],
+    () => selected.map((id) => interiorCatalog.find((item) => item.id === id)).filter(Boolean) as InteriorCatalogItem[],
     [selected]
   );
 
   useEffect(() => () => urls.current.forEach((url) => URL.revokeObjectURL(url)), []);
+  useEffect(() => saveInteriorSelection(selected), [selected]);
 
   const toggleFurniture = (id: string) => {
     setError("");
     setSelected((current) => {
       if (current.includes(id)) return current.filter((item) => item !== id);
-      if (current.length >= 4) {
-        setError("Можно передать модели до четырех предметов за одну генерацию.");
+      if (current.length >= maxInteriorSelection) {
+        setError(`Можно передать модели до ${maxInteriorSelection} предметов за одну генерацию.`);
         return current;
       }
       return [...current, id];
@@ -202,7 +145,9 @@ export default function InteriorDesignStudio() {
     setStatus(mode === "edit" ? "Готовлю новую версию…" : "Собираю комнату и референсы…");
 
     try {
-      const references = await Promise.all(selectedItems.map((item) => imageToReference(item)));
+      const references = await Promise.all(
+        selectedItems.filter((item) => item.referenceImage).map((item) => imageToReference(item))
+      );
       if (roomReference) {
         const { preview: _preview, ...reference } = roomReference;
         references.unshift(reference);
@@ -263,6 +208,22 @@ export default function InteriorDesignStudio() {
     }
   };
 
+  if (catalogOpen) {
+    return (
+      <InteriorCatalog
+        items={interiorCatalog}
+        selectedIds={selected}
+        maxSelected={maxInteriorSelection}
+        error={error}
+        onToggle={toggleFurniture}
+        onDone={() => {
+          setCatalogOpen(false);
+          setError("");
+        }}
+      />
+    );
+  }
+
   return (
     <section className="pro-studio-shell interior-pro">
       <div className="pro-studio-grid">
@@ -310,9 +271,16 @@ export default function InteriorDesignStudio() {
           <div className="pro-field">
             <div className="pro-field-head">
               <span>Мебель в сцене</span>
-              <button type="button" className="pro-text-button" onClick={() => setCatalogOpen((current) => !current)}>
+              <button
+                type="button"
+                className="pro-text-button"
+                onClick={() => {
+                  setError("");
+                  setCatalogOpen(true);
+                }}
+              >
                 <Armchair />
-                {catalogOpen ? "Скрыть каталог" : "Показать мебель"}
+                Открыть каталог
               </button>
             </div>
             <div className="selected-furniture">
@@ -326,40 +294,10 @@ export default function InteriorDesignStudio() {
             </div>
           </div>
 
-          {catalogOpen ? (
-            <div className="furniture-catalog">
-              <div className="furniture-catalog-head">
-                <div>
-                  <p className="pro-overline">Nomdu Objects</p>
-                  <h3>Каталог мебели</h3>
-                </div>
-                <span>{selected.length}/4 выбрано</span>
-              </div>
-              <div className="furniture-catalog-grid">
-                {furniture.map((item) => {
-                  const isSelected = selected.includes(item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={isSelected ? "is-selected" : ""}
-                      onClick={() => toggleFurniture(item.id)}
-                    >
-                      <img src={item.image} alt={item.title} loading="lazy" />
-                      <span>{item.category}</span>
-                      <strong>{item.title}</strong>
-                      {isSelected ? <Check /> : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-
-          <details className="pro-settings" open>
+          <details className="pro-settings">
             <summary>
               <Camera />
-              Камера и свет
+              Точные настройки
             </summary>
             <div className="pro-settings-body">
               <div className="pro-segmented">
@@ -515,7 +453,7 @@ function buildInteriorPrompt(input: {
   light: number;
   lightDirection: number;
   windowView: string;
-  furniture: FurnitureItem[];
+  furniture: InteriorCatalogItem[];
   change: string;
 }) {
   const styleLabel = styles.find(([id]) => id === input.style)?.[1] ?? input.style;
@@ -536,8 +474,9 @@ function buildInteriorPrompt(input: {
   ].join("\n");
 }
 
-async function imageToReference(item: FurnitureItem): Promise<ReferenceImageJobInput> {
-  const response = await fetch(item.image);
+async function imageToReference(item: InteriorCatalogItem): Promise<ReferenceImageJobInput> {
+  const source = item.referenceImage ?? item.image;
+  const response = await fetch(source);
   if (!response.ok) throw new Error(`Не удалось загрузить референс «${item.title}».`);
   const blob = await response.blob();
   return blobToReference(blob, `${item.id}.jpg`);

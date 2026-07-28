@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   Camera,
   Check,
   CircleStop,
@@ -21,6 +22,7 @@ import {
   Volume2,
   type LucideIcon,
 } from "lucide-react";
+import { Link } from "react-router";
 import {
   FaceLandmarker,
   FilesetResolver,
@@ -70,6 +72,8 @@ import {
 import { useAuth } from "../auth";
 import { toPublicApiError } from "../api-client/transport";
 import OptimizedImage from "../components/OptimizedImage";
+import AppHelpDialog from "../components/apps/AppHelpDialog";
+import type { AppHelpContent } from "../components/apps/appHelpContent";
 
 type HairStyle = "short" | "soft" | "bun" | "none";
 type MeetingBackground = "studio" | "office" | "dark";
@@ -418,6 +422,20 @@ const facialHairStyleLabels: Record<FacialHairStyle, string> = {
 const mediaPipeVisionWasmUrl = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
 const mediaPipeFaceLandmarkerUrl =
   "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
+
+const avatarHelp: AppHelpContent = {
+  description:
+    "Создаёт персональный AI-портрет по вашему фото, варианты эмоций и короткое видео с аватаром.",
+  result:
+    "Готовый портрет в выбранном стиле, набор выражений лица и, при необходимости, аватар-видео по сценарию.",
+  steps: [
+    "Загрузите чёткое портретное фото, где лицо хорошо освещено и смотрит в камеру.",
+    "Выберите визуальный стиль и подтвердите разрешение на использование фотографии.",
+    "Создайте основной портрет, затем выберите нужные эмоции.",
+    "Откройте вкладку «Видео», добавьте текст и описание движения, если нужен ролик.",
+  ],
+  tip: "Фото используется для выбранной генерации. Не загружайте снимок другого человека без его разрешения.",
+};
 
 export default function AvatarStudio() {
   const { isAuthenticated, updateProfile } = useAuth();
@@ -1193,12 +1211,18 @@ export default function AvatarStudio() {
       />
       <div className="relative flex min-w-0 flex-1 flex-col p-4 md:p-5">
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 p-5 md:p-6">
-          <div className="max-w-lg">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-4 py-2 text-sm text-gray-300 backdrop-blur">
-              <UserRound className="h-4 w-4" strokeWidth={1.7} />
-              AI Avatar
+          <div className="flex items-start justify-between gap-4">
+            <div className="max-w-lg">
+              <Link to="/workspace/apps" className="app-help-back pointer-events-auto">
+                <ArrowLeft className="h-4 w-4" strokeWidth={1.8} />
+                Назад к приложениям
+              </Link>
+              <p className="ns-overline mt-3">AI Avatar</p>
+              <h1 className="ns-avatar-headline mt-2 text-2xl font-medium tracking-normal md:text-3xl">Аватар в вашем стиле</h1>
             </div>
-            <h1 className="ns-avatar-headline mt-3 text-2xl font-medium tracking-normal md:text-3xl">Аватар в вашем стиле</h1>
+            <div className="pointer-events-auto">
+              <AppHelpDialog appName="AI-аватар" content={avatarHelp} />
+            </div>
           </div>
         </div>
 
@@ -1209,7 +1233,7 @@ export default function AvatarStudio() {
             className={`absolute inset-0 transition-opacity duration-300 ${stageMode === "liveRig" ? "opacity-100" : "pointer-events-none opacity-0"}`}
           />
           <div
-            className={`absolute inset-0 flex items-center justify-center px-6 pb-40 pt-28 transition-opacity duration-300 md:px-12 md:pb-32 md:pt-32 ${
+            className={`absolute inset-0 flex items-center justify-center px-6 pb-40 pt-36 transition-opacity duration-300 md:px-12 md:pb-32 md:pt-36 ${
               stageMode === "portrait" ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
           >
