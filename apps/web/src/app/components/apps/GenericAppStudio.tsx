@@ -12,6 +12,8 @@ import {
 import { useAuth } from "../../auth";
 import { appCatalog } from "../../data/appCatalog";
 import { useLanguage } from "../../i18n";
+import PresentationStudio from "./PresentationStudio";
+import VoiceStudio from "./VoiceStudio";
 
 type CatalogApp = (typeof appCatalog)[number];
 type FieldValue = string | boolean;
@@ -158,6 +160,12 @@ const studioConfigs: Record<string, StudioConfig> = {
 };
 
 export default function GenericAppStudio({ app }: { app: CatalogApp }) {
+  if (app.id === "presentation") return <PresentationStudio />;
+  if (app.id === "voice") return <VoiceStudio />;
+  return <ConfigurableAppStudio app={app} />;
+}
+
+function ConfigurableAppStudio({ app }: { app: CatalogApp }) {
   const config = studioConfigs[app.id] ?? studioConfigs["prompt-builder"];
   const { isAuthenticated, user } = useAuth();
   const { language } = useLanguage();
